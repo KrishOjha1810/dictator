@@ -339,6 +339,17 @@ def _transcribe_server(wav: str) -> "tuple[str, float] | None":
     caller falls back to the CLI."""
     if not whisper_up():
         return None
+    # A server that is up is not the same as a server that is right. It is
+    # started for one model and one language and cannot be told otherwise per
+    # request, so sending Hinglish to an English one returns
+    # "[NON-ENGLISH SPEECH]" and sending English to a multilingual one is
+    # slower and less accurate. This check existed and was only consulted when
+    # starting a server, which was harmless only for as long as nothing ever
+    # started one.
+    if not _server_matches():
+        core.log(f"stt: warm server is not the one this needs "
+                 f"({stt_lang_mode()[0].name}), using the CLI")
+        return None
     try:
         r = subprocess.run(
             ["curl", "-s", "-m", "30", f"http://127.0.0.1:{WHISPER_PORT}/inference",
