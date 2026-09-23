@@ -142,7 +142,7 @@ put them somewhere specific.
 ## Used by other things
 
 Dictator is a product on its own, and it is also the dictation layer under
-[voicebridge](https://github.com/cc-vb/voicebridge) and Friday. Those speak
+voicebridge and Friday. Those speak
 back to you; this one only listens. Plenty of people want the second thing
 without the first.
 
