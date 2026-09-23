@@ -399,8 +399,66 @@ Indic-Voices by 13 points** (47.64 against 60.82). Indic-Voices is spontaneous.
 A hold of the fn key is spontaneous.
 
 **There is no published number anywhere, from anyone, for code-mixed
-Hinglish.** Not from Oriserve, not from Sarvam, not from Wispr. That is the
-most important line in this section.
+Hinglish that is both fairly scored and recent.** Not from Oriserve, not from
+Sarvam, not from Wispr. That is the most important line in this section.
+
+### The table to show anyone who quotes the 42 percent
+
+Vistaar / IndicWhisper (arXiv:2305.15386), Hindi, all Devanagari, one metric,
+seven shared test sets, averaged:
+
+| | Hindi WER |
+|---|---|
+| Google STT | 23.9 |
+| IndicWav2vec | 21.0 |
+| Azure STT | 20.0 |
+| Nvidia large | 18.6 |
+| IndicWhisper | 13.6 |
+
+**Whisper-family Hindi, scored properly against Devanagari references, sits in
+the teens.** Oriserve shows Whisper Large V3 at 50.84 to 82.56 on the same
+language. The gap between those two pictures is the alphabet, not the
+recognition. Show both tables together to anyone citing "42 percent better
+than Whisper".
+
+This does not make IndicWhisper a candidate. It is Devanagari-output, so it
+keeps roman.py load-bearing. The point is only that the baseline Oriserve
+beats was never as bad as their column makes it look.
+
+### Two things that RAISE confidence in Apex
+
+**Indic-Voices deliberately contains code-mixing.** From the dataset paper
+(arXiv:2403.01926), translators "were instructed to do a colloquial
+translation which contains code-mixing to reflect real world usage". The paper
+publishes no WER of its own, so every Indic-Voices number is a downstream
+party scoring their own model. But it means Indic-Voices is the one Oriserve
+set that actually contains code-mixed spontaneous speech, **and it is the one
+where Apex beats Prime by 13 points.**
+
+**AI4Bharat does no code-switching at all.** A search of the full Vistaar text
+for code-mix, hinglish and roman returns zero hits. That whole family is
+monolingual Hindi work, however good it is at that.
+
+### T-WER: the fair metric does exist, and we should use it
+
+From the MUCS 2021 challenge (arXiv:2104.00235): "T-WER will count an English
+word in the reference correct if the hypothesis contains either the English
+word or its transliterated form in the native script."
+
+That is the honest version of what Oriserve did, and it predates them by
+years. It is cheap to implement with the Dakshina lexicon already shipped here,
+read in reverse.
+
+Published MUCS Hindi-English code-switched numbers, for scale only: WER 24.66
+(GMM-HMM), 29.03 (Kaldi TDNN), 31.19 (Transformer); T-WER 22.72, 26.20, 29.80.
+These are 2021 architectures on spoken-tutorial audio. **Do not put them in the
+same table as anything modern.**
+
+So the benchmark below should report four numbers, not three. T-WER is the one
+citable against published work. WER-sound stays primary, because T-WER does
+not solve arbitrary romanisation variance inside Hindi words (chahiye against
+chahie), which is the reference-writing problem. And ENG-exact stays the one
+to publish if only one is published, because nothing else measures it.
 
 ### The runner up, and what it would cost
 
