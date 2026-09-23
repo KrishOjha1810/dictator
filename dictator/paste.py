@@ -167,6 +167,20 @@ def _osa(script: str) -> bool:
         return False
 
 
+HOW_FILE = core.STATE_DIR / "delivery"
+
+
+def how() -> str:
+    """"clipboard" or "type". Clipboard is the default because it is one event
+    whatever the length, where typing is two events per character and the
+    target has to keep up with all of them."""
+    try:
+        want = HOW_FILE.read_text().strip().lower()
+        return "type" if want.startswith("t") else "clipboard"
+    except Exception:
+        return "clipboard"
+
+
 def _paste_once(text: str) -> bool:
     """One paste, and an honest answer about whether it landed.
 
@@ -177,9 +191,16 @@ def _paste_once(text: str) -> bool:
     keystroke was accepted."""
     if _HELPER.exists():
         try:
-            r = subprocess.run([str(_HELPER), text], capture_output=True,
-                               text=True, timeout=15)
-            if "read" in (r.stdout or "").split():
+            args = [str(_HELPER), text]
+            typing = how() == "type"
+            if typing:
+                args.append("--type")
+            r = subprocess.run(args, capture_output=True, text=True,
+                               timeout=90 if typing else 15)
+            out = (r.stdout or "").split()
+            # Typing has no receipt to wait for: the characters either went in
+            # or the helper failed, and it says which.
+            if "typed" in out or "read" in out:
                 return True
             # The helper posted Cmd-V. A missing receipt means the target had
             # not read the pasteboard before the helper stopped waiting, which

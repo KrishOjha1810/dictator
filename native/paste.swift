@@ -42,6 +42,8 @@ guard args.count > 1 else {
 }
 let text = args[1]
 let send = args.contains("--send")
+let typeIt = args.contains("--type")
+let src0 = CGEventSource(stateID: .combinedSessionState)
 
 let pb = NSPasteboard.general
 // Snapshot every type, not just the string: restoring with setString alone
@@ -67,6 +69,35 @@ func tap(_ key: CGKeyCode, flags: CGEventFlags) {
     up?.flags = flags
     down?.post(tap: .cghidEventTap)
     up?.post(tap: .cghidEventTap)
+}
+
+// Two ways to get the words in. Typing is the honest one: it touches nobody's
+// clipboard, it produces no paste event, so an application that treats a paste
+// differently from typing (Claude Code turns a long one into an attachment)
+// sees exactly what a person at the keyboard would produce.
+//
+// It is not free. Every character is two events the target has to process, so
+// it needs a gap between them or they arrive out of order or not at all, and
+// that gap is the whole cost: a 300 character transcript is about half a
+// second of visible typing. Pasting is one event whatever the length.
+//
+// Unicode is NOT a reason to avoid it. keyboardSetUnicodeString carries any
+// character, Devanagari and emoji included, because the string travels with
+// the event instead of being looked up from a key code.
+if typeIt {
+    for ch in Array(text.utf16) {
+        var c = ch
+        let d = CGEvent(keyboardEventSource: src0, virtualKey: 0, keyDown: true)
+        let u = CGEvent(keyboardEventSource: src0, virtualKey: 0, keyDown: false)
+        d?.keyboardSetUnicodeString(stringLength: 1, unicodeString: &c)
+        u?.keyboardSetUnicodeString(stringLength: 1, unicodeString: &c)
+        d?.post(tap: .cghidEventTap)
+        u?.post(tap: .cghidEventTap)
+        usleep(1500)
+    }
+    if send { usleep(120_000); tap(36, flags: []) }
+    print("typed")
+    exit(0)
 }
 
 tap(9, flags: .maskCommand)                     // Cmd+V

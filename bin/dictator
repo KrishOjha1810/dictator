@@ -26,6 +26,7 @@ USAGE = """dictator: hold a key and talk, anywhere on your Mac.
   dictator status     is it set up, and is it running
   dictator doctor     check everything and say what is wrong
   dictator permissions  open the right settings pane and watch for the toggle
+  dictator delivery [type|clipboard]   how the words get in
   dictator log        the last thing it did
   dictator errors     failures it noticed
   dictator dictate    run it in the foreground (for debugging)
@@ -222,6 +223,24 @@ def main(argv) -> int:
 
     if cmd in ("permissions", "permission", "perms"):
         return permissions("--reset" in rest)
+
+    if cmd in ("delivery", "paste"):
+        from dictator import paste as _p
+        if rest and rest[0] in ("type", "clipboard"):
+            _p.HOW_FILE.parent.mkdir(parents=True, exist_ok=True)
+            _p.HOW_FILE.write_text(rest[0])
+        now = _p.how()
+        print(f"  delivery: {now}")
+        if now == "clipboard":
+            print("  One paste, whatever the length. Fast, but it is a paste,")
+            print("  and some applications treat a long paste as an attachment.")
+            print("  Switch with: dictator delivery type")
+        else:
+            print("  Typed character by character. Touches no clipboard and")
+            print("  produces no paste event, so nothing can turn it into an")
+            print("  attachment. Slower: about half a second per 300 characters.")
+            print("  Switch back with: dictator delivery clipboard")
+        return 0
 
     if cmd == "doctor":
         return doctor()
