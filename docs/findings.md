@@ -336,3 +336,129 @@ in its error paths without importing `core`, so any failing osascript raised
 - That a single modifier tap inside a hold is a usable gesture. It cannot be
   told apart from someone pressing shift while they talk, and it ate several
   dictations before anyone worked out what it was.
+
+---
+
+## The model field (researched, not yet benchmarked)
+
+### Nobody ships a local Hinglish model. Not one.
+
+Checked: Wispr Flow, Superwhisper, MacWhisper, VoiceInk, Aqua Voice.
+
+**Wispr Flow is cloud only**, their own docs: "Wispr Flow processes dictated
+audio in the cloud", "Transcription always happens in the cloud". They are a
+**router over other people's engines**, their CTO's post: "Flow dynamically
+selects the most accurate ASR engine for each language", naming ElevenLabs
+Scribe and Gemini as components. Hindi is in their top tier. And romanised
+Hinglish sits under a heading that reads **"Ongoing code-mixing experiments"**.
+They also route **per utterance, not per word**: "if you switch languages mid
+dictation, the language you spoke longest is recorded".
+
+**VoiceInk** is open source, and a search of the whole repo for Hinglish,
+romanisation, code-mixing and transliteration returns **zero hits**. Hindi
+appears only as a locale string. That is a confident true negative.
+
+So the gap is real and currently unoccupied.
+
+### The candidate: `Oriserve/Whisper-Hindi2Hinglish-Apex`
+
+Apache-2.0. A fine-tune of **the exact checkpoint we already ship**
+(whisper-large-v3-turbo, 32-layer encoder, 4-layer decoder, 128 mel bins). It
+emits **Latin script only**, never Devanagari. ggml conversions already exist:
+q8_0 at **874MB** against our current **1549MB**.
+
+Switching is a filename change in `SHIPPED` and `_ML_MODELS`. No new runtime,
+no new code path, and the model is smaller.
+
+The structural win is bigger than the accuracy one: it takes `roman.py` off
+the critical path. Our own docstring names the limit we live with, that an
+English word the recogniser committed to Devanagari cannot be recovered
+("pull request" comes back as "pool rekvest"). **A model that never emits
+Devanagari cannot make that error.**
+
+Two real risks: it was trained on Hindi, not on code-mixing, so whether it
+holds "pull request" as English inside a Hindi sentence is exactly the
+untested thing. And it **cannot produce English prose**, so the router stays.
+
+### Their published numbers are worthless, and here is the proof
+
+The Apex card says, in their own words: "the original Hindi ground truth was
+first transliterated to Hinglish. The WER scores below were calculated against
+this transliterated reference text." So the references are Latin and the
+baseline emits Devanagari.
+
+The proof is on the Swift card, where the baseline scores **106.79, 104.28 and
+110.84**. A WER above 100 percent is not a measurement of recognition, it is a
+measurement of the alphabet. Every "42 percent improvement" headline from this
+family should carry no weight.
+
+What the table **does** say honestly is the part nobody quotes, because Prime
+and Apex are the same family in the same script and are mutually comparable:
+Prime wins on Common Voice and FLEURS (read speech), **Apex wins on
+Indic-Voices by 13 points** (47.64 against 60.82). Indic-Voices is spontaneous.
+A hold of the fn key is spontaneous.
+
+**There is no published number anywhere, from anyone, for code-mixed
+Hinglish.** Not from Oriserve, not from Sarvam, not from Wispr. That is the
+most important line in this section.
+
+### The runner up, and what it would cost
+
+`moorlee/qwen3-asr-0.6b-hinglish` is the only model trained on genuinely
+code-switched audio, and its output shape is arguably the right one: English in
+Latin, Hindi in Devanagari (`मेरा favourite festival Diwali है`), which is
+exactly what `roman.py` was designed to receive and never got.
+
+But it is a Qwen3-Omni derivative. whisper.cpp cannot load it; it needs
+llama.cpp with a separate audio projector, a second resident server, and a
+GGUF conversion of the fine-tune that nobody has made. That is a week, not a
+filename. Triage it by hand on the HF demo space before building anything.
+
+### Ruled out, with reasons
+
+- **Sarvam Saaras**: API only. Their HF org has 14 repos and **zero ASR
+  models**, verified. Using it means audio leaves the machine.
+- **indic-seamless, MMS, SeamlessM4T v2**: cc-by-nc, non-commercial.
+- **SraVaani, indic-conformer-600m**: MIT but **gated**, which cannot go
+  behind `curl | bash`.
+- **Vaani, vasista22, collabora, IndicWhisper, IndicConformer**: all
+  Devanagari-only, so every one keeps `roman.py` load-bearing and keeps
+  "pool rekvest". Better Hindi models, not better Hinglish ones.
+- **Parakeet, Canary, Moonshine, Kyutai, distil-whisper, Phi-4**: no Hindi.
+- **Voxtral, Qwen2-Audio, Granite**: 4B to 7B, 9GB, fail on latency.
+
+### Fine-tuning on our own corrections is impossible, and that is correct
+
+`history.db` stores heard, shown and kept, which is the right schema. But ASR
+fine-tuning needs **audio** paired with corrected text, and we deliberately
+store none. The docstring is proud of that and should be.
+
+What the corrections are actually for: they are the **benchmark set** (every
+row where kept differs from heard is a real failure on real audio with a
+hand-written reference), and they are the `initial_prompt`.
+
+### The benchmark to run before switching anything
+
+40 held utterances, **recorded on a real voice**, never TTS. We already learned
+that the hard way: small beat turbo on synthesised speech and lost badly on a
+real one.
+
+Composition: 15 work Hinglish with English technical nouns embedded, 10 mostly
+Hindi, 5 mostly English with Hindi markers, **5 pure English as a regression
+guard**, 5 hard cases.
+
+Three numbers, because plain WER is the wrong instrument (it counts "chahiye"
+against "chahie" as an error when both are correct):
+
+1. **WER-strict**, for honesty.
+2. **WER-sound**, the same alignment after mapping both sides through
+   `hindi.key()`, which already normalises exactly the arbitrary variation.
+   This is the "did it hear the words" number.
+3. **ENG-exact**, over only the English tokens in the reference. **This is the
+   "pool rekvest" detector**, and nothing published anywhere measures it.
+
+Plus seconds per utterance and script-leak rate.
+
+Decision rule, written before seeing results: a model wins if it improves
+WER-sound **and** ENG-exact, does not regress the 5 pure-English utterances,
+and costs no more than one extra second.
