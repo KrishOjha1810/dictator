@@ -504,11 +504,23 @@ final class App: NSObject, NSApplicationDelegate {
                         .data(using: .utf8)!)
             }
         }
-        guard hot, ours else { return hide() }
         let d = readDetail()
+        // Transcribing happens AFTER the key is released, so the microphone is
+        // already closed while the user is still waiting several seconds for
+        // their words. Hiding the indicator at exactly that moment is the
+        // worst possible time to hide it: the key appears to have done
+        // nothing. So a fresh "thinking" keeps it on screen with the mic shut.
+        //
+        // This does not weaken what the orb promises. The promise is that it
+        // never claims the microphone is open when it is not, and the working
+        // state does not look like the capturing one. When the mic is cold the
+        // capturing state is not reachable at all, a few lines below.
+        let thinking = d.fresh && (d.phase == "thinking" || d.phase == "working")
+        guard (hot && ours) || thinking else { return hide() }
+
         // Hot but stale: we know for certain the mic is open and not what it is
         // doing, so claim the most-open state. Over-report, never under-report.
-        let phase = d.fresh ? d.phase : "capturing"
+        let phase = (hot && ours) ? (d.fresh ? d.phase : "capturing") : "thinking"
         switch phase {
         case "hearing", "capturing":
             view.apply(.capturing); view.feed(d.level)

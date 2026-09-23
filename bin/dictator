@@ -25,6 +25,7 @@ USAGE = """dictator: hold a key and talk, anywhere on your Mac.
   dictator off        stop, and do not start again
   dictator status     is it set up, and is it running
   dictator doctor     check everything and say what is wrong
+  dictator permissions  open the right settings pane and watch for the toggle
   dictator log        the last thing it did
   dictator errors     failures it noticed
   dictator dictate    run it in the foreground (for debugging)
@@ -219,6 +220,9 @@ def main(argv) -> int:
                   "  right choice if most of what you say is Hinglish.")
         return 0
 
+    if cmd in ("permissions", "permission", "perms"):
+        return permissions("--reset" in rest)
+
     if cmd == "doctor":
         return doctor()
 
@@ -306,6 +310,82 @@ def doctor() -> int:
     print()
     print("all good." if not bad else f"{bad} problem(s) above.")
     return 0 if not bad else 1
+
+
+def permissions(reset: bool = False) -> int:
+    """Walk the user to the two toggles, and notice the moment they flip.
+
+    Every part of this exists because of something that actually goes wrong.
+    The app can ask for Accessibility and still not appear in the list, and
+    then there is nothing to switch on and no way to make it appear, so this
+    also reveals the bundle in Finder for the plus button. And there is no
+    notification when a permission changes, so the only way to know is to look
+    again, once a second, which is what turns "now restart it" into nothing at
+    all to do."""
+    import time as _t
+    from dictator import always
+
+    app = always.APP
+    if not app.exists():
+        print("The app is not built yet. Run: dictator build")
+        return 1
+
+    if reset:
+        # Clears a half-granted state where the box is ticked next to an app
+        # macOS no longer recognises. The prompt then fires fresh.
+        for service in ("Accessibility", "Microphone", "ListenEvent"):
+            subprocess.run(["tccutil", "reset", service, "com.dictator.dictation"],
+                           capture_output=True)
+        print("Cleared what macOS remembered about Dictator.\n")
+
+    print(f"The app asking for permission is:\n  {app}\n")
+    print("Opening Privacy & Security > Accessibility.")
+    print("If Dictator is in the list, switch it on.")
+    print("If it is NOT in the list, click the + button and choose the app")
+    print("from the Finder window that just opened.\n")
+
+    subprocess.run(["open", "-R", str(app)], capture_output=True)
+    subprocess.run(["open",
+                    "x-apple.systempreferences:com.apple.preference.security"
+                    "?Privacy_Accessibility"], capture_output=True)
+
+    print("Watching. This updates itself the moment you flip the toggle.")
+    print("Ctrl-C to stop waiting.\n")
+    was = None
+    try:
+        for _ in range(180):
+            running = always.running()
+            live = _has_listener()
+            now = (running, live)
+            if now != was:
+                print(f"  service running: {'yes' if running else 'no'}"
+                      f"   |   listening for the key: {'yes' if live else 'not yet'}")
+                was = now
+            if live:
+                print("\nGranted. Hold fn anywhere and talk.")
+                return 0
+            _t.sleep(1)
+    except KeyboardInterrupt:
+        print()
+    print("\nStill not listening. Two things worth checking:")
+    print("  1. The toggle next to Dictator is actually on, not just present.")
+    print("  2. dictator doctor")
+    return 1
+
+
+def _has_listener() -> bool:
+    """Is a key listener actually up for THIS user?
+
+    Checked by user, because a second account on the same Mac runs its own
+    copy and a plain process search returns whichever it finds first, which
+    has already produced one wrong diagnosis."""
+    import getpass
+    try:
+        r = subprocess.run(["pgrep", "-u", getpass.getuser(), "-f",
+                            "dictator-hotkey"], capture_output=True, text=True)
+        return bool(r.stdout.strip())
+    except Exception:
+        return False
 
 
 if __name__ == "__main__":

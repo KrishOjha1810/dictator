@@ -149,7 +149,21 @@ class Dictation:
             say(f"no audio captured ({size} bytes)."
                 + (f" sox said: {why}" if why else " sox said nothing."))
 
-        said = self.sdk.transcribe(wav, app=app or "")
+        # Keep saying "thinking" for as long as it is true. The indicator only
+        # trusts a state written in the last second, and transcription takes
+        # several, so a single write meant the orb vanished one second after
+        # the key came up and the user was left watching nothing happen.
+        done = threading.Event()
+
+        def still_working():
+            while not done.wait(0.4):
+                core.set_hud("thinking", 0.0)
+
+        threading.Thread(target=still_working, daemon=True).start()
+        try:
+            said = self.sdk.transcribe(wav, app=app or "")
+        finally:
+            done.set()
         core.set_hud("listening", 0.0)
         for term in self.sdk.last_learned:
             say(f'learned "{term}"')
