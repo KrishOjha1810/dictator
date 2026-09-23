@@ -27,6 +27,7 @@ USAGE = """dictator: hold a key and talk, anywhere on your Mac.
   dictator doctor     check everything and say what is wrong
   dictator permissions  open the right settings pane and watch for the toggle
   dictator delivery [type|clipboard]   how the words get in
+  dictator capture on|off        keep recordings, to compare speech models
   dictator log        the last thing it did
   dictator errors     failures it noticed
   dictator dictate    run it in the foreground (for debugging)
@@ -261,6 +262,36 @@ def main(argv) -> int:
             print("  and double tap again to stop. Two taps, because one is not")
             print("  distinguishable from simply pressing that key while talking.")
             print(f"  others: {', '.join(k for k in _hk.TOGGLE_KEYS if k != 'off')}")
+        return 0
+
+    if cmd == "capture":
+        from dictator import api as _api
+        want = rest[0] if rest else "status"
+        if want == "on":
+            _api.CAPTURE_FLAG.parent.mkdir(parents=True, exist_ok=True)
+            _api.CAPTURE_FLAG.touch()
+            print("  Keeping every recording now, in " + str(_api.CORPUS))
+            print("  Just use it normally. Speak the way you actually speak,")
+            print("  because careful reading is not what we need to measure.")
+            print("  Stop with: dictator capture off")
+        elif want == "off":
+            try:
+                _api.CAPTURE_FLAG.unlink()
+            except Exception:
+                pass
+            print("  Stopped.")
+        n = len(list(_api.CORPUS.glob("*.wav"))) if _api.CORPUS.exists() else 0
+        secs = 0.0
+        if _api.CORPUS.exists():
+            import wave as _w
+            for f in _api.CORPUS.glob("*.wav"):
+                try:
+                    with _w.open(str(f)) as h:
+                        secs += h.getnframes() / float(h.getframerate() or 1)
+                except Exception:
+                    pass
+        print(f"  capture: {'on' if _api.capturing() else 'off'}"
+              f"   |   {n} recording(s), {secs/60:.1f} minutes")
         return 0
 
     if cmd == "doctor":

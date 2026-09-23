@@ -24,6 +24,7 @@ Nothing here needs the key, the indicator or the launchd agent. It is the
 speech half on its own.
 """
 import os
+import shutil
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -59,6 +60,16 @@ class Transcript:
 DEFAULT_SHAPING = {"enabled": True, "punctuation": True, "lists": False,
                    "sentences": True, "fillers": True}
 FORMAT_FILE = core.STATE_DIR / "format.json"
+
+# Where held audio is kept while a capture is running, so two speech models can
+# be compared on the same real speech instead of on somebody's careful reading
+# of a script.
+CORPUS = core.STATE_DIR / "corpus"
+CAPTURE_FLAG = core.STATE_DIR / "capturing"
+
+
+def capturing() -> bool:
+    return CAPTURE_FLAG.exists()
 
 
 def shaping_flags() -> dict:
@@ -112,7 +123,7 @@ class Dictator:
             said.took = time.time() - started
             return said
         finally:
-            self._retire(wav)
+            self._retire(wav, said)
         said.language = stt.language()
         said.engine = stt.LAST_ENGINE
         # The model saying "there was nothing" is not a transcript. Pasting
@@ -220,9 +231,25 @@ class Dictator:
 
     # ---- internals -----------------------------------------------------
 
-    def _retire(self, wav: str) -> None:
+    def _retire(self, wav: str, said: "Transcript | None" = None) -> None:
         """Keep the last recording, because when a transcription comes out
-        wrong the audio is the only evidence that matters."""
+        wrong the audio is the only evidence that matters.
+
+        And keep ALL of them while a capture is running. Comparing two speech
+        models needs the same audio through both, and this product otherwise
+        keeps none: every hold overwrites the last one. Asking somebody to sit
+        down and record forty sentences to order produces careful, unnatural
+        speech, which is the wrong thing to measure. Their ordinary dictation
+        is the right corpus, and this is how it gets collected."""
+        try:
+            if capturing():
+                keep = CORPUS / f"{int(time.time() * 1000)}.wav"
+                keep.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy(wav, keep)
+                if said is not None:
+                    keep.with_suffix(".txt").write_text(said.heard or "")
+        except Exception as e:
+            core.log(f"dictator: could not keep the recording: {e}")
         try:
             if self.keep_audio:
                 os.replace(wav, core.STATE_DIR / "last-dictation.wav")
