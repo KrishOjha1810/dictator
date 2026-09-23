@@ -214,6 +214,19 @@ pasting long text without it arriving as an attachment.
 
 ---
 
+## What we measured
+
+[docs/findings.md](docs/findings.md) is the record: which models are good at
+what and by how much, what macOS actually does with permissions and code
+signatures, where the latency goes, and the things we assumed and were wrong
+about. Every number in it was measured on a real machine, and where a figure
+came from somebody else it says so.
+
+It exists so the same things do not get re-derived, and so ideas that have
+already been measured and rejected do not get tried again.
+
+---
+
 ## Credits
 
 The Hindi romanization lexicon is derived from
