@@ -145,18 +145,35 @@ fi
 step "6/6  Turn it on"
 "$HERE/bin/dictator" on
 
-cat <<'MSG'
+# The last step used to be a paragraph asking the user to go and do something.
+# Telling somebody to open System Settings and find a pane is the step people
+# give up on, and it is also the step a script can simply do. So it does it,
+# and then watches, so re-running this installer is a complete answer to "it
+# is not working" rather than the same paragraph again.
+# stdout, not stdin: the one line people actually run is "curl ... | bash",
+# where stdin is the pipe and only stdout is still the terminal. Checking
+# stdin meant the one invocation this was written for took the other branch.
+if [ -t 1 ]; then
+  echo
+  "$HERE/bin/dictator" permissions || true
+else
+  cat <<'MSG'
 
 One more thing, and it is the only part that needs you.
 
 macOS will ask to allow "Dictator" to use the microphone and to use
-Accessibility. Say yes to both. If you miss the pop-ups, go to
-Apple menu, System Settings, Privacy & Security, Accessibility, and switch
-"Dictator" on there.
+Accessibility. Say yes to both. If the app is not in the Accessibility list at
+all, run this and it will open the right place and add it:
 
-It starts working a second or two after you do. There is nothing to restart.
+  dictator permissions
 
-  dictator doctor    checks everything and says what is wrong
-  dictator off       stops it
+MSG
+fi
+
+cat <<'MSG'
+
+  dictator doctor      checks everything and says what is wrong
+  dictator permissions if the key does nothing, start here
+  dictator off         stops it
 
 MSG
