@@ -57,7 +57,7 @@ class Transcript:
 
 
 DEFAULT_SHAPING = {"enabled": True, "punctuation": True, "lists": False,
-                   "sentences": True}
+                   "sentences": True, "fillers": True}
 FORMAT_FILE = core.STATE_DIR / "format.json"
 
 

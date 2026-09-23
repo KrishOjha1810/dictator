@@ -478,7 +478,36 @@ def _tidy(text):
 # --- the one public function -----------------------------------------------
 
 
-def shape(text, enabled=True, punctuation=True, lists=False, sentences=True):
+
+# Sounds a person makes while thinking. Parakeet is verbatim and writes them
+# down; whisper quietly drops them, which is why they appeared the moment the
+# language setting was put back and English started going to Parakeet again.
+#
+# The list is deliberately tiny. Wispr Flow's own documentation records what
+# happens when it is not: a leading "so" carries a condition, deliberate
+# repetition carries emphasis, and stripping those "can result in dropping or
+# rewriting words that actually mattered". So this removes only the sounds
+# that are not words in any sentence, and never "like", "you know", "I mean",
+# "actually" or "so", all of which mean something.
+_FILLER = re.compile(r"(?<![\w'])(uh+|um+|uhm+|erm+|hmm+|mm+)(?![\w'])[,]?\s*",
+                     re.IGNORECASE)
+
+
+def drop_fillers(text: str) -> str:
+    """Remove thinking sounds, and nothing that carries meaning."""
+    if not text:
+        return text
+    out = _FILLER.sub("", text)
+    # Whatever is left of the spacing and the capital the filler was holding.
+    out = re.sub(r"\s{2,}", " ", out).strip()
+    out = re.sub(r"\s+([,.!?])", r"\1", out)
+    if out and text[:1].isupper():
+        out = out[:1].upper() + out[1:]
+    return out or text
+
+
+def shape(text, enabled=True, punctuation=True, lists=False, sentences=True,
+          fillers=True):
     """Shape a raw transcript into text that reads as though it was typed.
 
     Pure: the same string in gives the same string out, and nothing else
@@ -497,6 +526,10 @@ def shape(text, enabled=True, punctuation=True, lists=False, sentences=True):
                  starts, each with real content behind it.
     sentences    tidy the spacing and put a capital at the start of a sentence.
     """
+    if not enabled:
+        return text
+    if fillers:
+        text = drop_fillers(text)
     if not enabled or not text or not text.strip():
         return text
     out = text

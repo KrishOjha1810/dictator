@@ -5,12 +5,13 @@ list somebody wanted and did not get, it is a sentence that was restructured
 because it happened to start with "first of all". So the ordinary sentences,
 the Hinglish, and the speech about code are the tests that count.
 """
+import pytest
 import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from dictator.shape import shape
+from dictator.shape import shape, drop_fillers
 
 
 def on(text):
@@ -292,3 +293,37 @@ def test_shaping_twice_changes_nothing_the_second_time():
                  "The loop is slow."]:
         once = on(text)
         assert on(once) == once, text
+
+
+@pytest.mark.parametrize("said,want", [
+    ("Before we didn't used to take in uh and all of these",
+     "Before we didn't used to take in and all of these"),
+    ("Get back to me with the plans and uh proper fix",
+     "Get back to me with the plans and proper fix"),
+    # Lowercase in, lowercase out: capitalising is the sentences stage's job,
+    # and doing it here would fight it.
+    ("um so uh what I meant was hmm the loop",
+     "so what I meant was the loop"),
+])
+def test_thinking_sounds_are_removed(said, want):
+    """Parakeet is verbatim and writes them down. Whisper drops them, which is
+    why they appeared the moment English started going to Parakeet again."""
+    assert drop_fillers(said) == want
+
+
+@pytest.mark.parametrize("said", [
+    # Every one of these means something, and a vendor that strips them has
+    # documented what it costs: a leading "so" carries a condition, and
+    # deliberate repetition carries emphasis.
+    "So the loop is slow and I cannot tell why",
+    "I mean, you know, actually it works like that",
+    "Like for like, the numbers are the same",
+    "Right, so, the thing is",
+])
+def test_words_that_carry_meaning_are_left_alone(said):
+    assert drop_fillers(said) == said
+
+
+def test_a_sentence_of_nothing_but_filler_survives():
+    """Returning an empty string would look like a failed transcription."""
+    assert drop_fillers("um uh hmm") == "um uh hmm"
