@@ -29,8 +29,8 @@ import subprocess
 import threading
 import time
 
-from . import (core, history, hotkey, learn, mac, orbnative, paste, readback,
-               roman, shape, stt, vocab)
+from . import core, hotkey, mac, orbnative, paste, stt
+from .api import Dictator
 
 # Anything shorter is a mis-press, not speech. Kept low because a short real
 # utterance ("yes", "ship it") is common and losing it is worse than
@@ -39,31 +39,14 @@ MIN_MS = 250
 MAX_SECS = 120
 
 
-FORMAT_FILE = core.STATE_DIR / "format.json"
-
-
-def _format_flags() -> dict:
-    """Which shaping rules are on. Defaults are the conservative ones.
-
-    Kept in a file rather than in code because the user has to be able to turn
-    this off without editing anything, which is the single most common
-    complaint about every tool that reshapes dictated text."""
-    flags = {"enabled": True, "punctuation": True, "lists": False,
-             "sentences": True}
-    try:
-        import json
-        flags.update(json.loads(FORMAT_FILE.read_text()))
-    except Exception:
-        pass
-    return {k: bool(v) for k, v in flags.items() if k in
-            ("enabled", "punctuation", "lists", "sentences")}
-
-
 class Dictation:
     """One hold: record while down, transcribe on release, paste where you were."""
 
-    def __init__(self, key: str = "fn", send: bool = False):
+    def __init__(self, key: str = "fn", send: bool = False,
+                 sdk: "Dictator | None" = None):
+        self.sdk = sdk or Dictator()
         self.key = key
+        # The pipeline. Shared with every other caller by construction.
         self.send = send
         self.proc = None            # the recorder
         self.wav = ""
@@ -146,36 +129,13 @@ class Dictation:
 
     # ---- off the key thread -----------------------------------------------
 
-    def _learn_from_last(self, app, say):
-        """See what you did to the words pasted last time, and learn from it.
-
-        Read before this utterance is pasted, while the previous one is still
-        the last thing on screen. Only ever reads, and keeps the difference
-        rather than the document."""
-        last = getattr(self, "last", None)
-        if not last:
-            return
-        row_id, shown, last_app = last
-        self.last = None
-        # Only compare inside the app the text was actually put into.
-        if not shown or not row_id or (app and last_app and app != last_app):
-            return
-        try:
-            d = readback.field()
-            if not d.get("ok") or not isinstance(d.get("value"), str):
-                return
-            kept = learn.locate(shown, d["value"])
-            if not kept:
-                return
-            history.kept(row_id, kept)
-            for term in learn.observe(shown, kept):
-                say(f'learned "{term}"')
-        except Exception as e:
-            core.log(f"dictate: learning from the last one failed: {e}")
-
     def _finish(self, wav, app, secs: float = 0.0):
+        """One hold, from the recording to the words being on screen.
+
+        The pipeline itself lives in api.py and this calls it. It used to live
+        here, which meant anything else wanting the same result had to
+        reproduce the order, and a reproduction drifts."""
         say = getattr(self, "note", lambda m: None)
-        self._learn_from_last(app, say)
         try:
             size = os.path.getsize(wav)
         except Exception:
@@ -188,84 +148,34 @@ class Dictation:
                 pass
             say(f"no audio captured ({size} bytes)."
                 + (f" sox said: {why}" if why else " sox said nothing."))
-        conf = 0.0
-        try:
-            text, conf = stt.transcribe_ex(wav)
-            text = (text or "").strip()
-        except Exception as e:
-            core.log(f"dictate: transcribe failed: {e}")
-            say(f"transcription failed: {e}")
-            text = ""
-        finally:
-            # Keep the last one. When a transcription comes out wrong the
-            # audio is the only evidence that matters, and deleting it means
-            # every investigation starts by asking the user to say it again.
-            try:
-                keep = core.STATE_DIR / "last-dictation.wav"
-                os.replace(wav, keep)
-            except Exception:
-                try:
-                    os.unlink(wav)
-                except Exception:
-                    pass
-        # Whisper writes Hindi in Devanagari, which is unusable in a terminal
-        # or an editor. Converting here rather than steering the model keeps
-        # English untouched: this only ever rewrites characters that are
-        # already Devanagari.
-        if stt.language() == "hinglish" and roman.has_devanagari(text):
-            before = text
-            text = roman.to_latin(text)
-            say(f"romanised: {before[:40]}")
+
+        said = self.sdk.transcribe(wav, app=app or "")
         core.set_hud("listening", 0.0)
-        if not text:
+        for term in self.sdk.last_learned:
+            say(f'learned "{term}"')
+        if not said.text:
             say("nothing was transcribed")
             return
-        say(f'heard: "{text[:70]}"')
+        if said.heard != said.text:
+            say(f'heard: "{said.heard[:60]}"')
+            say(f'wrote: "{said.text[:60]}"')
+        else:
+            say(f'heard: "{said.text[:70]}"')
 
-        # Apply the words this user has taught it. This runs after the model,
-        # not as a prompt to the model, because the model gets one 223 token
-        # window and a growing personal vocabulary would eat all of it.
-        heard = text
-        try:
-            fixed = vocab.shared().fix(text)
-            if fixed != text:
-                say(f'vocabulary: "{text[:40]}" became "{fixed[:40]}"')
-                text = fixed
-        except Exception as e:
-            core.log(f"dictate: vocabulary failed: {e}")
-
-        # Punctuation you said out loud, and sentence casing. List rebuilding
-        # is off unless asked for: every loud complaint about tools that do
-        # this is about one that could not be turned off.
-        try:
-            text = shape.shape(text, **_format_flags())
-        except Exception as e:
-            core.log(f"dictate: shaping failed: {e}")
-
-        # Record what was heard and what was shown, so a correction later has
-        # something to compare against. Text only: no audio, no screenshots,
-        # and `dictator forget` removes it.
-        try:
-            row = history.add(heard=heard, shown=text, app=app or "",
-                               lang=stt.language(), engine=stt.LAST_ENGINE,
-                               secs=secs, conf=conf)
-            self.last = (row, text, app or "")
-        except Exception as e:
-            core.log(f"dictate: history failed: {e}")
         now = mac.frontmost_app()
         if app and now and now != app:
             say(f"you moved from {app} to {now}, so I did not paste")
             # You moved. Typing here would put your sentence somewhere you were
             # not looking, which is the one failure that is not recoverable by
             # pressing undo, because you may not even see where it went.
-            core.log(f"dictate: focus moved {app!r} -> {now!r}, not pasting")
+            core.log(f"dictate: focus moved {app!r} to {now!r}, not pasting")
             return
         say(f"pasting into {now or 'the front app'}")
         if self.send:
             # This path presses Return, which paste.deliver deliberately never
             # does, so it keeps the original single shot behaviour.
-            _paste_where_you_are(text, send=True)
-        elif not paste.deliver(text, now or app or ""):
+            _paste_where_you_are(said.text, send=True)
+        elif not paste.deliver(said.text, now or app or ""):
             # Deliberately no retry. A long transcript is delivered in pieces,
             # so if one failed some of the text is already in the field and
             # pasting the whole thing again would duplicate it.

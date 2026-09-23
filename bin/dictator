@@ -182,10 +182,10 @@ def main(argv) -> int:
 
     if cmd == "format":
         import json
-        from dictator import dictate as _d
-        flags = _d._format_flags()
+        from dictator import api as _d
+        flags = _d.shaping_flags()
         if not rest:
-            for k in ("enabled", "punctuation", "lists", "sentences"):
+            for k in _d.DEFAULT_SHAPING:
                 print(f"  {k:12} {'on' if flags.get(k) else 'off'}")
             print("\n  change with: dictator format lists on")
             return 0

@@ -81,6 +81,52 @@ actually open", so you never talk into a dead mic and find out afterwards.
 
 ---
 
+## Using it from your own code
+
+Dictator is a library as well as a key. Anything that can get audio into a
+`.wav` can get finished text back out, without the key, the indicator or the
+login item.
+
+```python
+from dictator import Dictator
+
+d = Dictator()
+said = d.transcribe("recording.wav")
+
+said.text        # "Jiske liye mujhe tumhari ek line chahiye"
+said.heard       # "jiske liye mujhe tumaree ek line chaahie"
+said.engine      # which model actually answered
+said.confidence  # 0 to 1
+```
+
+`text` is what you would have typed. `heard` is what the model returned before
+your own corrections were applied, which is the difference worth showing a
+user when something changes under them.
+
+Turn off the parts you do not want. A tool transcribing a hundred archived
+files should not write a hundred rows into somebody's personal history:
+
+```python
+d = Dictator(remember=False, learn=False)
+```
+
+The pieces are there on their own too, when you only want one of them:
+
+```python
+raw, confidence = d.hear("recording.wav")   # just the model
+text = d.polish(raw)                        # your words, then punctuation
+d.learn("Whisper Flow")                     # teach it a word
+d.paste(text)                               # into the frontmost app
+```
+
+`Dictator`, `Transcript`, `transcribe` and `VERSION` are the public surface.
+Everything else inside the package is internal and will move.
+
+The key listener is simply the first caller of this, which is deliberate: the
+order of those steps is the hard part, and a second copy of it would drift.
+
+---
+
 ## How it works
 
 | Piece | What it does |
