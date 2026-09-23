@@ -84,7 +84,7 @@ def test_an_empty_keychain_is_rebuilt_rather_than_trusted():
     was no way back short of deleting the file by hand."""
     import inspect
     src = inspect.getsource(signing.identity)
-    assert "_has_identity()" in src, \
+    assert "_usable()" in src, \
         "identity() trusts the file again instead of what is inside it"
 
 
@@ -111,3 +111,21 @@ def test_a_failed_check_does_not_destroy_a_working_keychain():
     from unittest import mock
     with mock.patch.object(signing, "_run", side_effect=OSError("boom")):
         assert signing._has_identity() is True
+
+
+
+def test_a_working_keychain_is_not_thrown_away_over_one_failure():
+    """Rebuilding resets every permission the user has granted.
+
+    An earlier version rebuilt whenever a test sign failed. One false negative
+    replaced a certificate that had been working for hours, which silently
+    revoked Accessibility and Microphone and left the key doing nothing. The
+    only thing that now justifies a rebuild is the certificate being genuinely
+    absent."""
+    from unittest import mock
+    with mock.patch.object(signing, "_has_certificate", return_value=True), \
+         mock.patch.object(signing, "_has_identity", return_value=False):
+        assert signing._usable() is True, "one failed sign destroyed the keychain"
+
+    with mock.patch.object(signing, "_has_certificate", return_value=False):
+        assert signing._usable() is False, "an empty keychain is kept"

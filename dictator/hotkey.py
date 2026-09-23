@@ -68,7 +68,16 @@ KEYS = ("fn", "rightcmd", "rightopt", "leftcmd")
 
 # "off" restores the hold-only listener exactly.
 TOGGLE_KEYS = ("shift", "control", "option", "command", "rightcmd", "space", "off")
-DEFAULT_TOGGLE = "shift"
+# OFF by default, and this is not caution, it is a measurement. With it on,
+# a hold that was meant to be ordinary dictation latched into a hands free
+# session, ended immediately, and the user's actual sentence was thrown away.
+# The log filled with "Thank you." and "[MUSIC PLAYING]", which is what
+# whisper returns for the silence that follows. It ate several dictations in a
+# row before anyone worked out what it was, which is the worst kind of feature:
+# one that breaks the thing people came for, invisibly.
+#
+# Turn it on with `dictator gesture shift` when you want it.
+DEFAULT_TOGGLE = "off"
 
 # Generous but bounded. Five minutes of hands free dictation is a long
 # utterance; a microphone open for five minutes that nobody remembers opening
@@ -172,7 +181,7 @@ def build(force: bool = False) -> str:
 
 
 def listen(key: str = "fn", min_hold_ms: int = 0,
-           toggle_key: str = DEFAULT_TOGGLE,
+           toggle_key: "str | None" = None,
            max_session_ms: int = DEFAULT_MAX_SESSION_MS):
     """Start the listener. Returns a Popen whose stdout yields the protocol
 
@@ -196,6 +205,13 @@ def listen(key: str = "fn", min_hold_ms: int = 0,
     exe = build()
     if not exe:
         return None
+    if toggle_key is None:
+        # What the user chose, if they chose. The default is off, because with
+        # it on it ate dictations, so this only ever turns something on.
+        try:
+            toggle_key = (core.STATE_DIR / "gesture").read_text().strip()
+        except Exception:
+            toggle_key = DEFAULT_TOGGLE
     if toggle_key not in TOGGLE_KEYS:
         core.log(f"hotkey: unknown toggle key {toggle_key!r}, using {DEFAULT_TOGGLE}")
         toggle_key = DEFAULT_TOGGLE

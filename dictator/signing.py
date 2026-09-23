@@ -157,6 +157,40 @@ def _has_identity() -> bool:
         return True        # do not destroy a keychain over a failed check
 
 
+def _has_certificate() -> bool:
+    """Is the certificate itself in the keychain?
+
+    Cheap, and it answers the only question that justifies destroying a
+    keychain: whether there is anything in there at all. A failed PKCS12
+    import leaves a keychain with no certificate, which is the state worth
+    recovering from. Everything else is a reason to leave it alone."""
+    r = _run(["security", "find-certificate", "-c", NAME, str(KEYCHAIN)])
+    return r.returncode == 0
+
+
+def _usable() -> bool:
+    """Is this keychain worth keeping?
+
+    Rebuilding resets every permission the user has granted, so this is
+    deliberately hard to answer no to. It says no only when the certificate is
+    genuinely absent. A signing attempt that fails for any other reason, a
+    locked keychain, a search list that has not settled, a transient codesign
+    error, is not grounds for throwing away a working identity.
+
+    Not hypothetical caution. An earlier version rebuilt whenever a test sign
+    failed, and one false negative replaced a certificate that had been
+    working for hours, which silently revoked Accessibility and Microphone and
+    left the key doing nothing at all."""
+    if not _has_certificate():
+        core.log("signing: no certificate in the keychain")
+        return False
+    if _has_identity():
+        return True
+    core.log("signing: the certificate is there but signing failed; "
+             "leaving the keychain alone")
+    return True
+
+
 def identity() -> str:
     """The signing identity to use, or "" to mean fall back to ad-hoc.
 
@@ -168,7 +202,7 @@ def identity() -> str:
         core.STATE_DIR.mkdir(parents=True, exist_ok=True)
         if KEYCHAIN.exists() and PASSFILE.exists():
             _run(["security", "unlock-keychain", "-p", _password(), str(KEYCHAIN)])
-            if _add_to_search_list() and _has_identity():
+            if _add_to_search_list() and _usable():
                 return NAME
             # The keychain file existed and had nothing usable in it. That is
             # not a theoretical state: a PKCS12 import failed once on a real
@@ -178,7 +212,26 @@ def identity() -> str:
             # ad-hoc signed from then on. Permissions never stuck and there
             # was no way back short of deleting the file by hand.
             core.log("signing: the keychain has no usable identity, rebuilding")
-        return NAME if _create() else ""
+        if _create() and _has_certificate():
+            return NAME
+        # One retry with a brand new password. The failure this recovers from
+        # is real and was seen on a real machine: the PKCS12 import came back
+        # "MAC verification failed (wrong password?)" while the same sequence
+        # succeeds elsewhere, which left a keychain that existed and could not
+        # sign. Reusing the stored password would reproduce it exactly.
+        core.log("signing: first attempt produced nothing usable, retrying")
+        try:
+            PASSFILE.unlink()
+        except Exception:
+            pass
+        if _create() and _has_certificate():
+            return NAME
+        core.surface_error(
+            "signing",
+            "Could not create a signing identity, so the app is ad-hoc signed.",
+            hint="macOS will forget its permissions on the next rebuild. "
+                 "The reason is in ~/.dictator/log.")
+        return ""
     except Exception as e:
         core.log(f"signing: {e}")
         return ""

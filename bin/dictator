@@ -242,6 +242,24 @@ def main(argv) -> int:
             print("  Switch back with: dictator delivery clipboard")
         return 0
 
+    if cmd == "gesture":
+        from dictator import hotkey as _hk
+        f = core.STATE_DIR / "gesture"
+        if rest and rest[0] in _hk.TOGGLE_KEYS:
+            f.parent.mkdir(parents=True, exist_ok=True)
+            f.write_text(rest[0])
+            print(f"  hands free gesture: {rest[0]}")
+            print("  Restart it: dictator off && dictator on")
+        else:
+            try:
+                now = f.read_text().strip()
+            except Exception:
+                now = _hk.DEFAULT_TOGGLE
+            print(f"  hands free gesture: {now}")
+            print("  off means hold the key and talk, nothing else.")
+            print(f"  others: {', '.join(k for k in _hk.TOGGLE_KEYS if k != 'off')}")
+        return 0
+
     if cmd == "doctor":
         return doctor()
 

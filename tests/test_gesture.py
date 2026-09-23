@@ -180,7 +180,17 @@ def test_every_verb_the_listener_ends_a_take_with_is_a_stop_verb():
 def test_space_is_not_the_default_gesture():
     """fn is not a translation modifier, so fn+space still types a space into
     whatever is in front, and a listen-only tap cannot take it back."""
-    assert hotkey.DEFAULT_TOGGLE == "shift"
+    assert hotkey.DEFAULT_TOGGLE != "space"
+
+
+def test_the_hands_free_gesture_is_off_by_default():
+    """With it on, holds that were meant to be ordinary dictation latched into
+    a hands free session, ended immediately, and the sentence was thrown away.
+    The log filled with "Thank you." and "[MUSIC PLAYING]", which is what
+    whisper returns for the silence that follows. It ate several dictations
+    before anyone worked out what it was. A feature that breaks the thing
+    people came for does not get to be the default."""
+    assert hotkey.DEFAULT_TOGGLE == "off"
     assert "space" in hotkey.TOGGLE_KEYS, "still offered, just not chosen for you"
 
 
