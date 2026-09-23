@@ -14,7 +14,7 @@ if [ "$(uname)" != "Darwin" ]; then
   exit 1
 fi
 
-step "1/4  Command line tools"
+step "1/6  Command line tools"
 if ! xcode-select -p >/dev/null 2>&1; then
   echo "Installing Apple's command line tools. Accept the dialog, then run this again."
   xcode-select --install || true
@@ -22,7 +22,7 @@ if ! xcode-select -p >/dev/null 2>&1; then
 fi
 echo "ok"
 
-step "2/4  Recording and speech"
+step "2/6  Recording and speech"
 # Homebrew is the only realistic way to get these two on a Mac. Installing it
 # silently would be rude, so say what is missing and how to get it.
 if ! command -v brew >/dev/null 2>&1; then
@@ -44,7 +44,7 @@ for pkg in sox whisper-cpp; do
   fi
 done
 
-step "3/4  Word matching"
+step "3/6  Word matching"
 # jellyfish does the phonetic matching that makes one correction cover its
 # variants. It was never installed by this script and never checked by doctor,
 # and without it vocab.py sets it to None and the entire vocabulary and
@@ -61,7 +61,7 @@ else
   everything else will. Try: python3 -m pip install --user jellyfish"
 fi
 
-step "4/5  Speech models"
+step "4/6  Speech models"
 # These are downloaded rather than assumed. ensure_model() existed in the code
 # and had no callers anywhere, and would have fetched the wrong model anyway,
 # so a fresh machine had nothing to transcribe with and the key simply did

@@ -169,3 +169,14 @@ def test_english_does_not_wait_for_the_multilingual_model():
     assert sum(m[1] for m in stt.SHIPPED if m[3]) < 800
     assert "nohup" in (ROOT / "install.sh").read_text(), \
         "the big model is no longer fetched in the background"
+
+
+def test_the_installer_counts_its_own_steps():
+    """It said "1/4" at the top and "6/6" at the bottom, because steps were
+    added in the middle and the numbers were not. Small, but it is the first
+    thing a new user reads and it makes the whole thing look unmaintained."""
+    import re
+    steps = re.findall(r'step "(\d+)/(\d+)', (ROOT / "install.sh").read_text())
+    assert steps, "no numbered steps found"
+    total = len(steps)
+    assert [(str(i), str(total)) for i in range(1, total + 1)] == steps, steps
