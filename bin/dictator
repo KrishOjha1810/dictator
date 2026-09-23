@@ -1,0 +1,169 @@
+#!/usr/bin/env python3
+"""Dictator: hold a key anywhere on your Mac and speak. The words land where
+your cursor is.
+
+There is no per-application integration because there is nothing to integrate
+with. It pastes the way you would have typed, so it works in the terminal, in
+a browser, in Slack, in a text field that was written before any of this
+existed.
+"""
+import os
+import subprocess
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
+from dictator import core
+
+KEYS = ("fn", "rightcmd", "rightopt", "leftcmd")
+
+USAGE = """dictator: hold a key and talk, anywhere on your Mac.
+
+  dictator on [fn|rightcmd|rightopt|leftcmd]
+                      start now, and after every restart
+  dictator off        stop, and do not start again
+  dictator status     is it set up, and is it running
+  dictator doctor     check everything and say what is wrong
+  dictator log        the last thing it did
+  dictator errors     failures it noticed
+  dictator dictate    run it in the foreground (for debugging)
+  dictator build      build the app bundle without starting anything
+"""
+
+
+def _key_from(args, default="fn"):
+    for a in args:
+        if a in KEYS:
+            return a
+    return default
+
+
+def main(argv) -> int:
+    cmd = argv[1] if len(argv) > 1 else "status"
+    rest = argv[2:]
+
+    if cmd in ("-h", "--help", "help"):
+        print(USAGE)
+        return 0
+
+    if cmd == "on":
+        from dictator import always
+        print(always.on(_key_from(rest)))
+        return 0
+
+    if cmd == "off":
+        from dictator import always
+        print(always.off())
+        return 0
+
+    if cmd == "status":
+        from dictator import always
+        print(always.status())
+        return 0
+
+    if cmd == "build":
+        from dictator import always
+        app = always.build_app()
+        print(f"built {app}" if app else
+              "could not build the app (needs Xcode command line tools)")
+        return 0 if app else 1
+
+    if cmd == "dictate":
+        from dictator import dictate
+        return dictate.run(_key_from(rest), send="--send" in rest,
+                           debug="--quiet" not in rest)
+
+    if cmd == "log":
+        p = core.STATE_DIR / "dictate.log"
+        if not p.exists():
+            print("nothing yet. Turn it on with: dictator on")
+            return 0
+        n = 40
+        for a in rest:
+            if a.isdigit():
+                n = int(a)
+        print("".join(p.read_text().splitlines(keepends=True)[-n:]), end="")
+        return 0
+
+    if cmd == "errors":
+        rows = core.errors()
+        if not rows:
+            print("no failures recorded.")
+            return 0
+        import time as _t
+        for r in rows:
+            when = _t.strftime("%H:%M:%S", _t.localtime(r.get("at", 0)))
+            print(f"{when}  [{r.get('where','?')}] {r.get('msg','')} "
+                  f"{r.get('hint','')}".rstrip())
+        return 0
+
+    if cmd == "doctor":
+        return doctor()
+
+    print(USAGE)
+    return 2
+
+
+def doctor() -> int:
+    """Check the things that actually break, and say which one it is.
+
+    Every line here is something that has silently failed at least once: a
+    missing recorder that made the key look dead, a model that was never
+    downloaded, an app whose signature had changed so its permissions were
+    quietly revoked, and a second listener from another install that pasted
+    everything twice."""
+    from dictator import always, signing, stt
+    bad = 0
+
+    def ok(label, good, detail=""):
+        nonlocal bad
+        if not good:
+            bad += 1
+        print(f"  {'ok ' if good else 'BAD'}  {label}" + (f"  {detail}" if detail else ""))
+
+    print("dictator doctor\n")
+
+    import shutil
+    ok("swiftc (builds the key listener)", bool(shutil.which("swiftc")),
+       "" if shutil.which("swiftc") else "run: xcode-select --install")
+    rec = shutil.which("rec") or shutil.which("sox")
+    ok("sox (records your voice)", bool(rec),
+       "" if rec else "run: brew install sox")
+    whisper = shutil.which("whisper-cli") or shutil.which("whisper-cpp")
+    ok("whisper (turns it into text)", bool(whisper),
+       "" if whisper else "run: brew install whisper-cpp")
+
+    ok(f"speech model in {stt.MODEL_DIR}", stt.MODEL.exists(),
+       "" if stt.MODEL.exists() else f"missing {stt.MODEL.name}")
+
+    app_built = always.APP.exists()
+    ok(f"app bundle ({always.APP.name})", app_built,
+       "" if app_built else "run: dictator build")
+
+    if app_built:
+        req = signing.requirement(always.APP)
+        stable = "certificate leaf" in req
+        ok("app identity survives a rebuild", stable,
+           "" if stable else "ad-hoc signed: macOS will forget its permissions")
+
+    ok("set to start at login", always.installed(),
+       "" if always.installed() else "run: dictator on")
+    if always.installed():
+        ok("running now", always.running(),
+           "" if always.running() else "check: dictator log")
+
+    # A second hold-to-talk listener pastes everything twice, and the symptom
+    # looks like a stutter rather than like two programs.
+    other = Path.home() / "Library" / "LaunchAgents" / "com.voicebridge.dictate.plist"
+    ok("no other dictation key running", not other.exists(),
+       "" if not other.exists() else
+       "voicebridge's key is also installed; run: vb always off")
+
+    print()
+    print("all good." if not bad else f"{bad} problem(s) above.")
+    return 0 if not bad else 1
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv))
