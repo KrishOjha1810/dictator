@@ -114,3 +114,37 @@ def test_the_mac_helpers_can_actually_log():
         or (isinstance(n, ast.Import) and any("core" in a.name for a in n.names))
         for n in ast.walk(tree))
     assert imported, "mac.py calls core.log without importing core"
+
+
+def test_the_one_outside_dependency_is_installed_and_checked():
+    """jellyfish does the phonetic matching, and it is not stdlib.
+
+    Without it vocab.py sets it to None and the whole vocabulary and learning
+    feature does nothing at all, with no error anywhere. The installer never
+    installed it and doctor never looked for it, so on anyone else's machine
+    the feature would simply have been absent while everything reported fine.
+    """
+    assert "jellyfish" in (ROOT / "install.sh").read_text(), \
+        "the installer does not install it"
+    assert "jellyfish" in (ROOT / "bin" / "dictator").read_text(), \
+        "doctor does not check for it"
+
+
+def test_nothing_else_came_in_from_outside():
+    """One outside dependency is a packaging problem. Five is a different
+    product, and this is where that starts."""
+    import ast, sys
+    std = getattr(sys, "stdlib_module_names", set())
+    if not std:
+        return
+    outside = set()
+    for f in sorted(PKG.glob("*.py")):
+        for node in ast.walk(ast.parse(f.read_text())):
+            if isinstance(node, ast.Import):
+                names = [a.name.split(".")[0] for a in node.names]
+            elif isinstance(node, ast.ImportFrom) and node.level == 0:
+                names = [(node.module or "").split(".")[0]]
+            else:
+                continue
+            outside |= {n for n in names if n and n not in std and n != "dictator"}
+    assert outside <= {"jellyfish"}, f"new outside dependencies: {outside}"

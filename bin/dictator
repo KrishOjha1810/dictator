@@ -255,6 +255,16 @@ def doctor() -> int:
     ok("whisper (turns it into text)", bool(whisper),
        "" if whisper else "run: brew install whisper-cpp")
 
+    # Without this the vocabulary and everything learned from corrections is
+    # silently inert, which looks exactly like the feature not existing.
+    try:
+        import jellyfish            # noqa: F401
+        has_phonetics = True
+    except Exception:
+        has_phonetics = False
+    ok("phonetic matching (corrections and learning)", has_phonetics,
+       "" if has_phonetics else "run: python3 -m pip install --user jellyfish")
+
     ok(f"speech model in {stt.MODEL_DIR}", stt.MODEL.exists(),
        "" if stt.MODEL.exists() else f"missing {stt.MODEL.name}")
 

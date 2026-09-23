@@ -44,7 +44,24 @@ for pkg in sox whisper-cpp; do
   fi
 done
 
-step "3/4  Speech models"
+step "3/4  Word matching"
+# jellyfish does the phonetic matching that makes one correction cover its
+# variants. It was never installed by this script and never checked by doctor,
+# and without it vocab.py sets it to None and the entire vocabulary and
+# learning feature does nothing at all, silently. Same family of bug as a
+# function with no callers: everything looks installed and one feature is
+# simply absent.
+if python3 -c "import jellyfish" 2>/dev/null; then
+  echo "  jellyfish already there"
+else
+  echo "  installing jellyfish (phonetic matching)"
+  python3 -m pip install --user --quiet jellyfish 2>/dev/null \
+    || pip3 install --user --quiet jellyfish 2>/dev/null \
+    || echo "  could not install it. Corrections and learning will not work;
+  everything else will. Try: python3 -m pip install --user jellyfish"
+fi
+
+step "4/5  Speech models"
 # These are downloaded rather than assumed. ensure_model() existed in the code
 # and had no callers anywhere, and would have fetched the wrong model anyway,
 # so a fresh machine had nothing to transcribe with and the key simply did
@@ -91,7 +108,7 @@ fi
 
 "$HERE/bin/dictator" build >/dev/null || true
 
-step "4/4  Turn it on"
+step "5/5  Turn it on"
 "$HERE/bin/dictator" on
 
 cat <<'MSG'
