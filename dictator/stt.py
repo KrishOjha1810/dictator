@@ -38,6 +38,30 @@ def _resolve_model_dir() -> Path:
 
 MODEL_DIR = _resolve_model_dir()
 
+# The models this product is actually shipped with, as opposed to the fallback
+# names in the lists above. The installer downloads exactly these and doctor
+# reports on exactly these, so the two cannot disagree about what is missing:
+# naming a file the installer never fetches sends the user looking for
+# something that was never going to be there.
+#   (filename, megabytes, what it is for, needed before first use)
+SHIPPED = (
+    ("ggml-tiny.bin", 74, "works out which language you spoke", True),
+    ("ggml-parakeet-tdt-0.6b-v3-q8_0.bin", 638, "English, fast", True),
+    ("ggml-large-v3-turbo.bin", 1549, "Hindi and Hinglish", False),
+)
+
+
+def missing(essential_only: bool = False) -> list:
+    """Which shipped models are not on disk yet."""
+    return [m for m in SHIPPED
+            if not (MODEL_DIR / m[0]).exists()
+            and (m[3] or not essential_only)]
+
+
+def arriving(name: str) -> bool:
+    """Is this one being downloaded right now?"""
+    return (MODEL_DIR / (name + ".part")).exists()
+
 # Which engine answered the last transcription. Recorded rather than
 # inferred, because the routing has changed more than once and a
 # history full of guesses about it would be worse than no history.

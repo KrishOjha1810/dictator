@@ -265,8 +265,16 @@ def doctor() -> int:
     ok("phonetic matching (corrections and learning)", has_phonetics,
        "" if has_phonetics else "run: python3 -m pip install --user jellyfish")
 
-    ok(f"speech model in {stt.MODEL_DIR}", stt.MODEL.exists(),
-       "" if stt.MODEL.exists() else f"missing {stt.MODEL.name}")
+    # English and Hinglish need different models, and the big one arrives in
+    # the background after the installer has finished, so report each one and
+    # say which half is working rather than one line about "the model".
+    print(f"  ..   models in {stt.MODEL_DIR}")
+    for name, mb, why, essential in stt.SHIPPED:
+        here = (stt.MODEL_DIR / name).exists()
+        ok(f"  {why}", here,
+           "" if here else
+           (f"downloading now ({mb}MB)" if stt.arriving(name)
+            else f"missing ({mb}MB); run ./install.sh again"))
 
     app_built = always.APP.exists()
     ok(f"app bundle ({always.APP.name})", app_built,
@@ -277,6 +285,10 @@ def doctor() -> int:
         stable = "certificate leaf" in req
         ok("app identity survives a rebuild", stable,
            "" if stable else "ad-hoc signed: macOS will forget its permissions")
+
+    on_path = shutil.which("dictator")
+    ok("the dictator command is on your PATH", bool(on_path),
+       "" if on_path else "run ./install.sh again, or call it by full path")
 
     ok("set to start at login", always.installed(),
        "" if always.installed() else "run: dictator on")

@@ -97,18 +97,52 @@ get_model ggml-parakeet-tdt-0.6b-v3-q8_0.bin \
   https://huggingface.co/ggml-org/parakeet-GGUF/resolve/main/ggml-parakeet-tdt-0.6b-v3-q8_0.bin \
   638MB "English, and fast: about half a second"
 
-if [ "${DICTATOR_ENGLISH_ONLY:-}" = "1" ]; then
+# The multilingual model is 1.5GB on its own, and nothing about English needs
+# it. Waiting for it before the first word is ten minutes of a progress bar
+# before the product has proved it does anything, so it comes down in the
+# background and Hinglish starts working when it lands.
+TURBO="$MODEL_DIR/ggml-large-v3-turbo.bin"
+TURBO_URL=https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-large-v3-turbo.bin
+if [ -s "$TURBO" ]; then
+  echo "  ggml-large-v3-turbo.bin already here"
+elif [ "${DICTATOR_ENGLISH_ONLY:-}" = "1" ]; then
   echo "  skipping the multilingual model (DICTATOR_ENGLISH_ONLY=1)."
   echo "  Hindi and Hinglish will not work without it."
 else
-  get_model ggml-large-v3-turbo.bin \
-    https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-large-v3-turbo.bin \
-    1.5GB "Hindi, Hinglish, and anything the fast one gets wrong"
+  echo "  fetching ggml-large-v3-turbo.bin (1.5GB) in the background."
+  echo "  English works as soon as this installer finishes. Hindi and Hinglish"
+  echo "  start working when this lands; check with: dictator doctor"
+  nohup sh -c "curl -fsSL -o '$TURBO.part' '$TURBO_URL' && mv '$TURBO.part' '$TURBO' \
+               || rm -f '$TURBO.part'" >/dev/null 2>&1 &
 fi
 
 "$HERE/bin/dictator" build >/dev/null || true
 
-step "5/5  Turn it on"
+step "5/6  Make the command reachable"
+# Without this every command in the README fails for a new user, because the
+# repo's bin directory is not on anyone's PATH. Deliberately does NOT ask for
+# an admin password: Ollama does, and being asked to authenticate before a
+# tool has done anything is a bad first impression.
+LINKED=""
+for d in /opt/homebrew/bin /usr/local/bin "$HOME/.local/bin"; do
+  if [ -d "$d" ] && [ -w "$d" ]; then
+    ln -sf "$HERE/bin/dictator" "$d/dictator" && LINKED="$d" && break
+  fi
+done
+if [ -n "$LINKED" ]; then
+  echo "  dictator -> $LINKED/dictator"
+  case ":$PATH:" in
+    *":$LINKED:"*) : ;;
+    *) echo "  ($LINKED is not on your PATH yet; open a new terminal tab)" ;;
+  esac
+else
+  mkdir -p "$HOME/.local/bin" && ln -sf "$HERE/bin/dictator" "$HOME/.local/bin/dictator"
+  echo "  dictator -> ~/.local/bin/dictator"
+  echo "  Add this to your shell profile, then open a new tab:"
+  echo "    export PATH=\"\$HOME/.local/bin:\$PATH\""
+fi
+
+step "6/6  Turn it on"
 "$HERE/bin/dictator" on
 
 cat <<'MSG'

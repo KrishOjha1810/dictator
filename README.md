@@ -35,10 +35,20 @@ is the thing being worked on.
 ## Install
 
 ```bash
-git clone https://github.com/KrishOjha1810/dictator.git ~/dictator
-cd ~/dictator
-./install.sh
+curl -fsSL https://raw.githubusercontent.com/KrishOjha1810/dictator/main/get.sh | bash
 ```
+
+Or clone it yourself, if you would rather read it first, which is the same
+thing in three steps:
+
+```bash
+git clone https://github.com/KrishOjha1810/dictator.git ~/dictator
+cd ~/dictator && ./install.sh
+```
+
+English works as soon as that finishes, in about two minutes. The larger model
+for Hindi and Hinglish keeps downloading in the background and starts working
+when it lands; `dictator doctor` says which half is ready.
 
 The installer needs Homebrew for two packages (`sox` to record, `whisper-cpp`
 to transcribe) and Apple's command line tools to build the key listener. It

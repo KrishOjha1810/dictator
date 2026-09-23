@@ -148,3 +148,24 @@ def test_nothing_else_came_in_from_outside():
                 continue
             outside |= {n for n in names if n and n not in std and n != "dictator"}
     assert outside <= {"jellyfish"}, f"new outside dependencies: {outside}"
+
+
+def test_the_installer_and_the_code_agree_on_the_models():
+    """They named different files once: doctor reported ggml-base.bin missing
+    while the installer only ever downloaded ggml-large-v3-turbo.bin, so the
+    user was sent looking for something that was never going to arrive."""
+    from dictator import stt
+    script = (ROOT / "install.sh").read_text()
+    for name, mb, why, essential in stt.SHIPPED:
+        assert name in script, f"the installer never downloads {name}"
+
+
+def test_english_does_not_wait_for_the_multilingual_model():
+    """1.5GB before the first word is ten minutes of progress bar before the
+    product has proved it does anything. English needs 712MB of it."""
+    from dictator import stt
+    essential = [m[0] for m in stt.SHIPPED if m[3]]
+    assert "ggml-large-v3-turbo.bin" not in essential
+    assert sum(m[1] for m in stt.SHIPPED if m[3]) < 800
+    assert "nohup" in (ROOT / "install.sh").read_text(), \
+        "the big model is no longer fetched in the background"
