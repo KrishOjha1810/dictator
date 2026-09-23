@@ -57,8 +57,10 @@ def test_built_bundle_points_at_this_checkout():
 
 
 def test_state_is_our_own_directory():
-    from dictator import core
-    assert core.STATE_DIR.name == ".dictator", core.STATE_DIR
+    """Checked in the source, because the suite redirects STATE_DIR to a
+    temporary directory so tests cannot write into the user's real data."""
+    src = (PKG / "core.py").read_text()
+    assert 'expanduser("~/.dictator")' in src, "state directory is not ~/.dictator"
 
 
 def test_models_are_found_not_redownloaded(tmp_path, monkeypatch):

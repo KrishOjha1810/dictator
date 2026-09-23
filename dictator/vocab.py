@@ -107,6 +107,30 @@ class Vocab:
 
     # ---- admission ----------------------------------------------------
 
+    def spoken(self, least: int = 2, most: int = 3000) -> list:
+        """The words this user actually says.
+
+        A learned term is dangerous exactly when it can overwrite a word the
+        user uses, and a generic dictionary is the wrong guard for that. It
+        would leave "Hinglish" free to eat "English", which this user says
+        often, while blocking "dictator" because the dictionary happens to
+        contain "dictate", which they have never said once. The words in their
+        own history are the ones worth protecting."""
+        try:
+            from . import history
+            rows = history.recent(limit=800)
+        except Exception:
+            return []
+        seen = {}
+        for r in rows:
+            text = r.get("kept") or r.get("shown") or r.get("heard") or ""
+            for w in _WORD.findall(text):
+                if len(w) > 2:
+                    lw = w.lower()
+                    seen[lw] = seen.get(lw, 0) + 1
+        return [w for w, n in sorted(seen.items(), key=lambda kv: -kv[1])
+                if n >= least][:most]
+
     def admit(self, term: str, common=None) -> dict:
         """Decide how safely a term can be matched, once, when it is learned.
 
@@ -124,7 +148,8 @@ class Vocab:
             rec["why"] = (f"too short to guess from ({key}), so I will only "
                           f"fix it when I hear it exactly")
             return rec
-        clash = [w for w in (common or COMMON)
+        against = common if common is not None else (COMMON + self.spoken())
+        clash = [w for w in against
                  if _apart(key, _key(w)) <= NEAR and w.lower() != term.lower()]
         if clash:
             rec["why"] = (f"sounds like {', '.join(sorted(clash)[:3])}, so I "
