@@ -351,10 +351,37 @@ def permissions(reset: bool = False) -> int:
     import time as _t
     from dictator import always
 
+    from dictator import signing
+
     app = always.APP
     if not app.exists():
-        print("The app is not built yet. Run: dictator build")
-        return 1
+        print("The app is not built yet. Building it now.")
+        if not always.build_app():
+            print("Could not build it. Run: dictator doctor")
+            return 1
+
+    # An ad-hoc signed bundle is identified by the hash of its own binary, so
+    # macOS treats every rebuild as a different application and a permission
+    # granted to it does not stick. Asking somebody to grant a permission that
+    # cannot stick is worse than asking nothing, so fix the signature first.
+    if "cdhash" in signing.requirement(app):
+        print("The app is ad-hoc signed, which means macOS would forget this")
+        print("permission again. Rebuilding it with a stable identity first.\n")
+        always.build_app()
+        if "cdhash" in signing.requirement(app):
+            print("Still ad-hoc signed. Run `dictator doctor` and look at the")
+            print("signing line; the log at ~/.dictator/log has the reason.")
+            return 1
+        # A new identity means macOS has never seen this app before, so
+        # whatever it remembered about the old one is in the way.
+        for service in ("Accessibility", "Microphone", "ListenEvent"):
+            subprocess.run(["tccutil", "reset", service, "com.dictator.dictation"],
+                           capture_output=True)
+        subprocess.run([str(always.REPO / "bin" / "dictator"), "off"],
+                       capture_output=True)
+        subprocess.run([str(always.REPO / "bin" / "dictator"), "on"],
+                       capture_output=True)
+        print("Rebuilt and restarted.\n")
 
     if reset:
         # Clears a half-granted state where the box is ticked next to an app

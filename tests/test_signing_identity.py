@@ -74,3 +74,35 @@ def test_signing_failure_is_logged_not_swallowed():
         always._sign(always.APP)
     assert log.called, "signing failed and nothing said so"
     assert "no identity found" in " ".join(str(c) for c in log.call_args_list)
+
+
+def test_an_empty_keychain_is_rebuilt_rather_than_trusted():
+    """The check was whether the keychain FILE existed. On a real machine a
+    PKCS12 import failed once, leaving a keychain with nothing in it, and from
+    then on every run reported the identity as present, codesign found nothing,
+    and the app was silently ad-hoc signed. Permissions never stuck and there
+    was no way back short of deleting the file by hand."""
+    import inspect
+    src = inspect.getsource(signing.identity)
+    assert "_has_identity()" in src, \
+        "identity() trusts the file again instead of what is inside it"
+
+
+def test_the_identity_check_signs_something():
+    """Every cheaper check lies. find-identity reports zero for a self-signed
+    certificate on a keychain where codesign works, and find-certificate finds
+    the certificate when the private key never made it in, which is exactly
+    what a failed import leaves behind."""
+    import inspect
+    src = inspect.getsource(signing._has_identity)
+    assert "codesign" in src, "the identity check no longer tries to sign"
+    assert "find-identity" not in src, \
+        "back on a check that reports zero for a working keychain"
+
+
+def test_a_failed_check_does_not_destroy_a_working_keychain():
+    """Rebuilding resets every permission the user has granted, so an
+    unreadable answer has to mean "leave it alone", not "start again"."""
+    from unittest import mock
+    with mock.patch.object(signing, "_run", side_effect=OSError("boom")):
+        assert signing._has_identity() is True

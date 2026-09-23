@@ -133,6 +133,30 @@ def _create() -> bool:
         shutil.rmtree(tmp, ignore_errors=True)
 
 
+def _has_identity() -> bool:
+    """Can we actually sign with it? Asked by signing something.
+
+    Every cheaper check lies. `security find-identity` reports zero identities
+    for a self-signed certificate that is not trusted, on a keychain where
+    codesign works perfectly, so believing it would throw away a working
+    setup. And `find-certificate` can find the certificate when the private
+    key never made it in, which is exactly the state a failed PKCS12 import
+    leaves behind. The only honest question is the one the caller will ask
+    later anyway."""
+    import tempfile
+    try:
+        with tempfile.TemporaryDirectory() as d:
+            probe = Path(d) / "probe"
+            probe.write_bytes(b"\xcf\xfa\xed\xfe" + b"\0" * 60)
+            r = _run(["codesign", "--force", "-s", NAME, str(probe)])
+            # A missing identity says so in as many words. Anything else is a
+            # complaint about the probe file, not about the identity.
+            return "no identity found" not in (r.stderr or "").lower()
+    except Exception as e:
+        core.log(f"signing: could not check the identity: {e}")
+        return True        # do not destroy a keychain over a failed check
+
+
 def identity() -> str:
     """The signing identity to use, or "" to mean fall back to ad-hoc.
 
@@ -144,9 +168,16 @@ def identity() -> str:
         core.STATE_DIR.mkdir(parents=True, exist_ok=True)
         if KEYCHAIN.exists() and PASSFILE.exists():
             _run(["security", "unlock-keychain", "-p", _password(), str(KEYCHAIN)])
-            if _add_to_search_list():
+            if _add_to_search_list() and _has_identity():
                 return NAME
-            return ""
+            # The keychain file existed and had nothing usable in it. That is
+            # not a theoretical state: a PKCS12 import failed once on a real
+            # machine, leaving an empty keychain, and because the check was
+            # whether the FILE existed, every later run reported the identity
+            # as present, codesign found nothing, and the app was silently
+            # ad-hoc signed from then on. Permissions never stuck and there
+            # was no way back short of deleting the file by hand.
+            core.log("signing: the keychain has no usable identity, rebuilding")
         return NAME if _create() else ""
     except Exception as e:
         core.log(f"signing: {e}")
