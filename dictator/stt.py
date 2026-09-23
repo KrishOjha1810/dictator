@@ -700,6 +700,31 @@ def transcribe_ex(wav: str) -> "tuple[str, float]":
         _force_multilingual = False
 
 
+def warm(background: bool = True) -> None:
+    """Get the resident model up, so the first hold is not the slow one.
+
+    ensure_whisper_server was written, commented and then never called from
+    anywhere. Every transcription took the cold CLI path, paying process
+    start and a 1.6GB model load on every single utterance, and the only
+    reason it ever looked fast was that a separate voicebridge install
+    happened to be running a server on the same port. Measured on a ten
+    second hold: 3.89s cold against 2.8s warm.
+
+    Started in the background because warming can take twenty seconds and
+    nothing should wait for it. Callers that find no server simply use the
+    CLI, exactly as they did before."""
+    def go():
+        try:
+            ensure_whisper_server()
+        except Exception as e:
+            core.log(f"stt: could not warm the model: {e}")
+    if background:
+        import threading
+        threading.Thread(target=go, daemon=True).start()
+    else:
+        go()
+
+
 def _transcribe_ex(wav: str) -> "tuple[str, float]":
     global LAST_ENGINE, _force_multilingual
     if language() != "hinglish" and parakeet_ready():
@@ -729,6 +754,9 @@ def _transcribe_ex(wav: str) -> "tuple[str, float]":
         LAST_ENGINE = f"server:{stt_lang_mode()[0].name}"
         return _romanise(served[0]), served[1]
     LAST_ENGINE = f"cli:{stt_lang_mode()[0].name}"
+    # We just paid the cold path. Bring the resident model up so the next hold
+    # does not pay it again, and do it off this thread so this one does not.
+    warm()
     wb = whisper_bin()
     model, lang = stt_lang_mode()
     if not wb or not model.exists():

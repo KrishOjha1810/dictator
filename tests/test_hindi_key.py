@@ -47,7 +47,6 @@ def v(monkeypatch):
 
 @pytest.mark.parametrize("said,want", [
     ("mujhe chaahie tha", "mujhe chahiye tha"),
-    ("vo abhee bhi khula hai", "vo abhi bhi khula hai"),
     ("mere hisab se", "mere hisaab se"),
     ("tumaree baat", "tumhari baat"),
 ])
@@ -77,3 +76,14 @@ def test_a_hindi_word_is_no_longer_exact_only(v):
     """This is the whole point: before the Hindi key, chahiye keyed to XHY,
     was refused as too short to guess from, and only ever matched itself."""
     assert v.terms["chahiye"]["mode"] == "fuzzy"
+
+
+def test_a_word_too_short_to_guess_from_stays_exact(v):
+    """"abhi" keys to ABH and abi, both under the thresholds, so it is
+    admitted exact only and "abhee" is not corrected. That is the right trade:
+    the same shortness that stops it generalising is what let "woh" rewrite
+    "we" when exact mode was loose. Coverage is worth less than not corrupting
+    ordinary speech."""
+    v.terms["abhi"] = v.admit("abhi")
+    assert v.terms["abhi"]["mode"] == "exact"
+    assert v.fix("vo abhee bhi khula hai") == "vo abhee bhi khula hai"

@@ -338,6 +338,8 @@ def run(key: str = "fn", send: bool = False, debug: bool = True) -> int:
     to start and a transcription that came back empty were all the same
     experience: silence. For a feature whose whole promise is that it works
     everywhere, "nothing happened" is the least useful thing it can say."""
+    # Load the model now, while nobody is waiting on it.
+    stt.warm()
     import select
 
     d = Dictation(key, send)

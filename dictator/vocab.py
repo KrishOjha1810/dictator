@@ -269,8 +269,14 @@ class Vocab:
             if th and hkey and len(th) >= MIN_HINDI_KEY and hkey == th:
                 d = 0.0
             if rec.get("mode") == "exact":
-                if d > 0.0:
+                # Exact means the WORD, not the key. Keys collide: metaphone
+                # gives "we" and "woh" both W, so a term admitted as exact
+                # because it was too short to guess from still rewrote an
+                # ordinary English word in ordinary English speech. "I will
+                # only fix it when I hear it exactly" has to mean exactly.
+                if span.lower() != term.lower():
                     continue
+                d = 0.0
             elif d > NEAR:
                 continue
             if d < best_d:

@@ -102,3 +102,21 @@ def test_the_spoken_list_comes_from_what_was_actually_said(monkeypatch):
     got = box.spoken(least=2)
     assert "loop" in got and "slow" in got
     assert "is" not in got, "two letter words are noise, not vocabulary"
+
+
+def test_exact_mode_means_the_word_not_the_key(monkeypatch):
+    """Learning "woh" rewrote "we" in ordinary English speech.
+
+    "woh" was admitted in exact match mode because its metaphone key, W, is
+    too short to guess from. But exact mode compared KEYS, and metaphone gives
+    "we" the key W as well, so the safest possible admission still corrupted
+    one of the most common words in the language. Told a user it would "only
+    fix it when I hear it exactly", then did not."""
+    box = vocab.Vocab()
+    box.terms = {}
+    box.save = lambda: None
+    monkeypatch.setattr(box, "spoken", lambda **kw: ["we", "english"])
+    box.terms["woh"] = box.admit("woh")
+    assert box.terms["woh"]["mode"] == "exact"
+    for line in ("we can do this", "where is the file", "who wrote this"):
+        assert box.fix(line) == line, line
