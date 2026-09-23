@@ -88,3 +88,39 @@ def test_the_engine_label_names_the_model_that_ran(monkeypatch):
     import inspect
     src = inspect.getsource(stt._transcribe_ex)
     assert "MODEL.name" not in src, "engine label is back on the import time default"
+
+
+@pytest.mark.parametrize("said", [
+    # Real holds, from the history. Parakeet reached for a language it could
+    # spell the sounds in when the speaker switched mid sentence.
+    "Mujal okta heangtoe plazma, iż jídti bazej kutka ku banana ċajk.",
+    "Менен Телеранде.",
+    "منن تھیلرر آنڈے",
+])
+def test_an_answer_in_another_script_is_caught(said):
+    """Neither of the other two checks sees these. They are not long fused
+    blobs and they are not short on words for the audio, and the second is too
+    short to judge by rate at all. What gives them away is the characters."""
+    assert stt._not_english(said)
+
+
+@pytest.mark.parametrize("said", [
+    "This is the English line. Bobi Bhikkhullah or Mare is English accuracy.",
+    "User token account would be the one like his public key, something like that.",
+    "Is everything done? Uh like have you made it a repo in itself",
+    "He said “hello” and left…",
+])
+def test_ordinary_english_is_left_alone(said):
+    """Curly quotes and an ellipsis are the only things above ASCII a
+    transcriber of English has any business producing."""
+    assert not stt._not_english(said)
+
+
+def test_all_three_checks_guard_the_fast_path():
+    """Each one catches a failure the others miss, so dropping any of them
+    quietly reopens a hole: fused blobs, speech that went missing, and an
+    answer in a script nobody spoke."""
+    import inspect
+    src = inspect.getsource(stt._transcribe_ex)
+    for check in ("_parakeet_lost(got)", "_too_little(got, wav)", "_not_english(got)"):
+        assert check in src, f"{check} no longer guards the Parakeet path"

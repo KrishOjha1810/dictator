@@ -749,6 +749,31 @@ def _too_little(text: str, wav: str) -> bool:
     return (n / secs) < MIN_WORDS_PER_SEC
 
 
+# Curly quotes and an ellipsis are the only characters above ASCII that a
+# transcriber of English has any business producing.
+_FINE_ABOVE_ASCII = "\u2018\u2019\u201c\u201d\u2026"
+
+
+def _not_english(text: str) -> bool:
+    """Did it answer in a language it does not have?
+
+    Parakeet has English and nothing else, so its correct output is plain
+    ASCII. When the audio switches to Hindi mid sentence it sometimes reaches
+    for whichever language its tokenizer can spell the sounds in, and the
+    giveaway is in the characters rather than the words. Two real holds:
+
+        "Mujal okta heangtoe plazma, iz jidti bazej kutka ku banana cajk."
+                             with Polish and Czech diacritics on iz, jidti, cajk
+        "Menen Telerande."   in Cyrillic
+
+    Neither looks odd by word length or by capitalisation, which is what the
+    other two checks measure, and the second is short enough that the word
+    rate check will not judge it either. One foreign letter is enough: an
+    English transcriber has no reason to emit even one."""
+    return any(ord(c) > 127 and c not in _FINE_ABOVE_ASCII
+               for c in (text or ""))
+
+
 def _parakeet_lost(text: str) -> bool:
     """Did Parakeet fail because the sentence had no English in it?
 
@@ -861,7 +886,8 @@ def _transcribe_ex(wav: str) -> "tuple[str, float]":
     global LAST_ENGINE, _force_multilingual
     if language() != "hinglish" and parakeet_ready():
         got = _parakeet(wav)
-        if got and not _parakeet_lost(got) and not _too_little(got, wav):
+        if got and not _parakeet_lost(got) and not _too_little(got, wav) \
+                and not _not_english(got):
             LAST_ENGINE = "parakeet"
             return got, 0.9
         if got:
