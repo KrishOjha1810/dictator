@@ -180,3 +180,13 @@ def test_the_installer_counts_its_own_steps():
     assert steps, "no numbered steps found"
     total = len(steps)
     assert [(str(i), str(total)) for i in range(1, total + 1)] == steps, steps
+
+
+def test_the_suite_does_not_write_into_the_benchmark_corpus():
+    """It did. The capture flag and the corpus path are module constants
+    computed from STATE_DIR at import, so redirecting STATE_DIR in the fixture
+    missed them, and a test run filled the user's corpus with one-byte files
+    that look like recordings. Third time this exact shape has bitten."""
+    conftest = (ROOT / "tests" / "conftest.py").read_text()
+    for attr in ("CORPUS", "CAPTURE_FLAG"):
+        assert attr in conftest, f"{attr} is not redirected for tests"
