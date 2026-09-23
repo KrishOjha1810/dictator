@@ -257,6 +257,9 @@ def main(argv) -> int:
                 now = _hk.DEFAULT_TOGGLE
             print(f"  hands free gesture: {now}")
             print("  off means hold the key and talk, nothing else.")
+            print("  otherwise: hold the key and DOUBLE TAP it to go hands free,")
+            print("  and double tap again to stop. Two taps, because one is not")
+            print("  distinguishable from simply pressing that key while talking.")
             print(f"  others: {', '.join(k for k in _hk.TOGGLE_KEYS if k != 'off')}")
         return 0
 

@@ -3,6 +3,7 @@
 // Prints one line per gesture on stdout, so any language can consume it:
 //
 //   READY <key> toggle=<latch|off> cap=<ms>
+//   The latch gesture is TWO clean taps of the latch key inside a hold.
 //                        the listener is armed, and says how it is configured
 //   DOWN                 the talk key went down; start capturing now
 //   UP <held_ms>         the talk key came up; stop and transcribe
@@ -198,6 +199,11 @@ final class Gesture {
     private var latchAt: Date? = nil         // latch key down inside a hold
     private var latchDirty = false           // something else arrived since
     private var lastToggleAt: Date? = nil
+    private var firstTapAt: Date? = nil      // first of the two taps
+    /// How long the second tap has to arrive within. Long enough to be
+    /// comfortable, short enough that two unrelated shift presses seconds
+    /// apart are never read as one gesture.
+    private let doubleTapWindow = 0.6
     private var lastBeat: Int = -1
 
     var isHeld: Bool { downAt != nil }
@@ -270,15 +276,41 @@ final class Gesture {
 
     /// The latch key came up. This is the gesture, but only if nothing else
     /// happened between the press and the release.
+    /// The whole gesture: two clean taps. Tests and nothing else.
+    func latchGesture() {
+        latchDown(); latchUp()
+        latchDown(); latchUp()
+    }
+
     func latchUp() {
         let started = latchAt
         latchAt = nil
         guard started != nil, !latchDirty else { return }
+
+        // A clean tap is not the gesture on its own, so it must not destroy
+        // the recording either. Pressing shift once while dictating is an
+        // ordinary thing to do, and it used to cancel the hold outright.
+        interrupted = false
+
+        // TWO taps, not one. A single tap of a modifier inside a hold cannot
+        // be told apart from somebody simply pressing shift while they talk,
+        // and it is not a theoretical confusion: with one tap the gesture
+        // latched during ordinary dictation, ended immediately, and threw the
+        // sentence away. It ate several in a row. Two taps in half a second
+        // is a thing a person does on purpose.
+        let now = Date()
+        if let first = firstTapAt, now.timeIntervalSince(first) <= doubleTapWindow {
+            firstTapAt = nil
+        } else {
+            firstTapAt = now
+            return
+        }
+
         // Key chatter, or a finger that bounced, should not stop a session the
-        // same tap just started. A user cannot mean two things in a third of
-        // a second.
-        if let t = lastToggleAt, Date().timeIntervalSince(t) < 0.35 { return }
-        lastToggleAt = Date()
+        // same gesture just started. A user cannot mean two things in a third
+        // of a second.
+        if let t = lastToggleAt, now.timeIntervalSince(t) < 0.35 { return }
+        lastToggleAt = now
         if sessionAt != nil {
             endSession(reason: "UP", why: "toggle")
         } else {
@@ -420,16 +452,15 @@ func runSelfTest() -> Never {
 
     scenario("latch: clean tap inside a hold starts a session", { g in
         g.down()
-        g.latchDown()
-        g.latchUp()
+        g.latchGesture()
         g.up()                      // the release that follows must say nothing
     }, expect: ["DOWN", "LATCH 0"])
 
     scenario("latch: second tap stops and transcribes", { g in
-        g.down(); g.latchDown(); g.latchUp(); g.up()
+        g.down(); g.latchGesture(); g.up()
         usleep(400_000)             // past the chatter debounce
         g.down()                    // no second DOWN: the mic is already open
-        g.latchDown(); g.latchUp()
+        g.latchGesture()
         g.up()
     }, expect: ["DOWN", "LATCH 0", "UP 400 toggle"])
 
@@ -455,33 +486,33 @@ func runSelfTest() -> Never {
     }, expect: ["DOWN", "LATCH 0"])
 
     scenario("session: the hard cap discards", { g in
-        g.down(); g.latchDown(); g.latchUp(); g.up()
+        g.down(); g.latchGesture(); g.up()
         g.endSession(reason: "CANCEL", why: "cap")
     }, expect: ["DOWN", "LATCH 0", "CANCEL 0 cap"])
 
     scenario("session: a lost tap discards", { g in
-        g.down(); g.latchDown(); g.latchUp(); g.up()
+        g.down(); g.latchGesture(); g.up()
         g.endSession(reason: "CANCEL", why: "tap")
     }, expect: ["DOWN", "LATCH 0", "CANCEL 0 tap"])
 
     scenario("session: screen lock discards", { g in
-        g.down(); g.latchDown(); g.latchUp(); g.up()
+        g.down(); g.latchGesture(); g.up()
         g.endSession(reason: "LOCKED", why: "lock")
     }, expect: ["DOWN", "LATCH 0", "LOCKED 0 lock"])
 
     scenario("session: exiting discards", { g in
-        g.down(); g.latchDown(); g.latchUp(); g.up()
+        g.down(); g.latchGesture(); g.up()
         g.endSession(reason: "CANCEL", why: "exit")
     }, expect: ["DOWN", "LATCH 0", "CANCEL 0 exit"])
 
     scenario("session: ending twice says it once", { g in
-        g.down(); g.latchDown(); g.latchUp(); g.up()
+        g.down(); g.latchGesture(); g.up()
         g.endSession(reason: "CANCEL", why: "cap")
         g.endSession(reason: "CANCEL", why: "exit")
     }, expect: ["DOWN", "LATCH 0", "CANCEL 0 cap"])
 
     scenario("session: the talk key alone does nothing", { g in
-        g.down(); g.latchDown(); g.latchUp(); g.up()
+        g.down(); g.latchGesture(); g.up()
         g.down(); g.up()            // a bare tap mid session
         g.down(); g.up()
     }, expect: ["DOWN", "LATCH 0"])
@@ -489,14 +520,39 @@ func runSelfTest() -> Never {
     scenario("session: heartbeats only while one is open", { g in
         let g2 = g
         g2.beat()                   // nothing open
-        g2.down(); g2.latchDown(); g2.latchUp(); g2.up()
+        g2.down(); g2.latchGesture(); g2.up()
         g2.beat()                   // 0ms in, too early to beat
     }, expect: ["DOWN", "LATCH 0"])
 
     scenario("session: a latch with nothing recording opens the mic first", { g in
-        g.latchDown()               // no hold: the tap died and was re-armed
-        g.latchUp()
+        g.latchGesture()            // no hold: the tap died and was re-armed
     }, expect: ["DOWN", "LATCH 0"])
+
+    scenario("latch: ONE tap does nothing at all", { g in
+        // The whole reason the gesture needs two. A single tap of a modifier
+        // inside a hold cannot be told apart from somebody pressing shift
+        // while they talk, and when one tap was enough it latched during
+        // ordinary dictation, ended immediately, and threw the sentence away.
+        g.down()
+        g.latchDown(); g.latchUp()
+        g.up()
+    }, expect: ["DOWN", "UP 0"])
+
+    scenario("latch: one tap does not cancel the recording either", { g in
+        // It used to. Pressing shift once mid sentence is an ordinary thing
+        // to do, and it killed the hold outright.
+        g.down()
+        g.latchDown(); g.latchUp()
+        g.up()
+    }, expect: ["DOWN", "UP 0"])
+
+    scenario("latch: two taps far apart are two accidents, not a gesture", { g in
+        g.down()
+        g.latchDown(); g.latchUp()
+        usleep(800_000)             // past the window
+        g.latchDown(); g.latchUp()
+        g.up()
+    }, expect: ["DOWN", "UP 800"])
 
     // --- the gesture turned off -------------------------------------------
 
