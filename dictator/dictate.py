@@ -341,7 +341,12 @@ def run(key: str = "fn", send: bool = False, debug: bool = True) -> int:
     import select
 
     d = Dictation(key, send)
-    p = hotkey.listen(key, min_hold_ms=0)
+    # The listener's session cap and the recorder's cap have to be the same
+    # number. If the listener ran longer, it would keep reporting that it is
+    # listening after the recorder had already stopped, which is the exact
+    # failure this product cannot have: a microphone the user believes is open
+    # and is not, or the reverse.
+    p = hotkey.listen(key, min_hold_ms=0, max_session_ms=int(MAX_SECS * 1000))
     if not p:
         print("Could not start the key listener. See `dictator log`.")
         print("If this is the first run, grant Accessibility and try again:")
@@ -405,10 +410,31 @@ def run(key: str = "fn", send: bool = False, debug: bool = True) -> int:
                 d.down()
             elif parts[0] == "UP":
                 held = float(parts[1]) if len(parts) > 1 else 0.0
-                note(f"released after {held:.0f}ms")
+                note("hands free session ended" if "toggle" in parts
+                     else f"released after {held:.0f}ms")
                 d.up(held)
+            elif parts[0] == "LATCH":
+                # Hands free. The microphone opened by DOWN keeps running, and
+                # the key release that follows emits nothing, so there is
+                # nothing to do here except say so. Saying so matters: the
+                # user has taken their hand off the key and the only thing
+                # telling them the mic is still open is the indicator.
+                note("hands free now. Tap the chord again to stop.")
+                core.set_hud("hearing", 0.0)
+            elif parts[0] == "LISTENING":
+                # A heartbeat, so a listener that died quietly is not mistaken
+                # for one that is patiently waiting.
+                core.set_hud("hearing", 0.0)
             elif parts[0] in ("CANCEL", "LOCKED"):
-                note("cancelled (another key joined, or the screen locked)")
+                why = parts[2] if len(parts) > 2 else ""
+                note({
+                    "cap": "that hit the time limit, so I threw it away rather "
+                           "than pasting minutes of whatever the room said",
+                    "tap": "I lost sight of the keyboard, so I stopped and "
+                           "threw it away",
+                    "exit": "stopping, so I threw that away",
+                    "lock": "the screen locked, so I threw that away",
+                }.get(why, "cancelled (another key joined, or the screen locked)"))
                 d.cancel()
             elif parts[0] == "BYE":
                 break

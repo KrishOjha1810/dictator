@@ -1,4 +1,4 @@
-"""Hold-to-talk on a single key.
+"""Hold-to-talk on a single key, and a hands free session on a chord.
 
 The listener itself is a tiny Swift binary (native/hotkey.swift) because only
 a CGEventTap can see the Fn/Globe key, and only an event tap gives us the key
@@ -7,7 +7,10 @@ which fires on key-press only and so cannot do this at all.
 
 It speaks a one-line-per-gesture protocol on stdout:
 
-    READY <key>       armed
+    READY <key> toggle=<latch|off> cap=<ms>
+                      armed, and saying how it is configured. `cap` is the
+                      longest hands free session it will allow, so a caller
+                      can size its recorder from it instead of guessing.
     DOWN              key down: warm the mic NOW
     UP <held_ms>      key up: stop and transcribe
     CANCEL <held_ms>  another key joined, or the press was too short to be
@@ -20,17 +23,40 @@ It speaks a one-line-per-gesture protocol on stdout:
                       emoji palette. We are listen-only and cannot prevent
                       that. The floor decides only whether WE transcribe.
     LOCKED            the screen locked mid-hold
-    BYE               exiting, any open hold already closed
 
-Why hold-only, with no tap or double-tap gesture: macOS runs the Globe key's
-own action (emoji picker, input-source switch) on the release of a clean TAP
-and ignores a HOLD. So a hold-only design collides with nothing and needs no
-change to System Settings, while any tap gesture would fight the OS.
+    LATCH <ms>        the hold just became a HANDS FREE session. The mic that
+                      DOWN opened keeps running, and the key release that
+                      follows deliberately emits nothing at all, so a caller
+                      that does nothing with LATCH keeps recording, which is
+                      the correct fallback.
+    LISTENING <ms>    heartbeat, every 5s, only while a session is open
+    UP <ms> toggle    the user tapped the chord again: stop and transcribe
+    CANCEL <ms> cap|tap|exit
+                      the session ended without the user asking for it. Stop
+                      and DISCARD: the reasons are a hard cap, a dead event
+                      tap, and our own exit.
+    LOCKED <ms> lock  the screen locked mid-session. Stop and DISCARD.
+    BYE               exiting, any open hold or session already closed
+
+The trailing reason word is always last and always optional to read, so the
+older parser (token 0 is the verb, token 1 is milliseconds) is still correct.
+
+Why hold, plus a MODIFIER chord to latch, and not fn+space: macOS runs the
+Globe key's own action (emoji picker, input-source switch) on the release of a
+clean TAP and ignores a HOLD, so a hold collides with nothing. fn+space is a
+different story. fn is not a translation modifier, so fn+space produces U+0020
+exactly as space alone does, and a listen-only tap cannot swallow it: it would
+type a space into your document, scroll a browser, open Quick Look in the
+Finder and press whichever button has focus in a dialog. A modifier tap
+(shift, by default) produces no character and triggers nothing by itself,
+which is the same property that makes the hold safe. `--toggle-key space` is
+still available for anyone who wants it knowing that.
 """
 import os
 import shutil
 import subprocess
 import time
+from collections import namedtuple
 from pathlib import Path
 
 from . import core
@@ -39,6 +65,87 @@ SRC = Path(__file__).resolve().parent.parent / "native" / "hotkey.swift"
 BIN = core.STATE_DIR / "bin" / "dictator-hotkey"
 
 KEYS = ("fn", "rightcmd", "rightopt", "leftcmd")
+
+# "off" restores the hold-only listener exactly.
+TOGGLE_KEYS = ("shift", "control", "option", "command", "rightcmd", "space", "off")
+DEFAULT_TOGGLE = "shift"
+
+# Generous but bounded. Five minutes of hands free dictation is a long
+# utterance; a microphone open for five minutes that nobody remembers opening
+# is a different kind of event. Whoever calls listen() must give its recorder
+# at least this long, or the mic will stop while the session still says it is
+# listening, which is the same lie in the other direction.
+DEFAULT_MAX_SESSION_MS = 300_000
+
+#: Lines that end a take. UP means transcribe it, the other two mean throw it
+#: away.
+STOP_VERBS = ("UP", "CANCEL", "LOCKED")
+#: Lines that only ever appear inside a hands free session.
+SESSION_VERBS = ("LATCH", "LISTENING")
+
+Event = namedtuple("Event", "verb ms why fields raw")
+
+
+def parse(line):
+    """Turn one protocol line into an Event, or None if there is nothing in it.
+
+    Deliberately total: a listener that garbles a line, or a future one that
+    invents a verb, must not take the dictation loop down with it. Unknown
+    verbs come back intact so the caller can log them and carry on.
+    """
+    if not isinstance(line, str):
+        return None
+    parts = line.strip().split()
+    if not parts:
+        return None
+    verb = parts[0]
+    ms = None
+    why = ""
+    fields = {}
+    for i, tok in enumerate(parts[1:]):
+        if "=" in tok:
+            k, _, v = tok.partition("=")
+            if k:
+                fields[k] = v
+            continue
+        if i == 0:
+            try:
+                ms = float(tok)
+                continue
+            except ValueError:
+                pass
+        # A bare word that is not the duration: the reason the take ended, or
+        # the key name on READY. Last one wins, because it is always last.
+        why = tok
+    return Event(verb, ms, why, fields, line.strip())
+
+
+def is_session(ev):
+    """Did this line come from a hands free session rather than a hold?
+
+    A session's ending carries a reason word; a hold's does not. That is the
+    whole difference, and it is why the reason is not decoration.
+    """
+    if ev is None:
+        return False
+    if ev.verb in SESSION_VERBS:
+        return True
+    return ev.verb in STOP_VERBS and bool(ev.why)
+
+
+def stops(ev):
+    """Does this line mean the microphone is now closed?"""
+    return ev is not None and ev.verb in STOP_VERBS
+
+
+def transcribes(ev):
+    """...and should what was captured be transcribed and pasted?
+
+    Only UP. Every other ending happened without the user asking for it, and
+    pasting minutes of whatever the room was saying into the frontmost app is
+    not a mistake you can take back.
+    """
+    return ev is not None and ev.verb == "UP"
 
 
 def build(force: bool = False) -> str:
@@ -64,7 +171,9 @@ def build(force: bool = False) -> str:
     return ""
 
 
-def listen(key: str = "fn", min_hold_ms: int = 0):
+def listen(key: str = "fn", min_hold_ms: int = 0,
+           toggle_key: str = DEFAULT_TOGGLE,
+           max_session_ms: int = DEFAULT_MAX_SESSION_MS):
     """Start the listener. Returns a Popen whose stdout yields the protocol
 
     min_hold_ms defaults to 0, i.e. no mis-press floor. A very short hold
@@ -74,13 +183,26 @@ def listen(key: str = "fn", min_hold_ms: int = 0):
     threshold. Raise it only with data.
     above, or None. The caller owns the process and MUST terminate it; the
     listener closes any open hold on SIGTERM so we can never be left believing
-    the key is still down."""
+    the key is still down.
+
+    toggle_key is the key tapped cleanly INSIDE a hold to leave the mic open
+    hands free, and tapped again to stop. "off" gives back the hold-only
+    listener. See the module docstring for why it is a modifier and not space.
+
+    max_session_ms bounds a session that nobody ever stops. The caller's
+    recorder must be allowed to run at least this long, or the mic closes
+    while we are still reporting a session.
+    """
     exe = build()
     if not exe:
         return None
+    if toggle_key not in TOGGLE_KEYS:
+        core.log(f"hotkey: unknown toggle key {toggle_key!r}, using {DEFAULT_TOGGLE}")
+        toggle_key = DEFAULT_TOGGLE
     try:
         return subprocess.Popen(
-            [exe, "--key", key, "--min-hold", str(min_hold_ms)],
+            [exe, "--key", key, "--min-hold", str(min_hold_ms),
+             "--toggle-key", toggle_key, "--max-session", str(int(max_session_ms))],
             stdout=subprocess.PIPE, stderr=subprocess.PIPE,
             text=True, bufsize=1,
         )
@@ -89,17 +211,18 @@ def listen(key: str = "fn", min_hold_ms: int = 0):
         return None
 
 
-def measure(key: str = "fn", secs: int = 30) -> dict:
+def measure(key: str = "fn", secs: int = 30, toggle_key: str = DEFAULT_TOGGLE) -> dict:
     """Run a self-serve trial so you can see the gestures land and learn your
     own natural hold duration. Prints as it goes; returns the summary."""
-    p = listen(key)
+    p = listen(key, toggle_key=toggle_key)
     if not p:
         print("could not start the listener; see `dictator log`")
         return {}
 
-    holds, cancels = [], []
+    holds, cancels, sessions = [], [], []
     deadline = time.time() + secs
-    print(f"hold {key} and speak, as you normally would. {secs}s.\n")
+    print(f"hold {key} and speak, as you normally would. Tap {toggle_key} while")
+    print(f"holding it to stay listening without holding. {secs}s.\n")
     try:
         os.set_blocking(p.stdout.fileno(), False)
         while time.time() < deadline:
@@ -107,17 +230,14 @@ def measure(key: str = "fn", secs: int = 30) -> dict:
             if not line:
                 time.sleep(0.02)
                 continue
-            line = line.strip()
-            if not line:
+            ev = parse(line)
+            if ev is None:
                 continue
-            print("  " + line)
-            parts = line.split()
-            if parts[0] == "UP" and len(parts) > 1:
-                holds.append(int(parts[1]))
-            elif parts[0] == "CANCEL" and len(parts) > 1:
-                cancels.append(int(parts[1]))
-            elif parts[0] == "READY":
-                pass
+            print("  " + ev.raw)
+            if ev.verb == "UP" and ev.ms is not None:
+                (sessions if is_session(ev) else holds).append(int(ev.ms))
+            elif ev.verb == "CANCEL" and ev.ms is not None:
+                cancels.append(int(ev.ms))
     finally:
         p.terminate()
         try:
@@ -133,6 +253,8 @@ def measure(key: str = "fn", secs: int = 30) -> dict:
         print("  " + ", ".join(f"{x}ms" for x in s))
     else:
         print("no completed holds recorded (was the key actually held?)")
+    if sessions:
+        print(f"hands free sessions: {', '.join(f'{x}ms' for x in sessions)}")
     if cancels:
         print(f"cancelled (chord or too short): {', '.join(f'{c}ms' for c in cancels)}")
-    return {"holds": holds, "cancels": cancels}
+    return {"holds": holds, "cancels": cancels, "sessions": sessions}
