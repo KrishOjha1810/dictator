@@ -55,11 +55,13 @@ def test_it_does_not_reach_inside_a_longer_word(v):
     assert v.fix("vergrossern lernen") == "vergrossern lernen"
 
 
-def test_a_crowded_sounding_term_is_admitted_exact_only(v):
-    """A term that sounds like common words cannot be guessed at safely, and
-    the reason is written for the user rather than silently applied."""
+def test_a_crowded_sounding_term_is_not_guessed_by_that_sound(v):
+    """A term that collides with words the user says cannot be guessed at by
+    the sound it collides on, and the reason is written for them to read
+    rather than silently applied. It may still be guessed at by a key that
+    does not collide, which is what makes "Amandhra" correctable at all."""
     rec = v.admit("Amandra")
-    assert rec["mode"] == "exact"
+    assert "key" not in rec["guess"], rec
     assert rec["why"], "declined to guess without saying why"
 
 
@@ -76,10 +78,10 @@ def test_a_term_that_sounds_like_a_word_you_use_is_exact_only(monkeypatch):
     monkeypatch.setattr(box, "spoken", lambda **kw: ["english", "line", "accuracy"])
 
     hinglish = box.admit("Hinglish")
-    assert hinglish["mode"] == "exact"
+    assert "key" not in hinglish["guess"], hinglish
     assert "english" in hinglish["why"]
 
-    assert box.admit("dictator")["mode"] == "fuzzy"
+    assert "key" in box.admit("dictator")["guess"]
 
 
 def test_learning_it_anyway_does_not_break_the_word_it_sounds_like(monkeypatch):
@@ -119,4 +121,22 @@ def test_exact_mode_means_the_word_not_the_key(monkeypatch):
     box.terms["woh"] = box.admit("woh")
     assert box.terms["woh"]["mode"] == "exact"
     for line in ("we can do this", "where is the file", "who wrote this"):
+        assert box.fix(line) == line, line
+
+
+def test_one_bad_key_does_not_disable_the_good_one(monkeypatch):
+    """"Amandra" keys to AMNTP, which collides with "amend" and "amount", and
+    to amandra in Hindi, which collides with nothing. Refusing to guess at all
+    because one of the two collided meant a misheard "Amandhra" was never
+    corrected, which is the case the user actually reported."""
+    box = vocab.Vocab()
+    box.terms = {}
+    box.save = lambda: None
+    monkeypatch.setattr(box, "spoken",
+                        lambda **kw: ["amend", "amends", "amount", "we"])
+    box.terms["Amandra"] = box.admit("Amandra")
+    assert box.terms["Amandra"]["guess"] == ["hkey"], box.terms["Amandra"]
+    assert box.fix("tell Amandhra to review") == "tell Amandra to review"
+    # The words it collided with must still be safe.
+    for line in ("we need to amend the file", "the amount is wrong"):
         assert box.fix(line) == line, line

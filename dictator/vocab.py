@@ -167,16 +167,29 @@ class Vocab:
                           f"will only fix it when I hear it exactly")
             return rec
         against = common if common is not None else (COMMON + self.spoken())
-        # Clashing on EITHER key is a clash: the matcher will try both, so a
-        # term is only safe to guess at when neither reading of it collides.
-        clash = []
+        # Judge each key on its own. A term can be unsafe to guess at by its
+        # English sound and perfectly safe by its Hindi one: "Amandra" keys to
+        # AMNTP, which collides with "amend" and "amount", while its Hindi key
+        # amandra collides with nothing. Refusing both because one collided
+        # meant "Amandhra" was never corrected, which is the exact thing the
+        # user asked for.
+        clash, hclash = [], []
         for w in against:
             if w.lower() == term.lower():
                 continue
             if key and _apart(key, _key(w)) <= NEAR:
                 clash.append(w)
-            elif hkey and len(hkey) >= MIN_HINDI_KEY and hkey == _hkey(w):
-                clash.append(w)
+            if hkey and len(hkey) >= MIN_HINDI_KEY and hkey == _hkey(w):
+                hclash.append(w)
+        rec["guess"] = ([] if clash or len(key) < MIN_KEY else ["key"]) + \
+                       ([] if hclash or len(hkey) < MIN_HINDI_KEY else ["hkey"])
+        if rec["guess"]:
+            rec["mode"] = "fuzzy"
+            if clash or hclash:
+                rec["why"] = (f"sounds like {', '.join(sorted(set(clash + hclash))[:3])}, "
+                              f"so I will be stricter about it")
+            return rec
+        clash = clash + hclash
         if clash:
             rec["why"] = (f"sounds like {', '.join(sorted(clash)[:3])}, so I "
                           f"will only fix it when I hear it exactly")
@@ -260,13 +273,17 @@ class Vocab:
             tk, th = rec.get("key") or "", rec.get("hkey") or ""
             if not tk and not th:
                 continue
-            d = _apart(key, tk) if (key and tk) else 1.0
+            guess = rec.get("guess")
+            if guess is None:          # written before per-key admission
+                guess = ["key", "hkey"] if rec.get("mode") == "fuzzy" else []
+            d = _apart(key, tk) if (key and tk and "key" in guess) else 1.0
             # The Hindi key has to match EXACTLY, never approximately. It has
             # already absorbed the spelling variation it exists for (chaahie
             # and chahiye are both cahie), so there is nothing left for a
             # distance to buy, and the keys are short enough that allowing one
             # character of slack turned "sahi hai" into "chahiye".
-            if th and hkey and len(th) >= MIN_HINDI_KEY and hkey == th:
+            if th and hkey and "hkey" in guess and len(th) >= MIN_HINDI_KEY \
+                    and hkey == th:
                 d = 0.0
             if rec.get("mode") == "exact":
                 # Exact means the WORD, not the key. Keys collide: metaphone

@@ -344,6 +344,23 @@ _DETECT_MODEL = "ggml-tiny.bin"
 # took 8.9 seconds. When unsure, fall back to letting whisper decide.
 MIN_DETECT_P = 0.5
 
+# The only two answers worth acting on. This product routes between English
+# and Hinglish and nothing else, so any other answer is the detector being
+# confused rather than useful information.
+#
+# It confuses easily, and the failure is spectacular rather than subtle. On
+# short holds containing Indian names the tiny model returned Malayalam at
+# p=0.80 and Malay at p=0.40, and pinning those produced "Аманди." and
+# "منن تھیلرر آنڈے": correct-looking transcription of a language nobody spoke,
+# in a script that cannot be pasted anywhere. Confidence did not separate the
+# good answers from the bad ones, so the language list does.
+PINNABLE = ("en", "hi")
+
+# Language identification off a second or two of audio is a coin flip, and a
+# hold that short is usually a name or a single word, which is exactly when
+# getting it wrong hurts most.
+MIN_DETECT_SECS = 4.0
+
 
 def audio_seconds(wav: str) -> float:
     try:
@@ -398,9 +415,18 @@ def pinned_language(wav: str, want: str) -> str:
     """Replace `auto` with a real language when we can work one out cheaply."""
     if want != "auto":
         return want
+    secs = audio_seconds(wav)
+    if secs and secs < MIN_DETECT_SECS:
+        core.log(f"stt: only {secs:.1f}s of audio, too short to identify a "
+                 f"language from, letting whisper decide")
+        return "auto"
     code, p = detect_language(wav)
-    if not code or p < MIN_DETECT_P:
-        core.log(f"stt: language unclear ({code or 'none'} p={p:.2f}), "
+    if code not in PINNABLE:
+        core.log(f"stt: detector said {code or 'nothing'} (p={p:.2f}), which "
+                 f"is not a language this handles, letting whisper decide")
+        return "auto"
+    if p < MIN_DETECT_P:
+        core.log(f"stt: language unclear ({code} p={p:.2f}), "
                  f"letting whisper decide")
         return "auto"
     core.log(f"stt: detected {code} (p={p:.2f}) in the tiny model")
