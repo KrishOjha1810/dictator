@@ -93,10 +93,15 @@ def test_the_identity_check_signs_something():
     certificate on a keychain where codesign works, and find-certificate finds
     the certificate when the private key never made it in, which is exactly
     what a failed import leaves behind."""
-    import inspect
-    src = inspect.getsource(signing._has_identity)
-    assert "codesign" in src, "the identity check no longer tries to sign"
-    assert "find-identity" not in src, \
+    import ast, inspect
+    tree = ast.parse(inspect.getsource(signing._has_identity).lstrip())
+    # The code, not the comments: the docstring explains why find-identity is
+    # the wrong check, and a plain text search fails on that explanation.
+    strings = [n.value for n in ast.walk(tree)
+               if isinstance(n, ast.Constant) and isinstance(n.value, str)]
+    body = " ".join(strings[1:])          # skip the docstring
+    assert "codesign" in body, "the identity check no longer tries to sign"
+    assert "find-identity" not in body, \
         "back on a check that reports zero for a working keychain"
 
 
