@@ -44,18 +44,52 @@ for pkg in sox whisper-cpp; do
   fi
 done
 
-step "3/4  Speech model"
+step "3/4  Speech models"
+# These are downloaded rather than assumed. ensure_model() existed in the code
+# and had no callers anywhere, and would have fetched the wrong model anyway,
+# so a fresh machine had nothing to transcribe with and the key simply did
+# nothing. Models already on the machine are found, not fetched again.
+MODEL_DIR="$(python3 -c "import sys; sys.path.insert(0, '$HERE'); from dictator import stt; print(stt.MODEL_DIR)")"
+mkdir -p "$MODEL_DIR"
+echo "  models live in $MODEL_DIR"
+
+get_model() {  # name url size why
+  local name="$1" url="$2" size="$3" why="$4"
+  if [ -s "$MODEL_DIR/$name" ]; then
+    echo "  $name already here"
+    return 0
+  fi
+  echo "  fetching $name ($size, one time): $why"
+  if curl -fSL --progress-bar -o "$MODEL_DIR/$name.part" "$url"; then
+    mv "$MODEL_DIR/$name.part" "$MODEL_DIR/$name"
+  else
+    # A half written model is worse than none: it looks present and fails at
+    # the moment you speak, which reads as the key being broken.
+    rm -f "$MODEL_DIR/$name.part"
+    echo "  could not download $name. Run this installer again when you have a"
+    echo "  connection; everything already downloaded is kept."
+    return 1
+  fi
+}
+
+get_model ggml-tiny.bin \
+  https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-tiny.bin \
+  74MB "works out which language you just spoke, in 0.2s"
+
+get_model ggml-parakeet-tdt-0.6b-v3-q8_0.bin \
+  https://huggingface.co/ggml-org/parakeet-GGUF/resolve/main/ggml-parakeet-tdt-0.6b-v3-q8_0.bin \
+  638MB "English, and fast: about half a second"
+
+if [ "${DICTATOR_ENGLISH_ONLY:-}" = "1" ]; then
+  echo "  skipping the multilingual model (DICTATOR_ENGLISH_ONLY=1)."
+  echo "  Hindi and Hinglish will not work without it."
+else
+  get_model ggml-large-v3-turbo.bin \
+    https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-large-v3-turbo.bin \
+    1.5GB "Hindi, Hinglish, and anything the fast one gets wrong"
+fi
+
 "$HERE/bin/dictator" build >/dev/null || true
-python3 - "$HERE" <<'PY'
-import sys
-sys.path.insert(0, sys.argv[1])
-from dictator import stt
-print(f"  models: {stt.MODEL_DIR}")
-if stt.MODEL.exists():
-    print(f"  {stt.MODEL.name} already there")
-else:
-    print(f"  {stt.MODEL.name} will download on first use")
-PY
 
 step "4/4  Turn it on"
 "$HERE/bin/dictator" on
