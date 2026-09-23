@@ -29,7 +29,7 @@ import subprocess
 import threading
 import time
 
-from . import core, hotkey, mac, orbnative, roman, stt
+from . import core, history, hotkey, learn, mac, orbnative, readback, roman, stt, vocab
 
 # Anything shorter is a mis-press, not speech. Kept low because a short real
 # utterance ("yes", "ship it") is common and losing it is worse than
@@ -109,7 +109,8 @@ class Dictation:
             core.set_hud("listening", 0.0)
             return
         core.set_hud("thinking", 0.0)
-        threading.Thread(target=self._finish, args=(self.wav, self.app),
+        threading.Thread(target=self._finish,
+                         args=(self.wav, self.app, held_ms / 1000.0),
                          daemon=True).start()
 
     def cancel(self):
@@ -124,8 +125,36 @@ class Dictation:
 
     # ---- off the key thread -----------------------------------------------
 
-    def _finish(self, wav, app):
+    def _learn_from_last(self, app, say):
+        """See what you did to the words pasted last time, and learn from it.
+
+        Read before this utterance is pasted, while the previous one is still
+        the last thing on screen. Only ever reads, and keeps the difference
+        rather than the document."""
+        last = getattr(self, "last", None)
+        if not last:
+            return
+        row_id, shown, last_app = last
+        self.last = None
+        # Only compare inside the app the text was actually put into.
+        if not shown or not row_id or (app and last_app and app != last_app):
+            return
+        try:
+            d = readback.field()
+            if not d.get("ok") or not isinstance(d.get("value"), str):
+                return
+            kept = learn.locate(shown, d["value"])
+            if not kept:
+                return
+            history.kept(row_id, kept)
+            for term in learn.observe(shown, kept):
+                say(f'learned "{term}"')
+        except Exception as e:
+            core.log(f"dictate: learning from the last one failed: {e}")
+
+    def _finish(self, wav, app, secs: float = 0.0):
         say = getattr(self, "note", lambda m: None)
+        self._learn_from_last(app, say)
         try:
             size = os.path.getsize(wav)
         except Exception:
@@ -138,8 +167,10 @@ class Dictation:
                 pass
             say(f"no audio captured ({size} bytes)."
                 + (f" sox said: {why}" if why else " sox said nothing."))
+        conf = 0.0
         try:
-            text = (stt.transcribe(wav) or "").strip()
+            text, conf = stt.transcribe_ex(wav)
+            text = (text or "").strip()
         except Exception as e:
             core.log(f"dictate: transcribe failed: {e}")
             say(f"transcription failed: {e}")
@@ -169,6 +200,29 @@ class Dictation:
             say("nothing was transcribed")
             return
         say(f'heard: "{text[:70]}"')
+
+        # Apply the words this user has taught it. This runs after the model,
+        # not as a prompt to the model, because the model gets one 223 token
+        # window and a growing personal vocabulary would eat all of it.
+        heard = text
+        try:
+            fixed = vocab.shared().fix(text)
+            if fixed != text:
+                say(f'vocabulary: "{text[:40]}" became "{fixed[:40]}"')
+                text = fixed
+        except Exception as e:
+            core.log(f"dictate: vocabulary failed: {e}")
+
+        # Record what was heard and what was shown, so a correction later has
+        # something to compare against. Text only: no audio, no screenshots,
+        # and `dictator forget` removes it.
+        try:
+            row = history.add(heard=heard, shown=text, app=app or "",
+                               lang=stt.language(), engine=stt.LAST_ENGINE,
+                               secs=secs, conf=conf)
+            self.last = (row, text, app or "")
+        except Exception as e:
+            core.log(f"dictate: history failed: {e}")
         now = mac.frontmost_app()
         if app and now and now != app:
             say(f"you moved from {app} to {now}, so I did not paste")

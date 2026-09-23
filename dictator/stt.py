@@ -37,6 +37,11 @@ def _resolve_model_dir() -> Path:
 
 
 MODEL_DIR = _resolve_model_dir()
+
+# Which engine answered the last transcription. Recorded rather than
+# inferred, because the routing has changed more than once and a
+# history full of guesses about it would be worse than no history.
+LAST_ENGINE = ""
 # English-only models are more accurate for English; the multilingual model
 # handles Hindi/Hinglish and everything else.
 _EN_MODELS = ["ggml-small.en.bin", "ggml-base.en.bin"]
@@ -644,9 +649,11 @@ def transcribe_ex(wav: str) -> "tuple[str, float]":
     # "Busley", "ke saath" as "kesaty". Turbo gets both halves right on the same
     # audio, so Hinglish goes there instead and Parakeet keeps the job it is
     # actually best at.
+    global LAST_ENGINE
     if language() != "hinglish" and parakeet_ready():
         got = _parakeet(wav)
         if got and not _parakeet_lost(got):
+            LAST_ENGINE = "parakeet"
             return got, 0.9
 
     """Transcribe and also return whisper's confidence (mean token
@@ -656,7 +663,9 @@ def transcribe_ex(wav: str) -> "tuple[str, float]":
     # CLI if it's not up or didn't answer, so behavior is identical otherwise.
     served = _transcribe_server(wav)
     if served is not None:
+        LAST_ENGINE = f"server:{MODEL.name}"
         return _romanise(served[0]), served[1]
+    LAST_ENGINE = f"cli:{MODEL.name}"
     wb = whisper_bin()
     model, lang = stt_lang_mode()
     if not wb or not model.exists():

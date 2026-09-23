@@ -22,7 +22,7 @@ def test_moving_to_another_app_mid_sentence_drops_the_words(monkeypatch):
     see where the text went."""
     _quiet(monkeypatch)
     pasted = []
-    monkeypatch.setattr(dictate.stt, "transcribe", lambda w: "deploy the thing")
+    monkeypatch.setattr(dictate.stt, "transcribe_ex", lambda w: ("deploy the thing", 0.9))
     monkeypatch.setattr(dictate.mac, "frontmost_app", lambda: "Slack")
     monkeypatch.setattr(dictate, "_paste_where_you_are",
                         lambda t, send=False: pasted.append(t))
@@ -36,7 +36,7 @@ def test_moving_to_another_app_mid_sentence_drops_the_words(monkeypatch):
 def test_staying_put_pastes(monkeypatch):
     _quiet(monkeypatch)
     pasted = []
-    monkeypatch.setattr(dictate.stt, "transcribe", lambda w: "deploy the thing")
+    monkeypatch.setattr(dictate.stt, "transcribe_ex", lambda w: ("deploy the thing", 0.9))
     monkeypatch.setattr(dictate.mac, "frontmost_app", lambda: "Terminal")
     monkeypatch.setattr(dictate, "_paste_where_you_are",
                         lambda t, send=False: pasted.append(t))
@@ -50,7 +50,7 @@ def test_staying_put_pastes(monkeypatch):
 def test_silence_pastes_nothing(monkeypatch):
     _quiet(monkeypatch)
     pasted = []
-    monkeypatch.setattr(dictate.stt, "transcribe", lambda w: "   ")
+    monkeypatch.setattr(dictate.stt, "transcribe_ex", lambda w: ("   ", 0.9))
     monkeypatch.setattr(dictate.mac, "frontmost_app", lambda: "Terminal")
     monkeypatch.setattr(dictate, "_paste_where_you_are",
                         lambda t, send=False: pasted.append(t))
@@ -64,7 +64,7 @@ def test_a_failed_transcription_is_not_pasted_as_an_error(monkeypatch):
     pasted = []
     def boom(w):
         raise RuntimeError("whisper died")
-    monkeypatch.setattr(dictate.stt, "transcribe", boom)
+    monkeypatch.setattr(dictate.stt, "transcribe_ex", boom)
     monkeypatch.setattr(dictate.mac, "frontmost_app", lambda: "Terminal")
     monkeypatch.setattr(dictate, "_paste_where_you_are",
                         lambda t, send=False: pasted.append(t))

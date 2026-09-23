@@ -29,6 +29,13 @@ USAGE = """dictator: hold a key and talk, anywhere on your Mac.
   dictator errors     failures it noticed
   dictator dictate    run it in the foreground (for debugging)
   dictator build      build the app bundle without starting anything
+
+Teaching it your words:
+  dictator learn WORD    fix this word when it mishears it
+  dictator words         what it has learned
+  dictator unlearn WORD  stop fixing it
+  dictator history [n]   what you have said
+  dictator forget        erase that history
 """
 
 
@@ -96,6 +103,70 @@ def main(argv) -> int:
             when = _t.strftime("%H:%M:%S", _t.localtime(r.get("at", 0)))
             print(f"{when}  [{r.get('where','?')}] {r.get('msg','')} "
                   f"{r.get('hint','')}".rstrip())
+        return 0
+
+    if cmd == "learn":
+        term = " ".join(rest).strip()
+        if not term:
+            print('usage: dictator learn "Whisper Flow"')
+            return 2
+        from dictator import vocab
+        rec = vocab.shared().add(term)
+        if rec.get("mode") == "fuzzy":
+            print(f'learned "{term}". I will fix things that sound like it.')
+        else:
+            print(f'learned "{term}", but {rec.get("why","")}.')
+        return 0
+
+    if cmd == "words":
+        from dictator import vocab
+        terms = vocab.shared().terms
+        if not terms:
+            print('nothing learned yet. Teach it with: dictator learn "Whisper Flow"')
+            return 0
+        for t, rec in sorted(terms.items()):
+            heard = ", ".join(rec.get("heard", [])[:3])
+            print(f"  {t}"
+                  + (f"   ({rec.get('mode')})" if rec.get("mode") else "")
+                  + (f"   heard as: {heard}" if heard else ""))
+        # Corrections seen once. Shown because a word that is "nearly learned"
+        # is the most common thing a user wonders about.
+        from dictator import learn
+        pending = learn.waiting()
+        if pending:
+            print("\n  noticed once, learning on the next one:")
+            for t, rec in sorted(pending.items()):
+                was = ", ".join(rec.get("heard", [])[:2])
+                print(f"    {t}" + (f"   heard as: {was}" if was else ""))
+        return 0
+
+    if cmd == "unlearn":
+        term = " ".join(rest).strip()
+        from dictator import vocab
+        print(f'forgot "{term}".' if vocab.shared().remove(term)
+              else f'"{term}" was not learned.')
+        return 0
+
+    if cmd == "history":
+        from dictator import history
+        import time as _t
+        n = int(rest[0]) if rest and rest[0].isdigit() else 20
+        rows = history.recent(limit=n)
+        if not rows:
+            print("nothing recorded yet.")
+            return 0
+        for r in rows:
+            when = _t.strftime("%d %b %H:%M", _t.localtime(r["at"]))
+            line = r.get("shown") or r.get("heard") or ""
+            print(f"  {when}  {line[:90]}")
+            if r.get("kept") and r["kept"] != r.get("shown"):
+                print(f"{'':16}  you changed it to: {r['kept'][:80]}")
+        return 0
+
+    if cmd == "forget":
+        from dictator import history
+        n = history.forget(before=9e18)
+        print(f"erased {n} recorded utterance(s).")
         return 0
 
     if cmd == "doctor":
