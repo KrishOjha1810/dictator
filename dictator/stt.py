@@ -171,6 +171,13 @@ def language() -> str:
     return "hinglish" if want.startswith("hing") else "english"
 
 
+# Set for the duration of one fallback, when the English path has already
+# proved the audio is not English. A module flag rather than an argument
+# because stt_lang_mode is read from several places inside a single
+# transcription, and only one hold is ever in flight at a time.
+_force_multilingual = False
+
+
 def stt_lang_mode() -> "tuple":
     """(model_path, whisper -l arg).
 
@@ -183,7 +190,7 @@ def stt_lang_mode() -> "tuple":
     Devanagari, which is unusable in a terminal or an editor. Neither flag can
     ask for Hindi-in-English-letters, because Whisper has no such language;
     the prompt does that part."""
-    if language() == "hinglish":
+    if _force_multilingual or language() == "hinglish":
         return _best_model(_ML_MODELS), "auto"
     return _best_model(_EN_MODELS), "en"
 
@@ -588,6 +595,37 @@ def _parakeet(wav: str) -> str:
         return ""
 
 
+# Below this many words per second, Parakeet has dropped speech rather than
+# transcribed it. Measured on real holds: a working English pass runs about
+# 2.7, turbo on the same Hinglish audio about 2.1, and Parakeet failing on that
+# audio 0.96. Anything under this is not a slow talker, it is missing content.
+MIN_WORDS_PER_SEC = 1.5
+MIN_SECS_TO_JUDGE = 3.0
+
+
+def _too_little(text: str, wav: str) -> bool:
+    """Did it return far less speech than the audio contains?
+
+    The other two signatures catch Parakeet FUSING Hindi into blobs. They do
+    not catch it doing something worse and less obvious: inventing fluent
+    English that has nothing to do with what was said. A real hold of
+    "jiske liye mujhe tumhari ek Hinglish line chahiye..." came back as
+    "This is the English line. Bobi Bhikkhullah or Mare is English accuracy."
+    Every word of that is ordinary English, so nothing about its shape is
+    suspicious. What gives it away is that twelve seconds of speech produced
+    twelve words."""
+    try:
+        import wave
+        with wave.open(wav) as w:
+            secs = w.getnframes() / float(w.getframerate() or 1)
+    except Exception:
+        return False
+    if secs < MIN_SECS_TO_JUDGE:
+        return False            # too short to tell a pause from a failure
+    n = len(re.findall(r"[A-Za-z']+", text or ""))
+    return (n / secs) < MIN_WORDS_PER_SEC
+
+
 def _parakeet_lost(text: str) -> bool:
     """Did Parakeet fail because the sentence had no English in it?
 
@@ -623,7 +661,12 @@ def _romanise(text: str) -> str:
     key got readable Hinglish and every other way of talking to the tool still
     got Devanagari, which is the same product behaving two ways depending on
     how you reached it."""
-    if not text or language() != "hinglish":
+    # Also when we fell back here on our own: the audio turned out not to be
+    # English, so it needs the same treatment as if Hinglish had been asked
+    # for. Without this the automatic path produces correct words in a script
+    # the user cannot paste into a terminal, which reads as a worse failure
+    # than the one it just fixed.
+    if not text or (language() != "hinglish" and not _force_multilingual):
         return text
     try:
         from . import roman
@@ -649,12 +692,29 @@ def transcribe_ex(wav: str) -> "tuple[str, float]":
     # "Busley", "ke saath" as "kesaty". Turbo gets both halves right on the same
     # audio, so Hinglish goes there instead and Parakeet keeps the job it is
     # actually best at.
-    global LAST_ENGINE
+    global LAST_ENGINE, _force_multilingual
+    _force_multilingual = False
+    try:
+        return _transcribe_ex(wav)
+    finally:
+        _force_multilingual = False
+
+
+def _transcribe_ex(wav: str) -> "tuple[str, float]":
+    global LAST_ENGINE, _force_multilingual
     if language() != "hinglish" and parakeet_ready():
         got = _parakeet(wav)
-        if got and not _parakeet_lost(got):
+        if got and not _parakeet_lost(got) and not _too_little(got, wav):
             LAST_ENGINE = "parakeet"
             return got, 0.9
+        if got:
+            # Parakeet only drops speech like this when the audio is not
+            # English, so falling back to the English model would just swap
+            # one wrong answer for "[NON-ENGLISH SPEECH]". Go multilingual for
+            # this one utterance regardless of what the setting says.
+            _force_multilingual = True
+            core.log(f"stt: parakeet dropped speech, falling back to "
+                     f"{stt_lang_mode()[0].name}: {got[:60]!r}")
 
     """Transcribe and also return whisper's confidence (mean token
     probability, 0..1). Real directed speech scores ~0.7+; background
@@ -663,9 +723,12 @@ def transcribe_ex(wav: str) -> "tuple[str, float]":
     # CLI if it's not up or didn't answer, so behavior is identical otherwise.
     served = _transcribe_server(wav)
     if served is not None:
-        LAST_ENGINE = f"server:{MODEL.name}"
+        # The model the request actually goes to, not the module level
+        # default. MODEL is resolved once at import from the English list, so
+        # naming it here reported small.en for work that turbo had done.
+        LAST_ENGINE = f"server:{stt_lang_mode()[0].name}"
         return _romanise(served[0]), served[1]
-    LAST_ENGINE = f"cli:{MODEL.name}"
+    LAST_ENGINE = f"cli:{stt_lang_mode()[0].name}"
     wb = whisper_bin()
     model, lang = stt_lang_mode()
     if not wb or not model.exists():

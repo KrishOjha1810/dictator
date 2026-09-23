@@ -37,6 +37,11 @@ Teaching it your words:
   dictator history [n]   what you have said
   dictator forget        erase that history
 
+Language:
+  dictator language              which language it expects
+  dictator language hinglish     skip the English engine entirely
+  dictator language english      the default, with automatic fallback
+
 Formatting:
   dictator format                  what is on
   dictator format lists on|off     spoken lists become real lists
@@ -195,6 +200,23 @@ def main(argv) -> int:
         _d.FORMAT_FILE.write_text(json.dumps(flags, indent=1))
         for k, v in flags.items():
             print(f"  {k:12} {'on' if v else 'off'}")
+        return 0
+
+    if cmd in ("language", "lang"):
+        from dictator import stt
+        f = core.STATE_DIR / "lang"
+        if rest:
+            want = "hinglish" if rest[0].lower().startswith("hing") else "english"
+            f.parent.mkdir(parents=True, exist_ok=True)
+            f.write_text(want)
+        print(f"  language: {stt.language()}")
+        if stt.language() == "english":
+            print("  English goes to the fast engine. If it drops speech, the\n"
+                  "  multilingual one picks it up on its own, so Hinglish still\n"
+                  "  works without changing this.")
+        else:
+            print("  Everything goes to the multilingual engine. Slower, and the\n"
+                  "  right choice if most of what you say is Hinglish.")
         return 0
 
     if cmd == "doctor":
