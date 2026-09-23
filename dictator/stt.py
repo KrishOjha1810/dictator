@@ -332,6 +332,81 @@ def _clean_text(text: str) -> str:
     return cleaned.strip()
 
 
+# whisper's own `-l auto` costs a FULL SECOND EXTRA on every utterance,
+# because it runs the encoder twice: once to decide the language and once to
+# transcribe. Measured on a 12.4 second hold with turbo: 2447ms of encode over
+# 2 runs for auto, against 1230ms over 1 run for a pinned language, and the
+# transcript is identical. The tiny model answers the same question in 0.2s.
+_DETECT_MODEL = "ggml-tiny.bin"
+
+# Below this the detector is guessing, and a wrong pin is worse than no pin:
+# forcing Hindi on English audio triggered a temperature fallback storm that
+# took 8.9 seconds. When unsure, fall back to letting whisper decide.
+MIN_DETECT_P = 0.5
+
+
+def audio_seconds(wav: str) -> float:
+    try:
+        import wave
+        with wave.open(wav) as w:
+            return w.getnframes() / float(w.getframerate() or 1)
+    except Exception:
+        return 0.0
+
+
+def audio_ctx_for(secs: float) -> int:
+    """How much of whisper's 30 second window this utterance actually needs.
+
+    whisper.cpp encodes a full 30 seconds however long you spoke, and the
+    encoder is 85 percent of the bill. Measured on a 12.4 second hold with
+    turbo: 4554ms at the default 1500 frames, 1840ms at 700.
+
+    Undershooting is dangerous, not merely lossy. At 600 frames (12 seconds,
+    just under the audio) the same clip lost a word, and smaller still sends
+    the decoder into a repetition loop that takes LONGER than full context. So
+    this rounds up and adds margin, and returns the default when it cannot
+    tell how long the audio is."""
+    if secs <= 0:
+        return 0
+    frames = int(secs / 0.02) + 80
+    return min(1500, max(200, frames))
+
+
+def detect_language(wav: str) -> "tuple[str, float]":
+    """(language code, probability) from the tiny model, or ("", 0.0).
+
+    Cheap enough to be worth it: 0.2s against the 1.2s that whisper's own
+    detection adds to every transcription."""
+    m = MODEL_DIR / _DETECT_MODEL
+    wb = whisper_bin()
+    if not wb or not m.exists():
+        return "", 0.0
+    try:
+        r = subprocess.run([wb, "-m", str(m), "-f", wav, "-dl", "-nt"],
+                           capture_output=True, text=True, timeout=30)
+        out = r.stdout + r.stderr
+        hit = re.search(r"detected language:\s*([a-z]{2,3})\s*\(p\s*=\s*([0-9.]+)", out)
+        if not hit:
+            return "", 0.0
+        return hit.group(1), float(hit.group(2))
+    except Exception as e:
+        core.log(f"stt: language detect failed: {e}")
+        return "", 0.0
+
+
+def pinned_language(wav: str, want: str) -> str:
+    """Replace `auto` with a real language when we can work one out cheaply."""
+    if want != "auto":
+        return want
+    code, p = detect_language(wav)
+    if not code or p < MIN_DETECT_P:
+        core.log(f"stt: language unclear ({code or 'none'} p={p:.2f}), "
+                 f"letting whisper decide")
+        return "auto"
+    core.log(f"stt: detected {code} (p={p:.2f}) in the tiny model")
+    return code
+
+
 def _transcribe_server(wav: str) -> "tuple[str, float] | None":
     """Transcribe against the warm whisper-server. Returns (text, conf) with
     conf = mean per-word probability (same 0..1 scale the CLI path derives
@@ -349,6 +424,17 @@ def _transcribe_server(wav: str) -> "tuple[str, float] | None":
     if not _server_matches():
         core.log(f"stt: warm server is not the one this needs "
                  f"({stt_lang_mode()[0].name}), using the CLI")
+        return None
+    # A server is started with one audio context and cannot be told otherwise
+    # per request, so it always encodes the full 30 second window. For a short
+    # utterance the CLI wins even after paying process start and model load.
+    # Measured on a 12.4 second hold: 2.90s through the CLI with the window
+    # sized and the language pinned, against 4.25s through this server, and
+    # 3.16s through a server pinned to the same language.
+    secs = audio_seconds(wav)
+    if 0 < secs < 25:
+        core.log(f"stt: {secs:.1f}s of audio, the CLI can size the window "
+                 f"and this server cannot")
         return None
     try:
         r = subprocess.run(
@@ -721,9 +807,18 @@ def warm(background: bool = True) -> None:
     happened to be running a server on the same port. Measured on a ten
     second hold: 3.89s cold against 2.8s warm.
 
-    Started in the background because warming can take twenty seconds and
-    nothing should wait for it. Callers that find no server simply use the
-    CLI, exactly as they did before."""
+    NOT called automatically any more, and the measurement is why. A server is
+    started with one audio context and cannot be told otherwise per request,
+    so it always encodes the full 30 second window, while the CLI can size the
+    window to the utterance. On a 12.4 second hold the CLI is faster even
+    after paying process start and model load, so the server is declined for
+    anything under 25 seconds, which is very nearly every dictation. Leaving
+    one resident then costs memory and contends for the GPU for no benefit:
+    the same hold measured 3.2s with no server running and 5.8s with one up.
+
+    Kept for long audio and for callers that want it, and available as
+    `dictator warm`. Started in the background because warming can take twenty
+    seconds and nothing should wait for it."""
     def go():
         try:
             ensure_whisper_server()
@@ -765,9 +860,6 @@ def _transcribe_ex(wav: str) -> "tuple[str, float]":
         LAST_ENGINE = f"server:{stt_lang_mode()[0].name}"
         return _romanise(served[0]), served[1]
     LAST_ENGINE = f"cli:{stt_lang_mode()[0].name}"
-    # We just paid the cold path. Bring the resident model up so the next hold
-    # does not pay it again, and do it off this thread so this one does not.
-    warm()
     wb = whisper_bin()
     model, lang = stt_lang_mode()
     if not wb or not model.exists():
@@ -778,9 +870,13 @@ def _transcribe_ex(wav: str) -> "tuple[str, float]":
             hint="Run setup on the Mac to install it.")
         return "", 0.0
     base = wav + ".vbout"
+    lang = pinned_language(wav, lang)
     cmd = [wb, "-m", str(model), "-f", wav, "-nt", "-np", "-l", lang,
            "--prompt", whisper_prompt(),   # same vocabulary biasing as the server
            "-ojf", "-of", base]   # -ojf: full JSON includes token probabilities
+    ac = audio_ctx_for(audio_seconds(wav))
+    if ac:
+        cmd += ["-ac", str(ac)]
     try:
         out = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
     except Exception as e:
