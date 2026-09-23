@@ -48,11 +48,20 @@ def test_the_app_runs_our_own_command():
 
 
 @pytest.mark.skipif(not always.APP.exists(), reason="app not built here")
-def test_built_bundle_points_at_this_checkout():
+def test_built_bundle_points_at_a_real_checkout():
+    """The bundle must run the code it was built from.
+
+    Checked as "a real checkout" rather than "this one" because there is only
+    one Dictator.app per machine and a second clone does not own it. Insisting
+    on this one made a fresh clone fail its own test suite for no reason the
+    person running it could act on."""
     info = plistlib.loads(
         (always.APP / "Contents" / "Info.plist").read_bytes())
-    assert info["DictatorCLI"] == str(ROOT / "bin" / "dictator"), info["DictatorCLI"]
-    assert Path(info["DictatorCLI"]).exists()
+    cli = Path(info["DictatorCLI"])
+    assert cli.exists(), f"the app runs {cli}, which is not there"
+    assert cli.name == "dictator", cli
+    assert (cli.parent.parent / "dictator" / "stt.py").exists(), \
+        f"{cli} is not inside a dictator checkout"
     assert ".dictator" in info["DictatorLog"], info["DictatorLog"]
 
 
