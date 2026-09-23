@@ -124,3 +124,36 @@ def test_all_three_checks_guard_the_fast_path():
     src = inspect.getsource(stt._transcribe_ex)
     for check in ("_parakeet_lost(got)", "_too_little(got, wav)", "_not_english(got)"):
         assert check in src, f"{check} no longer guards the Parakeet path"
+
+
+
+@pytest.mark.parametrize("marker", [
+    "[MUSIC PLAYING]", "[INAUDIBLE]", "[BLANK_AUDIO]",
+    "[No speech detected] [no speech detected]", "(silence)",
+])
+def test_the_model_saying_nothing_is_not_a_transcript(marker):
+    """These reached the screen. Pasting "[MUSIC PLAYING]" into an editor is
+    worse than pasting nothing: it reads as a wrong transcription, so the user
+    goes looking for what they said wrong."""
+    assert stt.is_silence(marker)
+
+
+@pytest.mark.parametrize("said", [
+    "Thank you.", "hello world", "[laughs] but I said yes",
+])
+def test_real_speech_is_not_mistaken_for_silence(said):
+    assert not stt.is_silence(said)
+
+
+def test_an_empty_answer_from_the_fast_engine_also_falls_back():
+    """It was treated as "no opinion" and fell through to the English model,
+    which produced [NON-ENGLISH SPEECH] and [INAUDIBLE] on real Hinglish
+    holds. An English-only model returning nothing on audio that was not
+    English is the same signal as it returning nonsense."""
+    import inspect
+    src = inspect.getsource(stt._transcribe_ex)
+    body = src[src.index("parakeet_ready()"):]
+    force = body.index("_force_multilingual = True")
+    guard = body.index("if got:")
+    assert force < guard, \
+        "the fallback is inside `if got:` again, so an empty answer is ignored"

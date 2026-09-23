@@ -115,6 +115,15 @@ class Dictator:
             self._retire(wav)
         said.language = stt.language()
         said.engine = stt.LAST_ENGINE
+        # The model saying "there was nothing" is not a transcript. Pasting
+        # "[MUSIC PLAYING]" into somebody's editor is worse than pasting
+        # nothing, because it reads as a wrong transcription rather than as
+        # silence, and they go looking for what they said wrong.
+        if stt.is_silence(said.heard):
+            core.log(f"dictator: nothing was said ({said.heard.strip()[:40]!r})")
+            said.heard = ""
+            said.took = time.time() - started
+            return said
         said.heard = self.romanise(said.heard)
         said.text = self.polish(said.heard) if said.heard else ""
         if said.text and self.remember:

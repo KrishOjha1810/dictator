@@ -348,6 +348,25 @@ def ensure_whisper_server(wait_s: float = 20.0) -> bool:
     return False
 
 
+# Whisper says these when it heard no speech. They are not a transcript, they
+# are the model telling you there was nothing, and pasting them into somebody's
+# editor is worse than pasting nothing: it looks like a wrong transcription
+# rather than like silence. Seen in real logs: [MUSIC PLAYING], [INAUDIBLE],
+# [No speech detected], [BLANK_AUDIO], [SOUND].
+_NOT_SPEECH = re.compile(
+    r"^\s*(\[[^\]]*\]|\([^)]*\)|\*[^*]*\*)\s*$", re.I)
+
+
+def is_silence(text: str) -> bool:
+    """Did the model say 'there was nothing', rather than transcribe words?"""
+    t = (text or "").strip()
+    if not t:
+        return True
+    # Several markers in a row is still nothing: "[no speech] [no speech]".
+    parts = re.findall(r"\[[^\]]*\]|\([^)]*\)|[^\[\]()]+", t)
+    return all(not p.strip() or _NOT_SPEECH.match(p.strip()) for p in parts)
+
+
 def _clean_text(text: str) -> str:
     lines = [ln.strip() for ln in text.splitlines() if ln.strip()]
     cleaned = " ".join(lines)
@@ -914,12 +933,18 @@ def _transcribe_ex(wav: str) -> "tuple[str, float]":
                 and not _not_english(got):
             LAST_ENGINE = "parakeet"
             return got, 0.9
+        # Parakeet only drops speech like this when the audio is not English,
+        # so falling back to the English model would just swap one wrong
+        # answer for "[NON-ENGLISH SPEECH]". Go multilingual for this one
+        # utterance regardless of what the setting says.
+        #
+        # Including when it returned NOTHING. That was treated as "no opinion"
+        # and fell through to the English model, which then produced
+        # "[NON-ENGLISH SPEECH]", "[INAUDIBLE]" and "[No speech detected]" on
+        # real Hinglish holds. An empty answer from an English-only model on
+        # audio that was not English is the same signal as a wrong one.
+        _force_multilingual = True
         if got:
-            # Parakeet only drops speech like this when the audio is not
-            # English, so falling back to the English model would just swap
-            # one wrong answer for "[NON-ENGLISH SPEECH]". Go multilingual for
-            # this one utterance regardless of what the setting says.
-            _force_multilingual = True
             core.log(f"stt: parakeet dropped speech, falling back to "
                      f"{stt_lang_mode()[0].name}: {got[:60]!r}")
 
