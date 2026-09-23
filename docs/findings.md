@@ -520,3 +520,109 @@ Plus seconds per utterance and script-leak rate.
 Decision rule, written before seeing results: a model wins if it improves
 WER-sound **and** ENG-exact, does not regress the 5 pure-English utterances,
 and costs no more than one extra second.
+
+
+---
+
+## Spokenly, the closest competitor
+
+A solo developer's product doing the same job. They published their own
+Parakeet versus Whisper comparison, which is the routing decision this product
+already makes, so it is worth reading as a check on our own engineering.
+
+### What the article actually is
+
+**It contains no WER number, no latency number and no hardware.** Every
+quantitative claim points at the Hugging Face leaderboard. This file contains
+strictly more measured data on the question than the vendor's own comparison
+article does.
+
+Where they agree with us, and it is the load-bearing agreement: **Parakeet has
+no Hindi**, Whisper is the right answer for code-switching, and **terminals
+defeat Accessibility reads**. That last one is two independent teams hitting
+the same wall from opposite sides. Their docs say they skip their spacing
+rules in terminals because those "draw their own text view"; we measured
+`settable=false` on both attributes.
+
+Where they are silent and we have data: Parakeet's failure modes (they do not
+mention it can invent text), `audio_ctx` sizing (our 4554ms to 1840ms win
+appears nowhere in their material), quantisation being a trap on Metal, and
+language detection being unsafe on short holds.
+
+**Nothing in the article contradicts a measured number here.**
+
+### What they got wrong, checked against primary sources
+
+- **"Parakeet leads the Open ASR Leaderboard."** Stale by about a year, beaten
+  by NVIDIA's own Canary-Qwen-2.5B (5.63 against Parakeet's 6.05).
+- **"Parakeet V3 covers 25 languages."** Verified: all 25 are European. **Zero
+  Indic, zero East Asian, zero Middle Eastern.** The table, the recommendation
+  box and the FAQ all say bare "25 languages". For anyone in this market that
+  is the most misleading line on the page.
+- **"Parakeet needs Apple Silicon or an NVIDIA GPU."** That is a property of
+  their CoreML implementation, not of the model.
+- **"Whisper is slightly behind on clean English."** 6.05 against 7.83 on the
+  leaderboard average is a 29 percent relative gap, not "slightly".
+
+### Where they are genuinely better
+
+1. **Distribution, and it is the biggest gap by a distance.** A 19MB `.dmg`,
+   a real Homebrew cask in `homebrew/cask` proper, the Mac App Store, Windows,
+   Linux and iOS. **They have already paid every toll we have identified and
+   not paid.** No amount of Hinglish accuracy closes this.
+   They ship **two Mac builds** because the sandboxed App Store one loses
+   features, which is exactly the constraint recorded above under rule
+   2.4.5(i). They solved it by shipping both rather than choosing.
+2. **Insertion polish**: Smart Spacing, Smart Paragraphs, Quick Send. Small,
+   felt on every dictation, and we have none of the three.
+3. **A legible privacy story.** "Local Only Mode blocks all network
+   connections, allowing localhost" is a switch a user can point at. Ours is
+   stronger by default and less legible, which is a README problem.
+
+### Where we are better
+
+1. **Hinglish, and it is not close.** One mention of Hindi in their entire
+   93KB documentation corpus, and it is about paragraph breaks. No Indic local
+   model, no romanisation, no code-mixing, no acknowledgement the problem
+   exists.
+2. **Automatic routing.** They ask the user to pick a model per task, in
+   advance. **A person who mixes two languages inside one sentence cannot
+   choose in advance.** Their architecture has nowhere to put this.
+3. **Learning from corrections: they have none.** Their vocabulary story is a
+   manual dictionary that only works with cloud models and caps at 50 terms.
+   This is the clearest place we are ahead.
+
+### Worth taking
+
+- **Quick Send.** Press Return while still recording: it stops, inserts, and
+  simulates Return so the message sends. Their docs name Claude Code as the
+  best use case. If focus moved, the Return is skipped so it cannot fire in
+  the wrong window. Highest value per line on the list.
+- **Smart Spacing.** Read the character either side of the cursor via AX,
+  insert a space if there is a letter, lowercase the first character if the
+  previous one was not `.`, `?` or `!`. No model at all.
+- **Smart Paragraphs**, off by default. They published their constants: break
+  at 45 words or 4 substantial sentences, always at a sentence boundary.
+- One free piece of engineering intel: **Claude Code has a 60 second timeout
+  on HTTP MCP connections**, which is why they ship a stdio bridge instead.
+  Relevant to voicebridge rather than here.
+
+### Worth refusing
+
+- **A user-facing prompt box.** They ship a docs page teaching users to write
+  a 224-token whisper prompt. We measured that the prompt was never the
+  problem, and that changing it makes things worse. Exposing it hands users a
+  knob instead of a fix.
+- **Modes**, a saved profile carrying a model, a provider, a prompt, scripts
+  and a shortcut, with a five-level precedence table. That is a settings panel
+  wearing a product. For a hold-to-talk tool the router choosing correctly IS
+  the feature, and their manual switching is the thing we beat them on.
+- Agentic actions, trigger words, tapping the chassis, and the cloud roster.
+
+### The honest summary
+
+They win on everything except the one thing the product exists for. A user
+picks us if they mix Hindi and English inside one sentence and want Latin
+script out, or if they refuse to send audio anywhere. They pick Spokenly if
+they want it working in five minutes with no terminal, or on Windows, or on a
+phone.
