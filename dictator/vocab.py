@@ -51,6 +51,10 @@ NEAR = 0.20
 # thousand ordinary words. Short terms get exact matches only.
 MIN_KEY = 5
 
+# Hindi keys are denser than metaphone keys, so the same length carries more
+# of the word, but a two or three letter key still matches far too much.
+MIN_HINDI_KEY = 4
+
 _WORD = re.compile(r"[A-Za-z][A-Za-z'\-]*")
 
 
@@ -63,6 +67,19 @@ def _key(text: str) -> str:
         return ""
     letters = "".join(_WORD.findall(text or "")).lower()
     return jellyfish.metaphone(letters) if letters else ""
+
+
+def _hkey(text: str) -> str:
+    """The Hindi key, for words metaphone has nothing useful to say about.
+
+    Metaphone models English spelling. On romanized Hindi it returns keys like
+    XHY for chahiye and W for woh, which are too short to guess from, so every
+    Hindi word was admitted in exact match mode and the generalisation that
+    makes this feature worth having never applied to half of what this user
+    says. See hindi.py."""
+    from . import hindi
+    letters = "".join(_WORD.findall(text or ""))
+    return hindi.key(letters)
 
 
 def _apart(a: str, b: str) -> float:
@@ -139,18 +156,27 @@ class Vocab:
         `why` is written for the user to read, because a tool that silently
         declines to do what you asked is worse than one that says why."""
         key = _key(term)
-        rec = {"term": term, "key": key, "mode": "exact", "why": "",
-               "heard": [], "count": 0, "at": time.time()}
+        hkey = _hkey(term)
+        rec = {"term": term, "key": key, "hkey": hkey, "mode": "exact",
+               "why": "", "heard": [], "count": 0, "at": time.time()}
         if not key:
             rec["why"] = "no pronounceable letters"
             return rec
-        if len(key) < MIN_KEY:
-            rec["why"] = (f"too short to guess from ({key}), so I will only "
-                          f"fix it when I hear it exactly")
+        if len(key) < MIN_KEY and len(hkey) < MIN_HINDI_KEY:
+            rec["why"] = (f"too short to guess from ({key or hkey}), so I "
+                          f"will only fix it when I hear it exactly")
             return rec
         against = common if common is not None else (COMMON + self.spoken())
-        clash = [w for w in against
-                 if _apart(key, _key(w)) <= NEAR and w.lower() != term.lower()]
+        # Clashing on EITHER key is a clash: the matcher will try both, so a
+        # term is only safe to guess at when neither reading of it collides.
+        clash = []
+        for w in against:
+            if w.lower() == term.lower():
+                continue
+            if key and _apart(key, _key(w)) <= NEAR:
+                clash.append(w)
+            elif hkey and len(hkey) >= MIN_HINDI_KEY and hkey == _hkey(w):
+                clash.append(w)
         if clash:
             rec["why"] = (f"sounds like {', '.join(sorted(clash)[:3])}, so I "
                           f"will only fix it when I hear it exactly")
@@ -224,16 +250,24 @@ class Vocab:
 
     def _match(self, span: str):
         key = _key(span)
-        if not key:
+        hkey = _hkey(span)
+        if not key and not hkey:
             return None
         best, best_d = None, 1.0
         for term, rec in self.terms.items():
             if span.lower() == term.lower():
                 return None                   # already right, leave it alone
-            tk = rec.get("key") or ""
-            if not tk:
+            tk, th = rec.get("key") or "", rec.get("hkey") or ""
+            if not tk and not th:
                 continue
-            d = _apart(key, tk)
+            d = _apart(key, tk) if (key and tk) else 1.0
+            # The Hindi key has to match EXACTLY, never approximately. It has
+            # already absorbed the spelling variation it exists for (chaahie
+            # and chahiye are both cahie), so there is nothing left for a
+            # distance to buy, and the keys are short enough that allowing one
+            # character of slack turned "sahi hai" into "chahiye".
+            if th and hkey and len(th) >= MIN_HINDI_KEY and hkey == th:
+                d = 0.0
             if rec.get("mode") == "exact":
                 if d > 0.0:
                     continue
