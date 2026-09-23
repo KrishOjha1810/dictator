@@ -178,11 +178,19 @@ def _paste_once(text: str) -> bool:
     if _HELPER.exists():
         try:
             r = subprocess.run([str(_HELPER), text], capture_output=True,
-                               text=True, timeout=10)
+                               text=True, timeout=15)
             if "read" in (r.stdout or "").split():
                 return True
-            core.log("paste: the helper never saw the text read: "
+            # The helper posted Cmd-V. A missing receipt means the target had
+            # not read the pasteboard before the helper stopped waiting, which
+            # a busy application does often; it does NOT mean the paste failed.
+            # Falling through to the second path from here was worse than
+            # doing nothing: it rewrites the clipboard and posts Cmd-V again,
+            # so a paste that worked got duplicated and one that did not got
+            # the user's clipboard replaced for nothing.
+            core.log("paste: no read receipt, assuming it landed: "
                      f"{(r.stdout or '').strip()!r}")
+            return True
         except Exception as e:
             core.log(f"paste: helper failed: {e}")
     # Wrapped because mac._pbcopy reaches for core.log on failure and mac.py

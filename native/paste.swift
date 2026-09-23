@@ -72,9 +72,12 @@ func tap(_ key: CGKeyCode, flags: CGEventFlags) {
 tap(9, flags: .maskCommand)                     // Cmd+V
 if send { usleep(120_000); tap(36, flags: []) } // Return
 
-// Wait for the receipt, not for a guess. 1.5s is generous; a paste that has
-// not been read by then is not going to be.
-let deadline = Date().addingTimeInterval(1.5)
+// Wait for the receipt. 1.5s was NOT generous: a busy terminal can take
+// longer than that to read the pasteboard, so the receipt came back "unread"
+// for pastes that had in fact landed, and the caller then tried a second
+// delivery that overwrote the clipboard. Four seconds, and the caller treats
+// a missing receipt as unknown rather than as failure.
+let deadline = Date().addingTimeInterval(4.0)
 while !provider.read && Date() < deadline {
     RunLoop.current.run(mode: .default, before: Date().addingTimeInterval(0.01))
 }
