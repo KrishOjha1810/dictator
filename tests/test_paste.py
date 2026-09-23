@@ -155,3 +155,26 @@ def test_one_piece_never_asks_where_the_focus_is(monkeypatch):
                         lambda: asked.append(1) or "Terminal")
     assert paste.deliver("deploy the thing", "Terminal") is True
     assert asked == []
+
+
+def test_the_module_that_uses_the_helper_can_build_it():
+    """It checked whether the binary existed and gave up if it did not, while
+    the code that knew how to build it sat in another module that nothing here
+    called. Deleting the binary once sent every delivery down a path that
+    cannot work, quietly, and the only symptom was that the key did nothing."""
+    import inspect
+    from dictator import paste
+    assert hasattr(paste, "helper"), "paste can no longer build its own helper"
+    src = inspect.getsource(paste._paste_once)
+    assert "helper()" in src, "the delivery path no longer builds the helper"
+
+
+def test_there_is_no_silent_path_that_cannot_work():
+    """osascript is a separate binary and never inherits the app's
+    Accessibility grant, so falling back to it was falling back to a
+    guaranteed failure that also overwrote the user's clipboard."""
+    import inspect
+    from dictator import paste
+    src = inspect.getsource(paste._paste_once)
+    assert "surface_error" in src, \
+        "a missing helper no longer says so and fails silently again"

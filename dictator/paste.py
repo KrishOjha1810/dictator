@@ -51,6 +51,7 @@ them is the user's.
 """
 import re
 import subprocess
+from pathlib import Path
 import time
 
 from . import core, mac
@@ -75,6 +76,31 @@ _TERMINALS = ("terminal", "iterm", "ghostty", "alacritty", "kitty", "wezterm",
 # Built by the caller on first use. Reused rather than rebuilt here, because
 # two processes compiling to the same path is a race for no benefit.
 _HELPER = core.STATE_DIR / "bin" / "dictator-paste"
+_HELPER_SRC = Path(__file__).resolve().parent.parent / "native" / "paste.swift"
+
+
+def helper() -> str:
+    """The Swift helper, built if it is not there or the source moved on.
+
+    This module used to check whether the file existed and give up if it did
+    not, while the code that knew how to build it sat in another module that
+    nothing here called. Deleting the binary once was enough to send every
+    delivery down a path that cannot work, quietly, for an hour."""
+    import shutil
+    try:
+        if _HELPER.exists() and _HELPER.stat().st_mtime >= _HELPER_SRC.stat().st_mtime:
+            return str(_HELPER)
+        if not _HELPER_SRC.exists() or not shutil.which("swiftc"):
+            core.log("paste: cannot build the helper (no source or no swiftc)")
+            return ""
+        _HELPER.parent.mkdir(parents=True, exist_ok=True)
+        subprocess.run(["swiftc", "-O", str(_HELPER_SRC), "-o", str(_HELPER)],
+                       check=True, capture_output=True, timeout=240)
+        core.log("paste: rebuilt the helper")
+        return str(_HELPER)
+    except Exception as e:
+        core.log(f"paste: helper build failed: {e}")
+        return ""
 
 _NEWLINE = re.compile(r"\r\n|\r|\n")
 
@@ -189,9 +215,10 @@ def _paste_once(text: str) -> bool:
     receipt rather than a hope. Without the helper we are back to guessing,
     and the guess at least reports the one thing it does know, whether the
     keystroke was accepted."""
-    if _HELPER.exists():
+    exe = helper()
+    if exe:
         try:
-            args = [str(_HELPER), text]
+            args = [exe, text]
             typing = how() == "type"
             if typing:
                 args.append("--type")
@@ -214,6 +241,12 @@ def _paste_once(text: str) -> bool:
             return True
         except Exception as e:
             core.log(f"paste: helper failed: {e}")
+    else:
+        core.surface_error(
+            "paste", "The text could not be delivered.",
+            hint="The paste helper is missing and could not be built. "
+                 "Run: dictator doctor")
+        return False
     # Wrapped because mac._pbcopy reaches for core.log on failure and mac.py
     # never imports core, so its error path raises NameError. A clipboard that
     # could not be written must come back as False, not as an exception out of

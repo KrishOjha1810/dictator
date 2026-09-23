@@ -299,6 +299,13 @@ def doctor() -> int:
            (f"downloading now ({mb}MB)" if stt.arriving(name)
             else f"missing ({mb}MB); run ./install.sh again"))
 
+    # The delivery helper. Without it nothing arrives anywhere, and the only
+    # symptom is that the key appears to do nothing.
+    from dictator import paste as _paste
+    exe = _paste.helper()
+    ok(f"can deliver the words ({_paste.how()})", bool(exe),
+       "" if exe else "the paste helper is missing and could not be built")
+
     app_built = always.APP.exists()
     ok(f"app bundle ({always.APP.name})", app_built,
        "" if app_built else "run: dictator build")
