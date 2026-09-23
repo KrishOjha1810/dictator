@@ -71,6 +71,18 @@ def _apart(a: str, b: str) -> float:
     return jellyfish.levenshtein_distance(a, b) / max(len(a), len(b))
 
 
+
+# Ordinary words that sit in front of a term without being part of it. Kept
+# deliberately short: this only has to stop a span from eating the word before
+# the one it is actually matching.
+GLUE = {"the", "a", "an", "this", "that", "my", "your", "our", "is", "was",
+        "to", "of", "in", "on", "and", "or", "for", "with"}
+
+
+def _lead(span: str) -> str:
+    return (span.split() or [""])[0].strip(".,;:!?").lower()
+
+
 class Vocab:
     def __init__(self):
         self.terms = {}          # canonical -> record
@@ -161,6 +173,15 @@ class Vocab:
                 if i + n > len(words):
                     continue
                 span = " ".join(words[i:i + n])
+                # Do not let a span swallow the ordinary word in front of the
+                # term. "the voice bridge" matched "voicebridge" closely enough
+                # to win as a three word span, and replacing it deleted a word
+                # the user actually said. A term that really does begin with
+                # "the" is still matched, because then the leading word is part
+                # of the term rather than in front of it.
+                if n > 1 and _lead(span) in GLUE:
+                    if not any(_lead(t) in GLUE for t in self.terms):
+                        continue
                 got = self._match(span)
                 if got:
                     hit = (got, n)
