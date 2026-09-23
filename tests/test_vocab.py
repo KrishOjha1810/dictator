@@ -140,3 +140,25 @@ def test_one_bad_key_does_not_disable_the_good_one(monkeypatch):
     # The words it collided with must still be safe.
     for line in ("we need to amend the file", "the amount is wrong"):
         assert box.fix(line) == line, line
+
+
+def test_old_records_are_re_admitted_once_and_only_once(tmp_path, monkeypatch):
+    """A word learned before a rule changed kept the old verdict for ever, and
+    the user had no way to see that a later improvement never reached it. The
+    migration has to be idempotent, or it decides every record is stale on
+    every start and rewrites the file each time."""
+    import json
+    store = tmp_path / "vocab.json"
+    monkeypatch.setattr(vocab, "STORE", store)
+    store.write_text(json.dumps({
+        "Amandra": {"term": "Amandra", "key": "AMNTP", "mode": "exact",
+                     "why": "", "heard": ["Amandhra"], "count": 3, "at": 1.0},
+    }))
+    first = vocab.Vocab()
+    rec = first.terms["Amandra"]
+    assert rec["guess"] == ["hkey"], rec
+    assert rec["heard"] == ["Amandhra"], "lost what it had already been taught"
+    assert rec["count"] == 3
+
+    second = vocab.Vocab()
+    assert not [t for t, r in second.terms.items() if "guess" not in r]

@@ -112,6 +112,24 @@ class Vocab:
             self.terms = json.loads(STORE.read_text())
         except Exception:
             self.terms = {}
+            return
+        # Bring records written before per-key admission up to date, once.
+        # Without this a word learned yesterday keeps yesterday's verdict for
+        # ever, and the user has no way to see that a later improvement never
+        # reached it.
+        stale = [t for t, r in self.terms.items()
+                 if isinstance(r, dict) and "guess" not in r]
+        if not stale:
+            return
+        for t in stale:
+            old = self.terms[t]
+            fresh = self.admit(t)
+            fresh["heard"] = old.get("heard", [])
+            fresh["count"] = old.get("count", 0)
+            fresh["at"] = old.get("at", fresh["at"])
+            self.terms[t] = fresh
+        core.log(f"vocab: re-admitted {len(stale)} term(s) after a rule change")
+        self.save()
 
     def save(self):
         try:
@@ -157,8 +175,12 @@ class Vocab:
         declines to do what you asked is worse than one that says why."""
         key = _key(term)
         hkey = _hkey(term)
+        # `guess` is always present, even on the early returns below, or the
+        # migration in load() would decide the record is stale every single
+        # time and rewrite the file on every start.
         rec = {"term": term, "key": key, "hkey": hkey, "mode": "exact",
-               "why": "", "heard": [], "count": 0, "at": time.time()}
+               "guess": [], "why": "", "heard": [], "count": 0,
+               "at": time.time()}
         if not key:
             rec["why"] = "no pronounceable letters"
             return rec
@@ -202,7 +224,17 @@ class Vocab:
         if not term:
             return {}
         with _lock:
-            rec = self.terms.get(term) or self.admit(term)
+            rec = self.terms.get(term)
+            # Re-admit anything written before per-key admission existed.
+            # Otherwise a term learned yesterday keeps yesterday's verdict
+            # forever, and the user has no way to know why teaching it again
+            # changed nothing.
+            if rec is None or "guess" not in rec:
+                fresh = self.admit(term)
+                if rec:
+                    fresh["heard"] = rec.get("heard", [])
+                    fresh["count"] = rec.get("count", 0)
+                rec = fresh
             if heard and heard not in rec["heard"]:
                 rec["heard"] = (rec["heard"] + [heard])[-8:]
             rec["count"] = rec.get("count", 0) + 1
