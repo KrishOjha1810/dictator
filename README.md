@@ -35,7 +35,7 @@ is the thing being worked on.
 ## Install
 
 ```bash
-git clone <this repo> ~/dictator
+git clone https://github.com/KrishOjha1810/dictator.git ~/dictator
 cd ~/dictator
 ./install.sh
 ```
