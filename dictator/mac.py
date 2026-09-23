@@ -13,6 +13,8 @@ otherwise would only have made the code harder to read.
 """
 import subprocess
 
+from . import core
+
 def _pbpaste() -> str:
     try:
         return subprocess.run(["pbpaste"], capture_output=True,

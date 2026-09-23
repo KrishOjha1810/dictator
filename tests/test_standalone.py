@@ -84,3 +84,22 @@ def test_no_second_key_listener_is_flagged():
     cli = (ROOT / "bin" / "dictator").read_text()
     assert "com.voicebridge.dictate.plist" in cli, \
         "doctor no longer warns about another dictation key"
+
+
+def test_the_mac_helpers_can_actually_log():
+    """These call core.log in their error paths, and the module was extracted
+    without the import, so any failing osascript raised NameError instead of
+    recording why. An error handler that itself crashes is worse than none."""
+    import ast
+    src = (PKG / "mac.py").read_text()
+    tree = ast.parse(src)
+    uses_core = any(
+        isinstance(n, ast.Attribute) and isinstance(n.value, ast.Name)
+        and n.value.id == "core" for n in ast.walk(tree))
+    if not uses_core:
+        return
+    imported = any(
+        (isinstance(n, ast.ImportFrom) and any(a.name == "core" for a in n.names))
+        or (isinstance(n, ast.Import) and any("core" in a.name for a in n.names))
+        for n in ast.walk(tree))
+    assert imported, "mac.py calls core.log without importing core"

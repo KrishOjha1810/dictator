@@ -29,13 +29,34 @@ import subprocess
 import threading
 import time
 
-from . import core, history, hotkey, learn, mac, orbnative, readback, roman, stt, vocab
+from . import (core, history, hotkey, learn, mac, orbnative, paste, readback,
+               roman, shape, stt, vocab)
 
 # Anything shorter is a mis-press, not speech. Kept low because a short real
 # utterance ("yes", "ship it") is common and losing it is worse than
 # transcribing a click into nothing.
 MIN_MS = 250
 MAX_SECS = 120
+
+
+FORMAT_FILE = core.STATE_DIR / "format.json"
+
+
+def _format_flags() -> dict:
+    """Which shaping rules are on. Defaults are the conservative ones.
+
+    Kept in a file rather than in code because the user has to be able to turn
+    this off without editing anything, which is the single most common
+    complaint about every tool that reshapes dictated text."""
+    flags = {"enabled": True, "punctuation": True, "lists": False,
+             "sentences": True}
+    try:
+        import json
+        flags.update(json.loads(FORMAT_FILE.read_text()))
+    except Exception:
+        pass
+    return {k: bool(v) for k, v in flags.items() if k in
+            ("enabled", "punctuation", "lists", "sentences")}
 
 
 class Dictation:
@@ -213,6 +234,14 @@ class Dictation:
         except Exception as e:
             core.log(f"dictate: vocabulary failed: {e}")
 
+        # Punctuation you said out loud, and sentence casing. List rebuilding
+        # is off unless asked for: every loud complaint about tools that do
+        # this is about one that could not be turned off.
+        try:
+            text = shape.shape(text, **_format_flags())
+        except Exception as e:
+            core.log(f"dictate: shaping failed: {e}")
+
         # Record what was heard and what was shown, so a correction later has
         # something to compare against. Text only: no audio, no screenshots,
         # and `dictator forget` removes it.
@@ -232,7 +261,16 @@ class Dictation:
             core.log(f"dictate: focus moved {app!r} -> {now!r}, not pasting")
             return
         say(f"pasting into {now or 'the front app'}")
-        _paste_where_you_are(text, send=self.send)
+        if self.send:
+            # This path presses Return, which paste.deliver deliberately never
+            # does, so it keeps the original single shot behaviour.
+            _paste_where_you_are(text, send=True)
+        elif not paste.deliver(text, now or app or ""):
+            # Deliberately no retry. A long transcript is delivered in pieces,
+            # so if one failed some of the text is already in the field and
+            # pasting the whole thing again would duplicate it.
+            say("some of that did not paste. Nothing was pasted again, "
+                "to avoid duplicating what did land.")
 
 
 def _paste_where_you_are(text: str, send: bool = False) -> bool:

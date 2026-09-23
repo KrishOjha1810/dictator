@@ -24,8 +24,8 @@ def test_moving_to_another_app_mid_sentence_drops_the_words(monkeypatch):
     pasted = []
     monkeypatch.setattr(dictate.stt, "transcribe_ex", lambda w: ("deploy the thing", 0.9))
     monkeypatch.setattr(dictate.mac, "frontmost_app", lambda: "Slack")
-    monkeypatch.setattr(dictate, "_paste_where_you_are",
-                        lambda t, send=False: pasted.append(t))
+    monkeypatch.setattr(dictate.paste, "deliver",
+                        lambda t, app="": pasted.append(t) or True)
     monkeypatch.setattr(dictate.os, "unlink", lambda p: None)
 
     d = dictate.Dictation()
@@ -38,13 +38,13 @@ def test_staying_put_pastes(monkeypatch):
     pasted = []
     monkeypatch.setattr(dictate.stt, "transcribe_ex", lambda w: ("deploy the thing", 0.9))
     monkeypatch.setattr(dictate.mac, "frontmost_app", lambda: "Terminal")
-    monkeypatch.setattr(dictate, "_paste_where_you_are",
-                        lambda t, send=False: pasted.append(t))
+    monkeypatch.setattr(dictate.paste, "deliver",
+                        lambda t, app="": pasted.append(t) or True)
     monkeypatch.setattr(dictate.os, "unlink", lambda p: None)
 
     d = dictate.Dictation()
     d._finish("/tmp/x.wav", "Terminal")
-    assert pasted == ["deploy the thing"]
+    assert pasted == ["Deploy the thing"]
 
 
 def test_silence_pastes_nothing(monkeypatch):
@@ -52,8 +52,8 @@ def test_silence_pastes_nothing(monkeypatch):
     pasted = []
     monkeypatch.setattr(dictate.stt, "transcribe_ex", lambda w: ("   ", 0.9))
     monkeypatch.setattr(dictate.mac, "frontmost_app", lambda: "Terminal")
-    monkeypatch.setattr(dictate, "_paste_where_you_are",
-                        lambda t, send=False: pasted.append(t))
+    monkeypatch.setattr(dictate.paste, "deliver",
+                        lambda t, app="": pasted.append(t) or True)
     monkeypatch.setattr(dictate.os, "unlink", lambda p: None)
     dictate.Dictation()._finish("/tmp/x.wav", "Terminal")
     assert pasted == []
@@ -66,8 +66,8 @@ def test_a_failed_transcription_is_not_pasted_as_an_error(monkeypatch):
         raise RuntimeError("whisper died")
     monkeypatch.setattr(dictate.stt, "transcribe_ex", boom)
     monkeypatch.setattr(dictate.mac, "frontmost_app", lambda: "Terminal")
-    monkeypatch.setattr(dictate, "_paste_where_you_are",
-                        lambda t, send=False: pasted.append(t))
+    monkeypatch.setattr(dictate.paste, "deliver",
+                        lambda t, app="": pasted.append(t) or True)
     monkeypatch.setattr(dictate.os, "unlink", lambda p: None)
     dictate.Dictation()._finish("/tmp/x.wav", "Terminal")
     assert pasted == []

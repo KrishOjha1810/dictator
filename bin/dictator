@@ -36,6 +36,12 @@ Teaching it your words:
   dictator unlearn WORD  stop fixing it
   dictator history [n]   what you have said
   dictator forget        erase that history
+
+Formatting:
+  dictator format                  what is on
+  dictator format lists on|off     spoken lists become real lists
+  dictator format punctuation on|off
+  dictator format off              paste exactly what was said
 """
 
 
@@ -167,6 +173,28 @@ def main(argv) -> int:
         from dictator import history
         n = history.forget(before=9e18)
         print(f"erased {n} recorded utterance(s).")
+        return 0
+
+    if cmd == "format":
+        import json
+        from dictator import dictate as _d
+        flags = _d._format_flags()
+        if not rest:
+            for k in ("enabled", "punctuation", "lists", "sentences"):
+                print(f"  {k:12} {'on' if flags.get(k) else 'off'}")
+            print("\n  change with: dictator format lists on")
+            return 0
+        if rest[0] in ("on", "off"):
+            flags["enabled"] = rest[0] == "on"
+        elif len(rest) >= 2 and rest[0] in flags and rest[1] in ("on", "off"):
+            flags[rest[0]] = rest[1] == "on"
+        else:
+            print("usage: dictator format [lists|punctuation|sentences] on|off")
+            return 2
+        _d.FORMAT_FILE.parent.mkdir(parents=True, exist_ok=True)
+        _d.FORMAT_FILE.write_text(json.dumps(flags, indent=1))
+        for k, v in flags.items():
+            print(f"  {k:12} {'on' if v else 'off'}")
         return 0
 
     if cmd == "doctor":
