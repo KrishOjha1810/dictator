@@ -115,8 +115,16 @@ while !provider.read && Date() < deadline {
 
 // A short quiet period so the reader is finished with it, then restore, but
 // only if nobody else has changed the clipboard in the meantime.
+//
+// AND only if the text was actually read. Without a receipt we do not know
+// that Cmd-V reached anything, and restoring the old clipboard on top of a
+// paste that never happened destroys the only remaining copy of what the
+// person just said. Leaving it on the clipboard costs them one stale
+// clipboard entry; restoring costs them the sentence. Print which happened,
+// so the caller can tell them the words are on the clipboard rather than
+// leaving them to wonder where the words went.
 usleep(200_000)
-if pb.changeCount == afterWrite {
+if provider.read && pb.changeCount == afterWrite {
     pb.clearContents()
     for d in saved {
         let item = NSPasteboardItem()

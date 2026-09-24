@@ -236,8 +236,14 @@ def _paste_once(text: str) -> bool:
             # doing nothing: it rewrites the clipboard and posts Cmd-V again,
             # so a paste that worked got duplicated and one that did not got
             # the user's clipboard replaced for nothing.
-            core.log("paste: no read receipt, assuming it landed: "
-                     f"{(r.stdout or '').strip()!r}")
+            # No receipt means Cmd-V may not have reached anything. The
+            # helper leaves the text on the clipboard in that case rather
+            # than restoring over it, so the sentence still exists.
+            core.log("paste: no read receipt; the text is on the clipboard")
+            core.surface_error(
+                "paste", "That may not have pasted.",
+                hint="The words are on your clipboard, so Command-V will "
+                     "put them in.")
             return True
         except Exception as e:
             core.log(f"paste: helper failed: {e}")
