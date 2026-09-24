@@ -378,9 +378,14 @@ def doctor() -> int:
     r = subprocess.run(["pgrep", "-u", getpass.getuser(), "-f", "dictator-hotkey"],
                        capture_output=True, text=True)
     n = len([x for x in (r.stdout or "").split() if x.strip()])
-    ok("exactly one key listener", n <= 1,
-       "" if n <= 1 else f"{n} are running, so everything is pasted {n} times. "
-                         "Run: dictator off && dictator on")
+    # Exactly one. Zero means the key does nothing, which is the complaint
+    # this check exists to answer, and `n <= 1` quietly passed it.
+    ok("exactly one key listener", n == 1,
+       "" if n == 1 else
+       ("none is running, so the key does nothing. Run: dictator permissions"
+        if n == 0 else
+        f"{n} are running, so everything is pasted {n} times. "
+        "Run: dictator off && dictator on"))
 
     ok("set to start at login", always.installed(),
        "" if always.installed() else "run: dictator on")

@@ -204,3 +204,11 @@ def test_starting_stops_whatever_was_already_running():
     # And the cleanup must be scoped to this user: another account on the same
     # Mac runs its own copy and killing theirs is not ours to do.
     assert '"-u", me' in inspect.getsource(always._stop_everything)
+
+
+def test_no_listener_is_reported_as_a_problem():
+    """The check was n <= 1, so zero listeners passed. Zero is the state where
+    the key does nothing at all, which is the exact complaint this check was
+    added to answer."""
+    src = (ROOT / "bin" / "dictator").read_text()
+    assert "n == 1" in src, "the listener count check accepts zero again"
