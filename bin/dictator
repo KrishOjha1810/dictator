@@ -372,6 +372,16 @@ def doctor() -> int:
     ok("the dictator command is on your PATH", bool(on_path),
        "" if on_path else "run ./install.sh again, or call it by full path")
 
+    # Two listeners on the same key means every hold is handled twice and
+    # every sentence is pasted twice, and the symptom reads as a paste bug.
+    import getpass
+    r = subprocess.run(["pgrep", "-u", getpass.getuser(), "-f", "dictator-hotkey"],
+                       capture_output=True, text=True)
+    n = len([x for x in (r.stdout or "").split() if x.strip()])
+    ok("exactly one key listener", n <= 1,
+       "" if n <= 1 else f"{n} are running, so everything is pasted {n} times. "
+                         "Run: dictator off && dictator on")
+
     ok("set to start at login", always.installed(),
        "" if always.installed() else "run: dictator on")
     if always.installed():

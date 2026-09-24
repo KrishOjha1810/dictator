@@ -190,3 +190,17 @@ def test_the_suite_does_not_write_into_the_benchmark_corpus():
     conftest = (ROOT / "tests" / "conftest.py").read_text()
     for attr in ("CORPUS", "CAPTURE_FLAG"):
         assert attr in conftest, f"{attr} is not redirected for tests"
+
+
+def test_starting_stops_whatever_was_already_running():
+    """It did not, and it looked like it did. Running the installer twice left
+    two listeners watching the same key, so every hold was handled twice and
+    every sentence pasted twice. The symptom reads as a bug in the paste path,
+    which is where the time goes looking for it."""
+    import ast, inspect
+    from dictator import always
+    src = inspect.getsource(always.on)
+    assert "_stop_everything()" in src, "on() is not idempotent again"
+    # And the cleanup must be scoped to this user: another account on the same
+    # Mac runs its own copy and killing theirs is not ours to do.
+    assert '"-u", me' in inspect.getsource(always._stop_everything)

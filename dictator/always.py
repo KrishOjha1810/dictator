@@ -106,7 +106,14 @@ def running() -> bool:
 
 
 def on(key: str = "fn") -> str:
-    """Install and start. Returns a message to print."""
+    """Install and start. Returns a message to print.
+
+    Stops whatever is already running first. Without that this was not
+    idempotent, and it looked like it was: running the installer twice left
+    two listeners, both watching the same key, so every hold was handled twice
+    and every sentence was pasted twice. The symptom reads as a bug in the
+    paste path, which is where the time goes looking for it."""
+    _stop_everything()
     PLIST.parent.mkdir(parents=True, exist_ok=True)
     log = str(core.STATE_DIR / "dictate.log")
     # Prefer the bundle: it carries its own permission entry, so the user is
@@ -170,12 +177,23 @@ def off(quiet: bool = False) -> str:
     # dictator-orb too: leaving it behind means the next start finds it "already
     # running" and keeps a stale build on screen, which is how an orb that had
     # been fixed went on behaving like the broken one.
+    _stop_everything()
+    return "" if quiet else "Dictation is off."
+
+
+def _stop_everything() -> None:
+    """Leave nothing holding the microphone or the key.
+
+    Scoped to this user, because a second account on the same Mac runs its own
+    copy and killing theirs is not ours to do."""
+    import getpass
+    me = getpass.getuser()
     for pat in ("bin/dictator dictate", "dictator-hotkey", "dictator-orb"):
         try:
-            subprocess.run(["pkill", "-f", pat], capture_output=True, timeout=10)
+            subprocess.run(["pkill", "-u", me, "-f", pat],
+                           capture_output=True, timeout=10)
         except Exception:
             pass
-    return "" if quiet else "Dictation is off."
 
 
 def status() -> str:
