@@ -41,6 +41,40 @@ def _run(args, **kw):
     return subprocess.run(args, capture_output=True, text=True, timeout=120, **kw)
 
 
+def _openssl() -> "tuple[str, list]":
+    """Which openssl to use, and what it needs to produce a usable PKCS12.
+
+    This is the whole reason the certificate could not be created on one
+    machine while working on another, and the two machines were the same one:
+
+        LibreSSL 3.3.6 (/usr/bin/openssl)      1 identity imported
+        OpenSSL 3.6.3  (/opt/homebrew/bin)     MAC verification failed
+                                               during PKCS12 import
+
+    OpenSSL 3 builds the PKCS12 MAC with SHA-256, and macOS's `security
+    import` cannot verify it, so the import fails with a message about a wrong
+    password when nothing is wrong with the password. Whether it happens is
+    decided by PATH order, which differs per user account, so the same install
+    worked for one person and not for another on the same laptop.
+
+    macOS always ships /usr/bin/openssl, so that is preferred. If something
+    else is all that is available, -legacy makes OpenSSL 3 emit a PKCS12 the
+    keychain accepts (measured, not assumed)."""
+    import shutil
+    for exe in ("/usr/bin/openssl", shutil.which("openssl")):
+        if not exe:
+            continue
+        v = _run([exe, "version"]).stdout or ""
+        # LibreSSL needs nothing. OpenSSL 3 needs -legacy and does not accept
+        # it on 1.x, so the version is read rather than guessed.
+        if v.startswith("LibreSSL"):
+            return exe, []
+        if v.startswith("OpenSSL 3"):
+            return exe, ["-legacy"]
+        return exe, []
+    return "openssl", []
+
+
 def _password() -> str:
     """The keychain password, generated once and kept beside the keychain.
 
@@ -81,9 +115,12 @@ def _add_to_search_list() -> bool:
 def _create() -> bool:
     """Make the keychain and the certificate. Runs once, ever."""
     import shutil
-    if not shutil.which("openssl"):
+    ssl, p12_flags = _openssl()
+    if not Path(ssl).exists() and not shutil.which(ssl):
         core.log("signing: no openssl, falling back to ad-hoc")
         return False
+    core.log(f"signing: using {ssl}"
+             + (f" with {' '.join(p12_flags)}" if p12_flags else ""))
     pw = _password()
     tmp = core.STATE_DIR / "_signing_tmp"
     tmp.mkdir(parents=True, exist_ok=True)
@@ -95,15 +132,15 @@ def _create() -> bool:
             "[v3]\nbasicConstraints=critical,CA:false\n"
             "keyUsage=critical,digitalSignature\n"
             "extendedKeyUsage=critical,codeSigning\n")
-        r = _run(["openssl", "req", "-x509", "-newkey", "rsa:2048",
+        r = _run([ssl, "req", "-x509", "-newkey", "rsa:2048",
                   "-keyout", str(tmp / "key.pem"), "-out", str(tmp / "cert.pem"),
                   "-days", "7300", "-nodes", "-config", str(cnf)])
         if r.returncode != 0:
             core.log(f"signing: cert generation failed: {r.stderr.strip()[:200]}")
             return False
-        r = _run(["openssl", "pkcs12", "-export", "-inkey", str(tmp / "key.pem"),
+        r = _run([ssl, "pkcs12", "-export", "-inkey", str(tmp / "key.pem"),
                   "-in", str(tmp / "cert.pem"), "-out", str(tmp / "id.p12"),
-                  "-passout", f"pass:{pw}", "-name", NAME])
+                  "-passout", f"pass:{pw}", "-name", NAME] + p12_flags)
         if r.returncode != 0:
             core.log(f"signing: pkcs12 export failed: {r.stderr.strip()[:200]}")
             return False

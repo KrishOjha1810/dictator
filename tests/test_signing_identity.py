@@ -129,3 +129,40 @@ def test_a_working_keychain_is_not_thrown_away_over_one_failure():
 
     with mock.patch.object(signing, "_has_certificate", return_value=False):
         assert signing._usable() is False, "an empty keychain is kept"
+
+
+def test_the_system_openssl_is_preferred():
+    """Which openssl runs decided whether the product worked, and it was
+    chosen by PATH order, which differs per user account. The same laptop
+    worked for one person and not for another.
+
+        LibreSSL 3.3.6 (/usr/bin/openssl)   1 identity imported
+        OpenSSL 3.6.3  (/opt/homebrew/bin)  MAC verification failed
+
+    OpenSSL 3 builds the PKCS12 MAC with SHA-256 and macOS cannot verify it,
+    so the import fails complaining about a password that was never wrong."""
+    exe, flags = signing._openssl()
+    assert exe == "/usr/bin/openssl", exe
+    assert flags == [], flags
+
+
+def test_openssl_3_is_given_the_flag_it_needs():
+    """If the system one ever goes missing, -legacy makes OpenSSL 3 emit a
+    PKCS12 the keychain accepts. Measured, not assumed."""
+    from unittest import mock
+    with mock.patch("pathlib.Path.exists", return_value=False), \
+         mock.patch("shutil.which", return_value="/opt/homebrew/bin/openssl"), \
+         mock.patch.object(signing, "_run",
+                           return_value=mock.Mock(stdout="OpenSSL 3.6.3", stderr="")):
+        exe, flags = signing._openssl()
+    assert flags == ["-legacy"], flags
+
+
+def test_libressl_is_not_given_a_flag_it_rejects():
+    from unittest import mock
+    with mock.patch("pathlib.Path.exists", return_value=False), \
+         mock.patch("shutil.which", return_value="/usr/bin/openssl"), \
+         mock.patch.object(signing, "_run",
+                           return_value=mock.Mock(stdout="LibreSSL 3.3.6", stderr="")):
+        exe, flags = signing._openssl()
+    assert flags == [], flags
