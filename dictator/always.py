@@ -49,7 +49,10 @@ def _bundle_points_here() -> bool:
     except Exception:
         return False
     return (info.get("DictatorCLI") == _cli()
-            and info.get("DictatorLog") == str(core.STATE_DIR / "dictate.log"))
+            and info.get("DictatorLog") == str(core.STATE_DIR / "dictate.log")
+            # A bundle still carrying the shared identifier is fighting another
+            # account for one TCC row, and nothing else here would notice.
+            and info.get("CFBundleIdentifier") == core.bundle_id())
 
 
 def build_app() -> str:
@@ -91,6 +94,10 @@ def build_app() -> str:
         info = plistlib.loads((src / "Info.plist").read_bytes())
         info["DictatorCLI"] = _cli()
         info["DictatorLog"] = str(core.STATE_DIR / "dictate.log")
+        # Per account. The template in the repo stays generic; the identifier
+        # that decides which system-wide TCC row this app owns is written here.
+        # See core.bundle_id for why sharing one is unfixable.
+        info["CFBundleIdentifier"] = core.bundle_id()
         (APP / "Contents" / "Info.plist").write_bytes(plistlib.dumps(info))
         _sign(APP)
         return str(APP)

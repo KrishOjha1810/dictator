@@ -269,8 +269,31 @@ def test_a_bundle_pointing_at_another_checkout_is_rebuilt(tmp_path,
     (app / "Contents" / "Info.plist").write_bytes(plistlib.dumps({
         "DictatorCLI": always._cli(),
         "DictatorLog": str(always.core.STATE_DIR / "dictate.log"),
+        "CFBundleIdentifier": always.core.bundle_id(),
     }))
     assert always._bundle_points_here() is True
+
+
+def test_a_bundle_sharing_the_identifier_with_another_account_is_rebuilt(
+        tmp_path, monkeypatch):
+    """Accessibility rows are system-wide and keyed by the bundle identifier,
+    so two accounts sharing one share a row that can pin only one certificate.
+    Whichever granted last wins and the other is silently untrusted with a tick
+    showing the whole time. A bundle still carrying the shared identifier has
+    to be rebuilt, and nothing else here would notice."""
+    import plistlib
+
+    from dictator import always
+
+    app = tmp_path / "Dictator.app"
+    (app / "Contents" / "MacOS").mkdir(parents=True)
+    monkeypatch.setattr(always, "APP", app)
+    (app / "Contents" / "Info.plist").write_bytes(plistlib.dumps({
+        "DictatorCLI": always._cli(),
+        "DictatorLog": str(always.core.STATE_DIR / "dictate.log"),
+        "CFBundleIdentifier": "com.dictator.dictation",   # the shared one
+    }))
+    assert always._bundle_points_here() is False
 
 
 def test_a_bundle_logging_somewhere_else_counts_as_wrong_too(tmp_path,

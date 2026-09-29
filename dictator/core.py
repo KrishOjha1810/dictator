@@ -36,6 +36,32 @@ def state_dir(override: "str|None" = None) -> Path:
 
 
 STATE_DIR = state_dir()
+
+
+def bundle_id(base: str = "com.dictator.dictation") -> str:
+    """The identifier the app is signed with, which is per ACCOUNT, not global.
+
+    Accessibility lives in the system-wide TCC database, at
+    /Library/Application Support/com.apple.TCC/TCC.db, and it holds exactly one
+    row per bundle identifier. Each account here builds its own app and signs
+    it with its own self-signed certificate, so two accounts sharing one
+    identifier share one row that can only pin one certificate. Whichever
+    account granted last wins and the other is silently untrusted, forever,
+    with a tick showing in System Settings the whole time. Granting it again in
+    the broken one simply flips the breakage back.
+
+    Measured on a real two-account Mac: the same row read
+    `certificate leaf = H"8501b12c..."` from one account and
+    `H"cbd3aabe..."` from the other, and each one's doctor reported the other's
+    certificate as the one macOS remembered.
+
+    The suffix is a hash of the home directory, not the user's name, so no
+    account name is written into a file. It is short because it ends up in the
+    designated requirement that people read in `dictator permissions`."""
+    import hashlib
+    who = hashlib.sha256(
+        str(Path.home().resolve()).encode("utf-8")).hexdigest()[:8]
+    return f"{base}.{who}"
 LOG_FILE = STATE_DIR / "log"
 HUD_FILE = STATE_DIR / "hud.json"
 ERRORS_FILE = STATE_DIR / "errors.jsonl"

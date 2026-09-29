@@ -45,7 +45,9 @@ from pathlib import Path
 
 from . import core
 
-BUNDLE_ID = "com.dictator.dictation"
+# Per account, because Accessibility rows are system-wide and keyed by this.
+# See core.bundle_id.
+BUNDLE_ID = core.bundle_id()
 
 # Accessibility and Input Monitoring live in the machine-wide database.
 # Microphone lives in the per-user one. Getting this the wrong way round

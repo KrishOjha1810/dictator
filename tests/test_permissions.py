@@ -501,3 +501,47 @@ def test_a_successful_reset_records_no_refusal(monkeypatch):
     got = cli._forget({"service": "accessibility", "state": tcc.STALE})
     assert got, got
     assert cli._forget.refused == []
+
+
+def test_two_accounts_do_not_share_one_permission_row(monkeypatch, tmp_path):
+    """The bug this fixes, stated as a test.
+
+    Accessibility lives in the SYSTEM TCC database, which holds one row per
+    bundle identifier. Each account builds and signs its own app with its own
+    self-signed certificate, so two accounts sharing an identifier share a row
+    that can pin only one of them. Whichever granted last wins, the other is
+    silently untrusted with a tick showing in System Settings, and granting it
+    again in the broken one simply flips the breakage back.
+
+    Measured on a real two-account Mac: the same row read
+    `certificate leaf = H"8501b12c"` from one account and `H"cbd3aabe"` from
+    the other.
+    """
+    from dictator import core
+
+    mine = core.bundle_id()
+    monkeypatch.setattr(core.Path, "home",
+                        classmethod(lambda cls: tmp_path / "somebody-else"))
+    (tmp_path / "somebody-else").mkdir(parents=True, exist_ok=True)
+    theirs = core.bundle_id()
+    assert mine != theirs, "two accounts would fight over one TCC row"
+    assert mine.startswith("com.dictator.dictation.")
+    assert theirs.startswith("com.dictator.dictation.")
+
+
+def test_the_identifier_carries_no_account_name():
+    """It is a hash of the home directory rather than the user's name, so no
+    account name is written into a file or shown in a requirement string."""
+    import getpass
+
+    from dictator import core
+
+    got = core.bundle_id()
+    assert getpass.getuser().lower() not in got.lower()
+    assert core.Path.home().name.lower() not in got.lower()
+
+
+def test_the_meeting_app_gets_its_own_identifier_too():
+    """Screen Recording is system-wide as well, so the same collision."""
+    from dictator import core
+    assert core.bundle_id("com.dictator.meeting") != core.bundle_id()

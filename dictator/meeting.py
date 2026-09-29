@@ -31,6 +31,7 @@ grounding checks, because an invented action item is worse than no notes.
 import array
 import json
 import os
+import plistlib
 import re
 import shutil
 import subprocess
@@ -94,7 +95,13 @@ def build_app(force: bool = False) -> str:
         subprocess.run(["swiftc", "-O", str(SRC), "-o", str(tmp)],
                        check=True, capture_output=True, timeout=600)
         os.replace(tmp, EXE)
-        shutil.copyfile(PLIST, APP / "Contents" / "Info.plist")
+        # Per account, for the same reason the dictation app is: Screen
+        # Recording is a system-wide TCC row keyed by the identifier, so two
+        # accounts sharing one would take turns breaking each other's grant.
+        # See core.bundle_id.
+        info = plistlib.loads(PLIST.read_bytes())
+        info["CFBundleIdentifier"] = core.bundle_id("com.dictator.meeting")
+        (APP / "Contents" / "Info.plist").write_bytes(plistlib.dumps(info))
     except subprocess.CalledProcessError as e:
         core.log(f"meeting: build failed: {(e.stderr or b'').decode()[:400]}")
         return ""

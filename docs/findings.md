@@ -2091,3 +2091,76 @@ benchmark that cannot be delegated and has not been done.
 
 Four runs, four instrument bugs, and the honest yield is a tie plus a much
 better ruler. Worth it, and worth saying plainly rather than dressing up.
+
+
+---
+
+## Two user accounts on one Mac could never both use this, and it was invisible
+
+The symptom: grant Accessibility in one account and the other stops working.
+Grant it there and the first one stops. Forever, with a tick showing in System
+Settings on both sides the whole time.
+
+Read out of the real databases on a real two-account Mac:
+
+```
+/Library/Application Support/com.apple.TCC/TCC.db
+  kTCCServiceAccessibility | com.dictator.dictation | auth_value=2   ONE row
+```
+
+Account A's doctor:  macOS remembers `H"8501b12c"`, this build is `H"cbd3aabe"`
+Account B's doctor:  macOS remembers `H"cbd3aabe"`, this build is `H"8501b12c"`
+
+**Each account reported the other's certificate as the one macOS remembered.**
+
+### Why
+
+Three facts that are individually fine and together fatal:
+
+1. **Accessibility is system-wide.** It lives in
+   `/Library/Application Support/com.apple.TCC/TCC.db`, not in the per-user
+   one, and holds exactly one row per bundle identifier. (Microphone and
+   AppleEvents are per-user, which is why those never fought.)
+2. **Every account builds and signs its own app**, with its own self-signed
+   certificate, because the certificate is generated per install and lives in
+   that account's keychain.
+3. **The bundle identifier was a constant.** `com.dictator.dictation`.
+
+So both accounts owned the same row, and that row pins one certificate.
+Whichever account granted last won. Granting again in the broken one did not
+fix it, it flipped the breakage to the other side, which is exactly what it
+looks like from the inside: "I fixed it and now the other one is broken."
+
+### The fix
+
+The identifier is now per account: `com.dictator.dictation.<8 hex>`, where the
+hex is a hash of the home directory. A hash rather than the username, so no
+account name is written into a file or into the requirement string that
+`dictator permissions` prints. `com.dictator.meeting` gets the same treatment,
+because Screen Recording is system-wide too.
+
+The template in the repo stays generic. The identifier is written into the
+built bundle at build time, next to `DictatorCLI`, which is where the other
+per-install values already live.
+
+`_bundle_points_here()` now also rejects a bundle still carrying the shared
+identifier, so an existing install rebuilds itself rather than quietly going on
+fighting. The cost is that every existing install re-grants Accessibility once.
+
+### The general shape
+
+This is the second time today that **a constant which should have been
+per-install** caused a failure that looked like something else. The first was
+the bundle pointing at another account's checkout, where dictation worked
+perfectly and was the wrong program. Both were invisible because the thing they
+broke still LOOKED fine: a tick in a list, and words appearing in a terminal.
+
+The other candidates were checked rather than left as a worry, and all three
+are already safe:
+
+- the **LaunchAgent label** is shared, but its plist lives in each account's
+  own `~/Library/LaunchAgents` and launchd agents are per session, so two
+  accounts running the same label never meet
+- the **signing keychain** is under `~/.dictator`, per account, which is
+  precisely why the two certificates differ in the first place
+- the **model directory** is per account, so the only cost is 2.3GB twice
