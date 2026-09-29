@@ -68,7 +68,7 @@ class Dictation:
         self._n += 1
         self.wav = f"/tmp/dictator-rec-{os.getpid()}-{self._n}.wav"
         # No silence detection: you are holding a key, so you are the
-        # boundary. sox's `silence` effect would trim your first word (you
+        # boundary. Automatic trimming would eat your first word (you
         # start speaking as you press) and end the take at your first pause.
         self.proc = stt.record_hold(self.wav, max_secs=MAX_SECS)
         self.started = time.time()
@@ -154,7 +154,8 @@ class Dictation:
             except Exception:
                 pass
             say(f"no audio captured ({size} bytes)."
-                + (f" sox said: {why}" if why else " sox said nothing."))
+                + (f" the recorder said: {why}" if why
+                   else " the recorder said nothing."))
 
         # Keep saying "thinking" for as long as it is true. The indicator only
         # trusts a state written in the last second, and transcription takes

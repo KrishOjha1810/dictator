@@ -285,7 +285,8 @@ models are.
 ```
 code (whole checkout)   1.0 MB     of which 672KB is the Hindi lexicon
 whisper-cli             643 KB     (3.2MB for the whole static set)
-sox                     2.4 MB     but drags in 9 libraries, and is GPL
+sox                     2.4 MB     plus 12 Homebrew packages, and is GPL
+dictator-rec              65 KB    what replaced it, using only AVFoundation
 models                  2261 MB    74 + 638 + 1549
 ```
 
@@ -294,6 +295,93 @@ The code is 1MB and the download is 2.3GB. It is all models.
 **sox cannot be bundled**: `GPL-2.0-or-later AND LGPL-2.1-or-later`.
 `AVAudioRecorder` replaces it in 40 to 60 lines of Swift and gives a real
 level meter for free.
+
+### The recorder, replaced and measured
+
+`native/record.swift` is 145 lines including its comments, compiles in **1.4s**
+to a **65KB** binary, and depends on nothing that is not already on the machine.
+`brew deps sox` lists **12** packages (ca-certificates, flac, lame, libogg,
+libpng, libsndfile, libvorbis, mad, mpg123, openssl@3, opus, opusfile) to
+capture one mono stream.
+
+Format out of `AVAudioRecorder` with `kAudioFormatLinearPCM`, read back with
+Python's `wave`: **16000Hz, 1 channel, 16-bit**, which is exactly what whisper
+wants and what sox was being asked for. A sentence played at the speakers and
+recorded through the mic came back from `stt.transcribe_ex` as itself, word for
+word. macOS does the resampling from the device's own rate; asking for 16kHz is
+enough, there is no converter to write.
+
+Latency, same machine, same microphone, time from spawn to the first audio in
+the file, and audio captured against 1.5s of wall clock:
+
+```
+native, warm      0.08s to first bytes    1.40s captured
+sox               0.50s to first bytes    1.25s captured
+native, cold      0.54s to first bytes    0.94s captured
+```
+
+So the new recorder does not just remove a dependency, it loses **0.15s less of
+the start of every sentence** than sox did. "Cold" is the first execution of a
+freshly written binary (dyld and signature checks) and is paid once, which is
+one more reason to compile at install time rather than on the first hold.
+
+Level metering: `isMeteringEnabled` plus `averagePower(forChannel:)` is the
+input itself, whereas the old meter inferred loudness from the RMS of whatever
+had reached the disk. The recorder publishes it to `<wav>.lvl` every 0.05s and
+deletes it on stop, so a meter can never show the last level it heard while the
+microphone is closed. Both paths land on the same 0..1 curve, so nothing
+downstream had to change.
+
+**Terminate, never kill.** `AVAudioRecorder` writes the RIFF and data chunk
+sizes at `stop()`, so a SIGKILLed recorder leaves a WAV whose header claims no
+audio. The recorder handles SIGTERM for exactly this, and sets `SIG_IGN` first
+because the default action kills the process before the dispatch source ever
+sees the signal.
+
+### What a static whisper.cpp build would take
+
+Not done. Here is what was measured, so the decision does not get re-derived.
+
+The Homebrew binary **cannot be copied and shipped**, and this is the concrete
+blocker rather than a licensing one (whisper.cpp is MIT):
+
+```
+$ otool -L /opt/homebrew/bin/whisper-cli
+  @rpath/libwhisper.1.dylib
+  /opt/homebrew/opt/ggml/lib/libggml.0.dylib
+  /opt/homebrew/opt/ggml/lib/libggml-base.0.dylib
+```
+
+Two of those are absolute paths into another machine's Homebrew prefix, and
+`ggml` is a separate formula, so there is no version of "just include the file
+we already have" that works.
+
+What it needs: `cmake` (not installed on this machine, so it becomes a build
+dependency for whoever cuts a release, not for the user), a checkout of
+whisper.cpp, and
+`cmake -B build -DBUILD_SHARED_LIBS=OFF -DGGML_METAL_EMBED_LIBRARY=ON`, with
+`-DCMAKE_OSX_ARCHITECTURES="arm64;x86_64"` if Intel Macs are in scope.
+`GGML_METAL_EMBED_LIBRARY` is what removes the loose `.metal` shader file, so
+the result is one binary.
+
+Two things that are easy to miss:
+
+1. **`parakeet-cli` has to come too.** The fast English path is Parakeet, and
+   it ships from the same formula (`libparakeet.1.9.1.dylib`, 166KB). Shipping
+   `whisper-cli` alone would leave every English hold on the slow path while
+   doctor reported everything fine.
+2. **`_find` only looks on PATH and in the Homebrew prefixes.** A bundled
+   binary needs its own directory added there, or it will sit in the checkout
+   unused, which is the failure this file already has four entries for.
+
+Gatekeeper does not object on the current install path: `curl` does not set the
+quarantine attribute, so a binary fetched by the installer or cloned with the
+repo runs. The same binary inside a downloaded `.zip` or `.dmg` is quarantined
+and blocked, so this buys nothing towards a double-clickable app until
+notarization is paid for. It is worth doing to remove the last Homebrew
+package, and it is a release-engineering job (a per-version rebuild, a
+universal binary, and about 3.2MB committed or attached to a release) rather
+than a code change.
 
 ---
 

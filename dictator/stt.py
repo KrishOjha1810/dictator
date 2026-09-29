@@ -1,7 +1,9 @@
 """dictator STT: local, private speech-to-text via whisper.cpp.
 
-Nothing about your code leaves the machine. Recording uses sox (`rec`)
-with silence auto-stop, so you press to talk, speak, and it ends itself.
+Nothing about your code leaves the machine. Push-to-talk records through
+AVFoundation (see recorder.py), falling back to sox (`rec`) only where the
+Swift toolchain is missing. The older hands-free helpers here, `record` and
+`record_start`, still use sox's silence detection to end a take by themselves.
 """
 
 import json
@@ -541,9 +543,14 @@ def _transcribe_server(wav: str) -> "tuple[str, float] | None":
 
 
 def have_deps() -> dict:
+    # "rec" stays in the answer under its old name because callers outside
+    # this repo read it, but it is now satisfied by the native recorder too:
+    # what the question means is "can this machine record", and since the
+    # Swift recorder landed that no longer implies sox.
+    from . import recorder as _rec
     return {
         "whisper": whisper_bin(),
-        "rec": _find("rec"),
+        "rec": _rec.build() or _find("rec"),
         "model": str(MODEL) if MODEL.exists() else "",
     }
 
@@ -666,6 +673,18 @@ def record_start(wav: str, max_secs: int = 30,
         return None
 
 
+def recorder_in_use() -> str:
+    """Which recorder a hold would use right now: "native", "sox" or "".
+
+    Named out loud because the two are not interchangeable to anyone
+    debugging: they open the microphone differently, they fail differently,
+    and only one of them is a dependency the user had to install."""
+    from . import recorder as _rec
+    if _rec.build():
+        return "native"
+    return "sox" if _find("rec") else ""
+
+
 def record_hold(wav: str, max_secs: int = 120):
     """Record until told to stop. For push-to-talk, where YOU are the boundary.
 
@@ -677,21 +696,38 @@ def record_hold(wav: str, max_secs: int = 120):
     still holding the key down to say you have not finished.
 
     So: no silence effect at all. It records from the instant it starts until
-    the caller kills it, which is the moment you let go."""
+    the caller kills it, which is the moment you let go.
+
+    AVFoundation does this, so sox is only the fallback (see recorder.py). The
+    shape is unchanged either way: a Popen the caller polls and terminates."""
+    # stderr is kept, not discarded, whichever recorder answers. When a
+    # recording comes back empty the recorder has almost always said why
+    # ("can't open input device", a permission refusal, a device that
+    # vanished), and throwing that away turns a one-line answer into an
+    # afternoon. The same mistake in the key listener is what made the
+    # Accessibility problem invisible.
+    errf = None
+    try:
+        core.STATE_DIR.mkdir(parents=True, exist_ok=True)
+        errf = open(core.STATE_DIR / "rec.err", "w")
+    except Exception:
+        pass
+
+    from . import recorder as _rec
+    p = _rec.start(wav, max_secs, errf)
+    if p is not None:
+        _hold_mic_lock_while(p)
+        return p
+
     rec = _find("rec")
     if not rec:
-        core.log("record_hold: sox `rec` not found")
+        core.log("record_hold: no recorder (swiftc missing and sox not found)")
         return None
     cmd = [rec, "-q", "-c", "1", "-r", "16000", "-b", "16", wav,
            "trim", "0", str(max_secs)]
     try:
-        # sox's stderr is kept, not discarded. When a recording comes back
-        # empty, sox has almost always said why ("can't open input device",
-        # a permission refusal, a device that vanished), and throwing that
-        # away turns a one-line answer into an afternoon. The same mistake in
-        # the key listener is what made the Accessibility problem invisible.
-        errf = open(core.STATE_DIR / "rec.err", "w")
-        p = subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=errf)
+        p = subprocess.Popen(cmd, stdout=subprocess.DEVNULL,
+                             stderr=errf or subprocess.DEVNULL)
         _hold_mic_lock_while(p)
         return p
     except Exception as e:
@@ -704,6 +740,14 @@ def live_level(wav: str, tail_ms: int = 200) -> float:
     for the live mic meter. Reads only the tail and does the RMS in-process
     (no sox), so it's fine to call every ~0.15s in the capture loop."""
     import array
+    # The native recorder publishes the level AVFoundation measured, which is
+    # the input itself rather than whatever has reached the disk yet. The tail
+    # read below stays for sox, which publishes nothing, and for the gap
+    # before the first level is written.
+    from . import recorder as _rec
+    published = _rec.level(wav)
+    if published is not None:
+        return published
     try:
         with open(wav, "rb") as f:
             f.seek(0, 2)
@@ -1010,15 +1054,25 @@ def _transcribe_ex(wav: str) -> "tuple[str, float]":
 
 
 def loudness(wav: str) -> float:
-    """RMS amplitude of the capture (0..1). Directed out-loud speech near
-    the mic is loud; background conversation and whispers are quiet."""
-    sox = _find("sox")
-    if not sox:
-        return -1.0
+    """RMS amplitude of the capture (0..1), or -1 if it cannot be read.
+
+    Directed out-loud speech near the mic is loud; background conversation and
+    whispers are quiet. This used to shell out to `sox stat` and parse its
+    stderr, which meant an answer of -1 on any machine without sox even though
+    the number is one pass over samples we already have."""
+    import array
+    import wave
     try:
-        r = subprocess.run([sox, wav, "-n", "stat"], capture_output=True,
-                           text=True, timeout=30)
-        m = re.search(r"RMS\s+amplitude:\s+([0-9.]+)", r.stderr)
-        return float(m.group(1)) if m else -1.0
+        with wave.open(str(wav), "rb") as w:
+            if w.getsampwidth() != 2:
+                return -1.0
+            frames = w.readframes(w.getnframes())
+        a = array.array("h")
+        a.frombytes(frames[:len(frames) - len(frames) % 2])
+        if not a:
+            return 0.0
+        # Scaled to 0..1 the way sox reported it, so any threshold written
+        # against the old numbers still means the same thing.
+        return (sum(x * x for x in a) / len(a)) ** 0.5 / 32768.0
     except Exception:
         return -1.0

@@ -50,9 +50,10 @@ English works as soon as that finishes, in about two minutes. The larger model
 for Hindi and Hinglish keeps downloading in the background and starts working
 when it lands; `dictator doctor` says which half is ready.
 
-The installer needs Homebrew for two packages (`sox` to record, `whisper-cpp`
-to transcribe) and Apple's command line tools to build the key listener. It
-tells you what is missing rather than guessing.
+The installer needs Homebrew for one package (`whisper-cpp`, to transcribe) and
+Apple's command line tools to build the key listener. It tells you what is
+missing rather than guessing. Recording needs nothing installed: it goes
+through AVFoundation, which is already on your Mac.
 
 macOS then asks to allow **Dictator** to use the microphone and Accessibility.
 Say yes to both. That is the only part that needs you, and there is nothing to
@@ -143,6 +144,7 @@ order of those steps is the hard part, and a second copy of it would drift.
 |---|---|
 | `native/hotkey.swift` | watches for the held key. A `CGEventTap`, because nothing else sees the Globe key |
 | `native/orb.swift` | the indicator. Reads the microphone's real state, not a guess |
+| `native/record.swift` | the microphone, at 16kHz mono, with a real level meter |
 | `native/app/main.swift` | the app bundle that owns the permissions |
 | `dictator/stt.py` | records and transcribes, locally |
 | `dictator/roman.py` | writes Hindi in Latin script |

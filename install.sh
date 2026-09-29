@@ -22,12 +22,20 @@ if ! xcode-select -p >/dev/null 2>&1; then
 fi
 echo "ok"
 
-step "2/6  Recording and speech"
-# Homebrew is the only realistic way to get these two on a Mac. Installing it
+step "2/6  Speech"
+# Recording is no longer on this list. It used to need sox, which is a 2.4MB
+# package that drags in nine libraries to capture one mono stream, and which is
+# GPL so it could never be shipped inside the app this wants to become. macOS
+# records through AVFoundation, and native/record.swift is compiled in step 4
+# by the toolchain step 1 already checked for. sox still works if it happens to
+# be installed; `dictator doctor` says which recorder is actually in use.
+#
+# Homebrew is the only realistic way to get whisper on a Mac. Installing it
 # silently would be rude, so say what is missing and how to get it.
 if ! command -v brew >/dev/null 2>&1; then
   cat <<'MSG'
-Homebrew is needed for the recorder and the speech engine.
+Homebrew is needed for the speech engine (whisper-cpp). It is the only
+package left: recording uses what macOS already has.
 
 Install it with the one line from https://brew.sh, then run this again:
 
@@ -35,7 +43,7 @@ Install it with the one line from https://brew.sh, then run this again:
 MSG
   exit 1
 fi
-for pkg in sox whisper-cpp; do
+for pkg in whisper-cpp; do
   if brew list "$pkg" >/dev/null 2>&1; then
     echo "  $pkg already there"
   else
@@ -116,7 +124,11 @@ else
                || rm -f '$TURBO.part'" >/dev/null 2>&1 &
 fi
 
-"$HERE/bin/dictator" build >/dev/null || true
+# Compile all five helpers now. Built lazily they land in the middle of the
+# first holds, which is the window where somebody is deciding whether this
+# works, and a few seconds spent here is invisible next to a 1.5GB download.
+echo "  compiling the helpers"
+"$HERE/bin/dictator" build || true
 
 step "5/6  Make the command reachable"
 # Without this every command in the README fails for a new user, because the
