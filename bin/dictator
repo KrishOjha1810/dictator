@@ -1128,6 +1128,19 @@ def permissions(reset: bool = False, explain: bool = False) -> int:
         if cleared:
             print(f"Removed what macOS remembered about Dictator for: "
                   f"{', '.join(cleared)}.\n")
+        for flag, why in _forget.refused:
+            print(f"  Could NOT remove the {flag} entry: {why}")
+        if _forget.refused and not cleared:
+            # Saying "it can ask again" here would be untrue, and it is the
+            # sentence that sends somebody away believing it is fixed.
+            print("\n  So the stale entry is still there, and macOS will not "
+                  "ask again\n  while it is. It has to come out by hand:\n")
+            print("    1. System Settings, Privacy & Security, Accessibility")
+            print("    2. Click Dictator once, to select the row")
+            print("    3. Click the minus button under the list (Remove)")
+            print("    4. Run:  dictator off && dictator on")
+            print("    5. Say yes to the dialog\n")
+            return 1
         _restart(always)
         print("Restarted, so it can ask again.\n")
 
@@ -1193,13 +1206,30 @@ def _forget(info: dict, everything: bool = False) -> list:
             # Accessibility is the one that traps people and the one the user
             # asked about, so clear that and leave the microphone alone.
             want = ["Accessibility"]
-    done = []
+    done, refused = [], []
     for flag in want:
-        r = subprocess.run(["tccutil", "reset", flag, "com.dictator.dictation"],
-                           capture_output=True, text=True)
+        try:
+            r = subprocess.run(["tccutil", "reset", flag,
+                                "com.dictator.dictation"],
+                               capture_output=True, text=True, timeout=30)
+        except Exception as e:
+            refused.append((flag, str(e)[:120]))
+            continue
         if r.returncode == 0:
             done.append(flag)
+        else:
+            # tccutil refusing is the interesting case and it used to be
+            # swallowed: the row stayed, and the caller went on to say
+            # "Restarted, so it can ask again", which is untrue, because a row
+            # that is still there is exactly why macOS will NOT ask again.
+            why = (r.stderr or r.stdout or "").strip() or f"exit {r.returncode}"
+            refused.append((flag, why))
+            core.log(f"permissions: tccutil would not clear {flag}: {why}")
+    _forget.refused = refused
     return done
+
+
+_forget.refused = []
 
 
 def _asked_to_clear() -> bool:

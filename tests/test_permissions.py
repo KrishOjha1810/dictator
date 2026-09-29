@@ -455,3 +455,49 @@ def test_no_listener_record_at_all_changes_nothing():
                             (tcc.DENIED, "bad"), (tcc.MISSING, "bad")):
         assert tcc.verdict(_state(state))[0] == expected, state
         assert tcc.verdict(_state(state), {})[0] == expected, state
+
+
+def _cli():
+    import importlib.machinery
+    import importlib.util
+    loader = importlib.machinery.SourceFileLoader("dcli", "bin/dictator")
+    spec = importlib.util.spec_from_loader("dcli", loader)
+    m = importlib.util.module_from_spec(spec)
+    loader.exec_module(m)
+    return m
+
+
+def test_a_refused_tccutil_is_reported_rather_than_swallowed(monkeypatch):
+    """`tccutil` refusing used to leave `cleared` empty and print nothing, and
+    the caller went on to say "Restarted, so it can ask again". That is untrue:
+    a row that is still there is exactly the reason macOS will not ask again,
+    so the one sentence somebody reads sends them away believing it is fixed.
+    """
+    cli = _cli()
+
+    class Refused:
+        returncode = 1
+        stdout = ""
+        stderr = "tccutil: Failed to reset Accessibility"
+
+    monkeypatch.setattr(cli.subprocess, "run", lambda *a, **k: Refused())
+    from dictator import tcc
+    got = cli._forget({"service": "accessibility", "state": tcc.STALE})
+    assert got == [], got
+    assert cli._forget.refused, "the refusal was swallowed"
+    assert "Failed to reset" in cli._forget.refused[0][1]
+
+
+def test_a_successful_reset_records_no_refusal(monkeypatch):
+    cli = _cli()
+
+    class Done:
+        returncode = 0
+        stdout = ""
+        stderr = ""
+
+    monkeypatch.setattr(cli.subprocess, "run", lambda *a, **k: Done())
+    from dictator import tcc
+    got = cli._forget({"service": "accessibility", "state": tcc.STALE})
+    assert got, got
+    assert cli._forget.refused == []
