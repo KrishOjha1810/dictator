@@ -513,7 +513,7 @@ def _clean(text: str) -> str:
 
 def prose_for(block: str, system: str = _SYSTEM, max_tokens: int = 200,
               limit: int = 6000, against: str = "", what: str = "recap",
-              timeout: float = 0.0) -> str:
+              timeout: float = 0.0, exempt: tuple = ()) -> str:
     """A summary of one session, or '' if we could not get an honest one.
 
     `against` is the text the answer is checked back against, when that is not
@@ -523,6 +523,14 @@ def prose_for(block: str, system: str = _SYSTEM, max_tokens: int = 200,
     out = _clean(_ask(block, system, max_tokens, limit, timeout))
     if not out:
         return ""
+    # An answer that says there is nothing to report is not a claim about the
+    # source and cannot be checked against it. Meeting notes need this: asked
+    # what was decided in a meeting where nothing was, the honest answer is
+    # "nothing was decided", and the grounding check threw exactly that away
+    # for not tracing back to words anybody said. The section then looked
+    # rejected when it had been answered correctly, which is the opposite fact.
+    if out.strip().lower().rstrip(".") in exempt:
+        return out
     # Longer than what it summarised is not a summary. Small models pad when
     # they have little to work with, and padding is the failure this whole
     # feature is supposed to avoid.

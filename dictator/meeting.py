@@ -38,7 +38,7 @@ import time
 import wave
 from pathlib import Path
 
-from . import core, recap, stt, swiftbuild
+from . import core, recap, stt
 
 REPO = Path(__file__).resolve().parent.parent
 SRC = REPO / "native" / "meeting.swift"
@@ -609,21 +609,40 @@ def _slice(wav, start: float, end: float, out) -> bool:
 BATCH = 8
 
 
-def _watchdog(proc, after: float) -> None:
-    """Terminate `proc` if it is still going after `after` seconds."""
+# How long whisper may go without saying anything before it is treated as
+# wedged. It prints a percentage every five percent of every file, and the
+# longest gap in normal running is the model load between files, which is three
+# seconds. Five minutes of silence is not slowness.
+STALL = 300.0
+
+
+def _watchdog(proc, heard: list) -> None:
+    """Kill `proc` if it stops saying anything at all.
+
+    A total time limit would be the obvious thing and is useless here: a batch
+    of eight two minute chunks is legitimately allowed to take several minutes,
+    so any limit loose enough not to fire on a busy machine is too loose to
+    catch a wedge inside a working day. What a wedged whisper actually does is
+    stop printing, so that is what is watched. `heard` is a one element list
+    holding the time of the last thing it said."""
     import threading
 
-    def wait():
-        try:
-            proc.wait(timeout=after)
-        except Exception:
-            core.log("meeting: whisper took far too long, stopping it")
+    def watch():
+        while True:
             try:
-                proc.kill()
+                proc.wait(timeout=30)
+                return                      # it finished on its own
             except Exception:
                 pass
+            if time.time() - heard[0] > STALL:
+                core.log("meeting: whisper stopped responding, stopping it")
+                try:
+                    proc.kill()
+                except Exception:
+                    pass
+                return
 
-    threading.Thread(target=wait, daemon=True).start()
+    threading.Thread(target=watch, daemon=True).start()
 
 
 def _whisper(paths, lang: str, progress=None) -> dict:
@@ -654,13 +673,13 @@ def _whisper(paths, lang: str, progress=None) -> dict:
         # a command that sits there silently reads as a command that has hung.
         proc = subprocess.Popen(cmd, stdout=subprocess.DEVNULL,
                                 stderr=subprocess.PIPE, text=True)
-        # Reading a pipe has no timeout of its own, so a whisper that wedges
-        # would hold the command open with nothing to look at. Generous, and
-        # measured against reality: this machine runs at roughly four times
-        # real time, so sixty times the audio is not a limit anybody meets.
-        _watchdog(proc, 60 * sum(_seconds(p) for p in paths) + 120)
+        # Reading a pipe has no timeout of its own, so a whisper that wedged
+        # would hold the command open forever with nothing to look at.
+        heard = [time.time()]
+        _watchdog(proc, heard)
         seen, last = 0, 101
         for line in proc.stderr:
+            heard[0] = time.time()
             hit = re.search(r"progress\s*=\s*(\d+)%", line)
             if not hit:
                 continue
@@ -926,23 +945,33 @@ def _stretches(block: str, size: int = STRETCH) -> list:
     return out or [""]
 
 
-def _answer(system: str, parts: list, whole: str, what: str) -> str:
+def _answer(system: str, parts: list, whole: str, what: str) -> tuple:
     """Ask one question of a whole transcript, however long it is.
 
-    Each stretch is answered separately and the answers are joined, and every
-    answer is checked back against the WHOLE transcript rather than against the
-    stretch it came from, which is the same guard recap uses and the reason an
-    invented name cannot survive being summarised twice."""
-    said = []
+    Returns (what it said, whether anything was thrown away). Each stretch is
+    answered separately and the answers are joined, and every answer is checked
+    back against the WHOLE transcript rather than against the stretch it came
+    from, which is the same guard recap uses and the reason an invented name
+    cannot survive being summarised twice.
+
+    The second half of the answer matters as much as the first. An empty
+    section has two very different causes: nothing was decided, or something
+    was said and could not be believed. Printing the same blank for both leaves
+    the reader thinking the meeting had no decisions in it."""
+    said, dropped = [], False
     for part in parts:
         if not part.strip():
             continue
         got = recap.prose_for(part, system=system, max_tokens=220,
                               limit=STRETCH, against=whole,
-                              what=f"meeting/{what}", timeout=THINK)
-        if got and got.strip().lower().rstrip(".") not in _NOTHING:
+                              what=f"meeting/{what}", timeout=THINK,
+                              exempt=_NOTHING)
+        if not got:
+            dropped = True
+        elif got.strip().lower().rstrip(".") not in _NOTHING:
             said.append(got)
-    return " ".join(said).strip()
+    text = " ".join(said).strip()
+    return text, (dropped and not text)
 
 
 def notes(mid: str, prose: bool = True) -> dict:
@@ -966,12 +995,14 @@ def notes(mid: str, prose: bool = True) -> dict:
         save(mid, rec)
         return rec
     parts = _stretches(whole)
-    out = {"source": "rejected"}
+    out = {"source": "rejected", "dropped": []}
     with recap.model_up() as answering:
         if answering:
-            out["discussed"] = _answer(_DISCUSSED, parts, whole, "discussed")
-            out["decided"] = _answer(_DECIDED, parts, whole, "decided")
-            out["yours"] = _answer(_YOURS, parts, whole, "yours")
+            for key, system in (("discussed", _DISCUSSED),
+                                ("decided", _DECIDED), ("yours", _YOURS)):
+                out[key], lost = _answer(system, parts, whole, key)
+                if lost:
+                    out["dropped"].append(key)
             if any(out.get(k) for k in ("discussed", "decided", "yours")):
                 out["source"] = "model"
     rec["notes"] = out
@@ -1006,6 +1037,19 @@ def render(rec: dict, transcript: bool = False) -> str:
             out.append(f"\n  {label}\n")
             out.append(_wrap(notes_[key], "    "))
     if notes_.get("source") == "model":
+        # Name what was thrown away. A blank section otherwise reads as "there
+        # were no decisions", when what happened was that the answer did not
+        # trace back to the transcript and was dropped for it.
+        lost = [l for k, l in (("discussed", "what was discussed"),
+                               ("decided", "what was decided"),
+                               ("yours", "what you took on"))
+                if k in (notes_.get("dropped") or [])]
+        if lost:
+            out.append("\n")
+            out.append(_wrap("Nothing is shown for " + " or ".join(lost)
+                             + ", because what came back did not match what "
+                               "was actually said and was thrown away rather "
+                               "than shown with a warning.", "  "))
         out.append("\n")
         out.append(_wrap("Written by a model on this machine, out of the "
                          "transcript and nothing else, and thrown away "

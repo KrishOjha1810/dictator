@@ -237,6 +237,27 @@ def test_an_invented_action_item_is_thrown_away(monkeypatch, tmp_path):
     assert not rec["notes"].get("decided")
 
 
+def test_a_dropped_section_says_so_rather_than_reading_as_empty(monkeypatch,
+                                                                tmp_path):
+    """A blank "Decided" otherwise reads as "nothing was decided", when what
+    happened is that something was said and could not be believed. Those are
+    opposite facts and must not print the same."""
+    lines = [{"at": 0.0, "who": "them", "text": "the recorder is ready"},
+             {"at": 5.0, "who": "me", "text": "I will test it tomorrow"}]
+    mid = _recorded(tmp_path, lines)
+    monkeypatch.setattr(recap, "available", lambda: True)
+    monkeypatch.setattr(recap, "_start", lambda: False)
+    monkeypatch.setattr(recap, "up", lambda timeout=1.0: True)
+    monkeypatch.setattr(recap, "_ask", lambda block, *a, **k:
+                        "Priya agreed to ship the billing migration.")
+    rec = meeting.notes(mid)
+    assert "decided" in rec["notes"]["dropped"]
+    # And a section the model honestly reported as empty is NOT called dropped.
+    monkeypatch.setattr(recap, "_ask", lambda block, *a, **k: "nothing was decided")
+    rec = meeting.notes(mid)
+    assert "decided" not in rec["notes"]["dropped"]
+
+
 def test_a_grounded_note_survives(monkeypatch, tmp_path):
     lines = [{"at": 0.0, "who": "them", "text": "the recorder is ready to test"},
              {"at": 5.0, "who": "me", "text": "I will test the recorder tomorrow"}]
