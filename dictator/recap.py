@@ -136,6 +136,10 @@ whom when where why how all any both each few more most other some such only
 own same too let lets go going goes get gets got make makes made put puts one
 two three like want wants wanted say says said thing things stuff bro yaar ye
 hai kya nahi haan bhi kar karo raha rahi rahe tha the ka ki ke ko se me mein
+know knows knew well good great sure fine still even ever never always again
+uhh umm yeah yep nope please thanks thank sorry actually basically literally
+don't doesn't didn't can't won't isn't it's i'm we're you're that's there's
+let's they're wasn't aren't haven't hasn't shouldn't wouldn't couldn't
 """.split())
 
 
@@ -328,32 +332,93 @@ def _stem(word: str) -> str:
     return word
 
 
-def grounded(prose: str, source: str, floor: float = 0.7) -> bool:
-    """Is every idea in this summary traceable to the lines it summarised.
+# Numbers get spoken as words and summarised as digits, so "hundred USDC" in
+# the source has to count as 100 in the summary or the guard below fires on a
+# correct sentence. Measured: this was the only false positive in ten real
+# sessions.
+_NUM_WORDS = {
+    "one": 1, "two": 2, "three": 3, "four": 4, "five": 5, "six": 6,
+    "seven": 7, "eight": 8, "nine": 9, "ten": 10, "eleven": 11, "twelve": 12,
+    "thirteen": 13, "fourteen": 14, "fifteen": 15, "sixteen": 16,
+    "seventeen": 17, "eighteen": 18, "nineteen": 19, "twenty": 20,
+    "thirty": 30, "forty": 40, "fifty": 50, "sixty": 60, "seventy": 70,
+    "eighty": 80, "ninety": 90, "hundred": 100, "thousand": 1000,
+    "lakh": 100000, "million": 1000000, "crore": 10000000,
+}
+
+
+def _numbers(text: str) -> set:
+    out = {int(n) for n in re.findall(r"\d+", text)}
+    for w in re.findall(r"[a-z]+", text.lower()):
+        if w in _NUM_WORDS:
+            out.add(_NUM_WORDS[w])
+    return out
+
+
+def _propers(text: str) -> set:
+    """Capitalised words that are not simply the start of a sentence, which is
+    where an invented person, product or place shows up."""
+    out = set()
+    for sentence in re.split(r"(?<=[.!?])\s+", text):
+        for w in re.findall(r"[A-Za-z][A-Za-z'\-]+", sentence)[1:]:
+            if w[0].isupper():
+                out.add(re.sub(r"'s$", "", w.lower()).strip("'-"))
+    return out
+
+
+# Measured on ten real sessions of this user's own dictation, summarised by the
+# local model. A summary scored against the lines it was actually given: 0.47
+# to 0.82. The same summaries scored against a DIFFERENT session: median 0.07.
+# Three invented summaries (a meeting, an offer, an incident) against every one
+# of those sources: maximum 0.17. So the honest ones and the invented ones are
+# two clearly separated populations, and 0.45 sits in the gap. A floor of 0.7,
+# which was the first guess, threw away six of the ten good ones.
+GROUND_FLOOR = 0.45
+
+
+def unsupported(prose: str, source: str, floor: float = GROUND_FLOOR) -> str:
+    """Why this summary cannot be shown, or '' if it can.
 
     A small model's failure mode is not gibberish, it is fluent invention: a
-    name nobody said, a decision nobody made, a reason for a thing that had no
-    stated reason. That reads as a fact in a report about your own day, which
-    is exactly the kind of wrong that gets believed.
+    name nobody said, a number nobody gave, a decision nobody made. In a report
+    about your own day that reads as a fact, which is the kind of wrong that
+    gets believed, so a summary is checked back against the lines it was given
+    and thrown away rather than shown with a caveat.
 
-    So the summary is checked back against its source and thrown away if too
-    much of it is new. The threshold is loose (linking verbs and ordinary
-    connective words are expected to be new) and it is the invented NOUN this
-    is hunting: a sentence about a person or a number that was never dictated
-    fails it comfortably. Throwing away a good summary costs a paragraph;
-    keeping a bad one costs the user's trust in every other line."""
+    Three checks, because one is not enough. The ratio catches a summary that
+    is about something else entirely but cannot see a single invented name in
+    an otherwise faithful paragraph, and that is precisely the dangerous one,
+    so numbers and proper nouns are checked exactly. Throwing away a good
+    summary costs a paragraph, and the lines are printed instead. Keeping a bad
+    one costs the reader's trust in every other line of the report."""
+    if not prose.strip():
+        return "empty"
+    made_up = _numbers(prose) - _numbers(source)
+    if made_up:
+        return f"a number nobody dictated ({sorted(made_up)[0]})"
+    known_words = {re.sub(r"'s$", "", w) for w in
+                   re.findall(r"[a-z][a-z'\-]+", source.lower())}
+    invented = sorted(p for p in _propers(prose) if p not in known_words)
+    if invented:
+        return f"a name nobody dictated ({invented[0]})"
     have = {_stem(w) for w in _words(source)}
     want = [_stem(w) for w in _words(prose)]
     if not want:
-        return False
-    known = sum(1 for w in want if w in have)
-    return known / len(want) >= floor
+        return "no content"
+    share = sum(1 for w in want if w in have) / len(want)
+    if share < floor:
+        return f"only {share:.0%} of it traces back to what was said"
+    return ""
+
+
+def grounded(prose: str, source: str, floor: float = GROUND_FLOOR) -> bool:
+    return not unsupported(prose, source, floor)
 
 
 def _clean(text: str) -> str:
     """House style, and TTS style: a dash mid-sentence reads as a stumble when
     voicebridge speaks one of these out loud."""
-    text = text.replace("—", ", ").replace("–", ", ")
+    text = text.replace("\u2014", ", ").replace("\u2013", ", ")
     return re.sub(r"\s+", " ", text).replace(" ,", ",").strip()
 
 
@@ -368,8 +433,9 @@ def prose_for(block: str) -> str:
     if len(out) > max(160, len(block) * 0.9):
         core.log("recap: the local model padded rather than compressed")
         return ""
-    if not grounded(out, block):
-        core.log("recap: dropped a summary that said more than was dictated")
+    why = unsupported(out, block)
+    if why:
+        core.log(f"recap: dropped a summary, {why}")
         return ""
     return out
 
@@ -387,7 +453,12 @@ class Recap:
     seconds: float = 0.0        # how long the person was actually talking
     sessions: list = field(default_factory=list)
     terms: list = field(default_factory=list)
-    source: str = "grouping"    # "model" when prose came from the local model
+    # Where the prose came from, and when there is none, why there is none:
+    #   model      a model on this machine wrote it
+    #   no-model   there is no local model, so nothing could write it
+    #   rejected   the model answered and the answer was not supported
+    #   too-short  nothing here was long enough to be worth compressing
+    source: str = "no-model"
 
     def __bool__(self) -> bool:
         return self.utterances > 0
@@ -438,24 +509,29 @@ def report(when: "str | int" = "today", prose: bool = True) -> Recap:
         lines = [f"{len(rows)} thing{'s' if len(rows) != 1 else ''} dictated "
                  f"{label}, which is not enough to summarise. Here they are:\n"]
         for x in rows:
-            lines.append(f"  {_clock(x['at'])}  {x['app'] or '':<14} "
-                         f"{x['text']}\n")
+            # Whole, not shortened. This is the path that promises the lines
+            # themselves, so the only thing done to them is wrapping.
+            lines.append(f"\n  {_clock(x['at'])}  {x['app'] or 'unknown'}\n")
+            lines.append(_wrap(x["text"], "    "))
         r.text = "".join(lines)
         return r
 
-    if prose and available():
+    worth_prose = [s for s in r.sessions if len(s["lines"]) >= PROSE_MIN]
+    if not worth_prose:
+        r.source = "too-short"
+    if prose and worth_prose and available():
+        r.source = "rejected"       # until something usable comes back
         started = False
         try:
             started = _start()
             if up():
                 # Longest first: if the ceiling bites, it should bite on the
                 # sessions with least in them.
-                for s in sorted(r.sessions, key=lambda s: -len(s["lines"])
-                                )[:MAX_CALLS]:
-                    if len(s["lines"]) >= PROSE_MIN:
-                        s["prose"] = prose_for(_block(s))
-                        if s["prose"]:
-                            r.source = "model"
+                for s in sorted(worth_prose,
+                                key=lambda s: -len(s["lines"]))[:MAX_CALLS]:
+                    s["prose"] = prose_for(_block(s))
+                    if s["prose"]:
+                        r.source = "model"
         finally:
             if started:
                 _stop()
@@ -488,6 +564,13 @@ def render(r: Recap) -> str:
         if multiday and _day(s["start"]) != day:
             day = _day(s["start"])
             out.append(f"\n{day}\n")
+        # One sentence into one application is not a session, and giving it a
+        # heading, a time range and a count makes a week of dictation read as
+        # forty pieces of work instead of six.
+        if len(s["lines"]) == 1:
+            out.append(f"\n  {_clock(s['start'])}   {s['app'] or 'unknown'}   "
+                       f"{_short(s['lines'][0]['text'], 60)}\n")
+            continue
         out.append(f"\n  {_clock(s['start'])} to {_clock(s['end'])}   "
                    f"{s['app'] or 'unknown'}   {len(s['lines'])} said\n")
         if s["prose"]:
@@ -506,19 +589,24 @@ def render(r: Recap) -> str:
                    + ", ".join(f"{w} ({n})" for w, n in r.terms) + "\n")
 
     if r.source == "model":
-        out.append("\n  The prose was written by a model on this machine. "
-                   "Nothing left it.\n")
+        out.append("\n  The prose above was written by a model on this "
+                   "machine. Nothing left it.\n")
     else:
-        out.append("\n  No local model here, so this is grouping only: your "
-                   "own lines by\n  time and application, and the words that "
-                   "repeated. It cannot tell you\n  what you decided, only "
-                   "what you said.\n")
+        why = {"no-model": "there is no local model on this machine",
+               "rejected": "the local model did not return anything that "
+                           "matched what you said",
+               "too-short": "nothing here was long enough to be worth "
+                            "compressing"}.get(r.source, "")
+        out.append("\n")
+        out.append(_wrap("Grouping only: your own lines by time and "
+                         "application, and the words that repeated. Nothing "
+                         "was summarised, because " + why + ".", "  "))
     return "".join(out)
 
 
 def _short(text: str, width: int = 88) -> str:
     text = " ".join(text.split())
-    return text if len(text) <= width else text[:width - 1] + "…"
+    return text if len(text) <= width else text[:width - 3] + "..."
 
 
 def _wrap(text: str, indent: str, width: int = 74) -> str:

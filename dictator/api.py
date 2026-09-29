@@ -29,7 +29,8 @@ import time
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from . import core, history, learn as _learn, roman, shape as _shape, stt, vocab
+from . import (core, history, learn as _learn, recap as _recap, roman,
+               shape as _shape, stt, vocab)
 
 __all__ = ["Dictator", "Transcript", "transcribe", "VERSION"]
 
@@ -221,6 +222,21 @@ class Dictator:
 
     def said(self, limit: int = 50) -> list:
         return history.recent(limit=limit)
+
+    def recap(self, when: "str | int" = "today", prose: bool = True):
+        """What you dictated in a period, summarised. `when` is "today",
+        "week", "yesterday" or a number of days.
+
+        Returns a `Recap`: `text` is the report as it would be printed,
+        `sessions` and `terms` are the same thing structured, and `source`
+        says who wrote the prose or why nobody did. `prose=False` skips the
+        local model entirely, which is what a caller wants when it is going to
+        do its own wording.
+
+        Reads history and nothing else. It starts no recording, asks for no
+        permission, and talks to no network: a summary is a convenience and
+        this product's only real promise is that nothing leaves the machine."""
+        return _recap.report(when, prose=prose)
 
     # ---- getting it onto the screen ------------------------------------
 

@@ -77,6 +77,7 @@ It checks the things that actually break and names the one that is wrong.
 | `dictator off` | stop, and do not start again |
 | `dictator status` | is it set up, is it running |
 | `dictator doctor` | check everything, say what is wrong |
+| `dictator recap [today\|week\|N]` | what you dictated, summarised here |
 | `dictator log` | the last thing it did |
 | `dictator errors` | failures it noticed |
 
@@ -89,6 +90,40 @@ anything the system already does.
 While you hold it, a small indicator appears and its bars move with your
 voice. That is not decoration: it is the honest answer to "is the microphone
 actually open", so you never talk into a dead mic and find out afterwards.
+
+---
+
+## What you said today
+
+```
+dictator recap today
+dictator recap week
+dictator recap 3
+```
+
+It reads back what you dictated in that period: your day grouped into stretches
+of work, with the times and the applications next to each one so every line can
+be checked against the sentence that produced it.
+
+This summarises **what you dictated, not what was said in a room**. It is the
+half of "meeting notes" that a dictation tool is uniquely placed to do, and it
+needs no recording, no second model to work out who spoke, and no new
+permission from macOS. Nothing else on your machine knows what you said into
+Slack at eleven and into a terminal at noon.
+
+If there is a local model on the machine (llama.cpp and a small instruct model
+in `~/.dictator/models` or a voicebridge install) it writes the prose, here,
+and puts itself away afterwards. If there is not, you get the same report
+grouped by time and application with the words that kept coming up, and it says
+plainly that it cannot tell you what you decided, only what you said.
+
+It will not pad. An empty day says so in one line, and four sentences are
+printed as four sentences rather than made into a report about four sentences.
+A summary that mentions a name, a number or a subject you never dictated is
+thrown away rather than shown, and the lines are printed instead.
+
+There is no cloud option and there will not be one. `--plain` skips the model
+entirely.
 
 ---
 
@@ -130,6 +165,20 @@ d.learn("Whisper Flow")                     # teach it a word
 d.paste(text)                               # into the frontmost app
 ```
 
+The recap is there too, for anything that wants to say your day back to you:
+
+```python
+day = d.recap("today")      # or "week", "yesterday", or a number of days
+
+print(day)                  # the report, as the command prints it
+day.sessions                # the same thing structured, with the lines
+day.terms                   # what kept coming up
+day.source                  # "model", or why nobody wrote prose
+```
+
+`d.recap(when, prose=False)` skips the local model, which is what a caller that
+is going to do its own wording wants.
+
 `Dictator`, `Transcript`, `transcribe` and `VERSION` are the public surface.
 Everything else inside the package is internal and will move.
 
@@ -149,6 +198,7 @@ order of those steps is the hard part, and a second copy of it would drift.
 | `dictator/stt.py` | records and transcribes, locally |
 | `dictator/roman.py` | writes Hindi in Latin script |
 | `dictator/dictate.py` | the loop: hold, record, transcribe, paste |
+| `dictator/recap.py` | reads your history back to you, summarised locally |
 
 ### The app bundle is not decoration
 
@@ -195,6 +245,12 @@ keychain. Speech models are shared with any other local whisper install rather
 than copied, because the large model alone is 1.6GB. Set `DICTATOR_MODELS` to
 put them somewhere specific.
 
+The recap does not change any of that. It reads the history that is already on
+the machine, and the model that writes its prose runs here too, for the length
+of that one command. Every competitor's version of this feature summarises in
+somebody else's cloud, which is the reason this one exists and the one thing it
+will not do.
+
 ---
 
 ## Used by other things
@@ -209,10 +265,16 @@ without the first.
 ## Status
 
 Working: the held key, the indicator, local transcription, engine routing
-between English and Hinglish, permissions that survive a rebuild.
+between English and Hinglish, permissions that survive a rebuild, and the
+recap of what you dictated.
 
 Being worked on: Hinglish word accuracy, learning the words you correct,
 pasting long text without it arriving as an attachment.
+
+Not built, deliberately: recording a meeting. That is system audio, a second
+model to tell speakers apart, and a permission this product does not currently
+ask for, and it should be judged on its own rather than smuggled in behind a
+summary feature.
 
 ---
 

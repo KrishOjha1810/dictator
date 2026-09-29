@@ -180,6 +180,73 @@ already records.
 
 ---
 
+## Summarising what was dictated
+
+### The local model is good enough, measured rather than assumed
+
+`qwen3-4b-instruct-2507-q4_k_m.gguf` (2.5GB) through Homebrew's `llama-server`,
+on this M3, summarising real sessions out of this user's own history:
+
+| | |
+|---|---|
+| cold start to answering | 3.6s |
+| one session, 7 to 39 lines, 700 to 7000 characters | 1.3 to 5.9s |
+| a week's recap end to end, 8 sessions summarised | 22.1s |
+| a day with nothing worth summarising | 0.08s, model never loaded |
+
+So a recap is a command you wait for once at the end of a day, not something
+that can sit on the dictation path. That is also why the server is **stopped
+when the command finishes**: we already measured that a resident speech server
+makes dictation slower by contending for the same GPU (3.2s against 5.8s), and
+leaving 2.5GB resident after a once-a-day command would be paid for by every
+hold after it.
+
+### Where to put the grounding threshold, and why 0.7 was wrong
+
+A summary of your own day is believed, so the guard is: throw away anything
+whose words do not trace back to the lines it was given. The first threshold
+was a guess (70 percent of content words) and it **rejected six of ten good
+summaries**.
+
+Measured over ten real sessions, scoring the share of the summary's content
+words that appear in its source:
+
+| | Share traced back |
+|---|---|
+| A summary against the lines it was actually given | 0.47 to 0.82 |
+| The same summaries against a DIFFERENT session | median 0.07, 95th 0.42 |
+| Three invented summaries (a meeting, an offer, an incident) | max **0.17** |
+
+Honest and invented are two separated populations, and 0.45 sits in the gap.
+What the rejected words actually were is the useful part: `confirmed`,
+`verified`, `identified`, `decided`, `reviewed`. The model was not inventing,
+it was **reporting**, and a threshold high enough to catch reporting verbs
+catches nothing else.
+
+### The ratio cannot see the dangerous case, so two exact checks sit above it
+
+One invented name inside a faithful paragraph barely moves the ratio, and that
+is exactly the failure that gets believed. So, checked exactly rather than
+statistically:
+
+- **Every number** in the summary must appear in the source. One false positive
+  in ten (the source said "hundred USDC", the summary said "100"), fixed by
+  reading number words as numbers.
+- **Every capitalised word** that is not the first word of a sentence must
+  appear in the source. One false positive in ten (`Whisper Flow's`), fixed by
+  stripping the possessive. It catches `Priya`, `Friday` and `Kubernetes` in
+  every fabricated sample.
+
+### What this feature is NOT, and why
+
+Summarising what was **dictated** needs no new capture, no diarization, no new
+macOS permission and no network. Recording a **meeting** needs all four. The
+competitors ship the second one and summarise it in their cloud, which is the
+thing this product exists not to do. Building the first half is not a step
+toward the second half, it is the half that is defensible on its own.
+
+---
+
 ## macOS
 
 ### Permissions are granted to a code signature, not to a path or a name
