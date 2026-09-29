@@ -14,7 +14,7 @@ import subprocess
 import time
 from pathlib import Path
 
-from . import core
+from . import core, loops
 
 def _resolve_model_dir() -> Path:
     """Where the whisper models live.
@@ -1028,6 +1028,26 @@ def _transcribe_ex(wav: str) -> "tuple[str, float]":
         core.log(f"transcribe failed: {e}")
         return "", 0.0
     text = (out.stdout or "").strip()
+    # A shrunk encoder sometimes makes the decoder repeat itself instead of
+    # transcribing, and what comes out ("ndernderndernder") is not speech and
+    # is not worth pasting. The trimming is ours, so the answer is to spend the
+    # second or so and run it again at full size rather than deliver that.
+    if ac and text and loops.looped(text):
+        core.log(f"transcribe: {loops.why(text)}, running again at full size")
+        try:
+            again = subprocess.run([a for a in cmd if a != "-ac"
+                                    and a != str(ac)],
+                                   capture_output=True, text=True, timeout=120)
+            retried = (again.stdout or "").strip()
+            # Only if it actually helped. A loop on both passes means the audio
+            # is the problem, and the first answer is no worse than the second.
+            if retried and not loops.looped(retried):
+                text = retried
+            else:
+                core.log("transcribe: it looped at full size too, "
+                         "so the audio is the problem, not the setting")
+        except Exception as e:
+            core.log(f"transcribe: the second pass failed: {e}")
     lines = [ln.strip() for ln in text.splitlines() if ln.strip()]
     cleaned = " ".join(lines)
     for tag in ("[BLANK_AUDIO]", "(blank audio)", "[ Silence ]", "[silence]"):
