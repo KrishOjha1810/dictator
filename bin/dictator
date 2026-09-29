@@ -485,6 +485,204 @@ def main(argv) -> int:
     return 2
 
 
+MEETING_USAGE = """dictator meeting: record a meeting, and get notes afterwards.
+
+  dictator meeting start [title]   start recording, now, because you said so
+  dictator meeting stop            stop, transcribe it here, write the notes
+  dictator meeting list            everything recorded, with its size
+  dictator meeting show [id]       the notes for one   (--full for every word)
+  dictator meeting forget id|all   delete a recording, and mean it
+  dictator meeting permissions     walk macOS through allowing system audio
+
+It records two tracks: the microphone, which is you, and the system audio,
+which is everybody else. That is also how each line in the transcript knows
+who said it. It does not work out who among "them" was speaking, because that
+is a research problem and guessing at it would put words in people's mouths.
+
+Everything happens on this Mac. The audio is not uploaded, the transcript is
+not uploaded, and the notes are written by a model running here.
+
+  You are recording other people.
+
+Recording a conversation has consent implications, and in some places legal
+ones: several US states, and much of Europe, require everyone to agree. This
+tool will never start on its own, never detect a meeting, and never hide that
+it is running, so that the decision stays yours and stays visible. macOS shows
+its own screen recording indicator in the menu bar for as long as it records.
+Tell the room. It costs one sentence.
+"""
+
+
+def meeting(rest) -> int:
+    """Everything under `dictator meeting`.
+
+    Deliberately one explicit verb per thing. There is no mode this can be left
+    in, nothing that starts it from a calendar and nothing that resumes it
+    after a restart, because a recorder somebody forgot they armed is the one
+    failure that harms other people rather than the user."""
+    import time as _t
+    from dictator import meeting as m
+
+    what = rest[0] if rest else ""
+    args = rest[1:]
+
+    if what in ("", "status"):
+        live = m.running()
+        if live:
+            mins = live.get("elapsed", 0) / 60.0
+            print(f"  RECORDING  {live['id']}"
+                  + (f"  ({live['title']})" if live.get("title") else ""))
+            print(f"  {mins:.1f} minutes so far   "
+                  f"them {live.get('them_seconds', 0)/60:.1f} min, "
+                  f"you {live.get('me_seconds', 0)/60:.1f} min")
+            print("  Stop and write it up:  dictator meeting stop")
+            return 0
+        print(MEETING_USAGE)
+        return 0
+
+    if what in ("permissions", "permission", "perms"):
+        return meeting_permissions()
+
+    if what == "start":
+        title = " ".join(a for a in args if not a.startswith("-"))
+        print("  Starting. macOS will show a recording indicator in the menu "
+              "bar.", flush=True)
+        got = m.start(title)
+        if got.get("problem"):
+            print("\n" + got.get("say", "could not start"))
+            return 1
+        print(f"\n  Recording: {got['id']}")
+        if title:
+            print(f"  {title}")
+        print("  Everyone in the room is being recorded. Tell them.")
+        print("  Stop with: dictator meeting stop")
+        return 0
+
+    if what == "stop":
+        got = m.stop()
+        if got.get("problem"):
+            print(got.get("say", ""))
+            return 1
+        mid = got["id"]
+        mins = got.get("seconds", 0) / 60.0
+        print(f"  Stopped. {mins:.1f} minutes recorded.")
+        n = m.chunks_expected(mid)
+        # Said BEFORE the wait, not after it. Transcribing an hour of meeting
+        # takes minutes, and a command that sits there silently reads as a
+        # command that has hung. The dictation path learned the same thing.
+        print(f"  Transcribing here, in {n} piece(s). This is the slow part.",
+              flush=True)
+        t0 = _t.time()
+
+        def progress(who, done, total, at, pct=0):
+            # Whole pieces plus how far into the current one, so the number
+            # keeps moving through a piece that takes a minute rather than
+            # jumping once and then sitting still.
+            share = (done - 1 + pct / 100.0) / max(1, total)
+            print(f"\r  {int(100 * share):3d}%  piece {done} of {total}  "
+                  f"({'you' if who == 'me' else 'them'}, "
+                  f"{int(at) // 60:02d}:{int(at) % 60:02d})   ",
+                  end="", file=sys.stderr, flush=True)
+
+        m.transcribe(mid, progress)
+        print(f"\r  transcribed in {_t.time() - t0:.0f}s"
+              + " " * 30, file=sys.stderr, flush=True)
+        from dictator import recap as _recap
+        if _recap.available():
+            print("  Writing the notes on this machine, a few seconds...",
+                  file=sys.stderr, flush=True)
+        rec = m.notes(mid)
+        print()
+        print(m.render(rec), end="")
+        return 0
+
+    if what in ("list", "ls"):
+        print(m.listing(), end="")
+        return 0
+
+    if what == "show":
+        wanted = next((a for a in args if not a.startswith("-")), "")
+        rows = m.ids()
+        mid = wanted if wanted in rows else (rows[0] if rows else "")
+        if not mid:
+            print("No meetings recorded.  (dictator meeting start)")
+            return 1
+        rec = m.load(mid)
+        print(m.render(rec, transcript="--full" in args), end="")
+        return 0
+
+    if what == "forget":
+        wanted = next((a for a in args if not a.startswith("-")), "")
+        if not wanted:
+            print("usage: dictator meeting forget <id>|all")
+            return 2
+        targets = m.ids() if wanted == "all" else [wanted]
+        gone = [mid for mid in targets if m.forget(mid)]
+        if not gone:
+            print(f'no meeting called "{wanted}".')
+            return 1
+        print(f"deleted {len(gone)} recording(s), audio and transcript.")
+        print("  Overwritten before unlinking, so nothing on the filesystem "
+              "reads it back.\n"
+              "  An SSD moves blocks around underneath us, so that is as far "
+              "as software can honestly go.")
+        return 0
+
+    print(MEETING_USAGE)
+    return 2
+
+
+def meeting_permissions() -> int:
+    """Walk the user to the Screen Recording toggle, and notice it flip.
+
+    The same shape as `dictator permissions`, and for the same reason: an app
+    can ask for this and still not appear in the list, and then there is
+    nothing to switch on and no way to make it appear. So this reveals the
+    bundle in Finder as well, for the plus button."""
+    import time as _t
+    from dictator import meeting as m
+
+    app = m.build_app()
+    if not app:
+        print("Could not build the meeting recorder. It needs Apple's command")
+        print("line tools:  xcode-select --install")
+        return 1
+
+    print("The app that needs the permission is:\n  " + str(m.APP) + "\n")
+    print("It is a SECOND app on purpose. macOS remembers a permission against")
+    print("one application, so giving this one its own means the dictation")
+    print("app's Accessibility and Microphone grants are never disturbed.\n")
+    print("Opening Privacy & Security > Screen Recording (macOS may call it")
+    print("Screen & System Audio Recording).")
+    print("If Dictator Meeting is in the list, switch it on.")
+    print("If it is NOT in the list, use the + button and choose the app from")
+    print("the Finder window that just opened.\n")
+    print("It records no video. The capture is two pixels wide and its frames")
+    print("are never read; system audio simply lives behind this permission.\n")
+
+    subprocess.run(["open", "-R", str(m.APP)], capture_output=True)
+    subprocess.run(["open",
+                    "x-apple.systempreferences:com.apple.preference.security"
+                    "?Privacy_ScreenCapture"], capture_output=True)
+
+    print("Watching. Ctrl-C to stop waiting.\n")
+    try:
+        for i in range(120):
+            if m.granted():
+                print("\nGranted. Start a meeting:  dictator meeting start")
+                return 0
+            if i % 15 == 0 and i:
+                print(f"  still not granted after {i}s")
+            _t.sleep(1)
+    except KeyboardInterrupt:
+        print()
+    print("\nStill not granted. Two things worth checking:")
+    print("  1. The toggle next to Dictator Meeting is on, not just present.")
+    print("  2. macOS only applies it to a NEW process, which is why this")
+    print("     tests it by running the recorder rather than by asking.")
+    return 1
+
+
 def snippet(rest) -> int:
     """Teach it a phrase and the exact text that phrase stands for.
 

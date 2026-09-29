@@ -245,6 +245,214 @@ competitors ship the second one and summarise it in their cloud, which is the
 thing this product exists not to do. Building the first half is not a step
 toward the second half, it is the half that is defensible on its own.
 
+The second half was then built anyway, and everything measured while doing it
+is below. The paragraph above was right about the cost and wrong about one
+thing: diarization was never needed, because two tracks answer the only
+question that matters.
+
+---
+
+## Recording a meeting
+
+Measured on macOS 26.5.1 (build 25F80), SDK 26.2, Apple Silicon.
+
+### The constraint that could have killed it did not
+
+**Neither way of capturing system audio needs a paid Apple Developer account.**
+That was the thing worth finding out first, and it is the answer:
+
+| | Available since | Entitlement | Permission |
+|---|---|---|---|
+| ScreenCaptureKit, `capturesAudio` | macOS 13 | none | Screen Recording |
+| ScreenCaptureKit, `captureMicrophone` | macOS 15 | none | Microphone |
+| `AudioHardwareCreateProcessTap` | macOS 14.2 | none | the same grant |
+| A virtual device (BlackHole) | any | none | a kernel driver install |
+
+The app is signed with the same locally generated certificate the dictation app
+uses, and `AudioHardwareCreateProcessTap` returned `noErr` under it. There is no
+entitlement to buy here, so the $99 wall that closes off notarization does not
+close off this.
+
+### Core Audio process taps hand you silence rather than an error
+
+This is the most expensive thing in this section and it is why the tap is not
+what shipped. Run without the permission, on a self-signed binary:
+
+```
+AudioHardwareCreateProcessTap       st=0    tap=145
+tap format                          st=0    48000Hz, 2ch
+AudioHardwareCreateAggregateDevice  st=0    agg=146
+AudioDeviceCreateIOProcIDWithBlock  st=0
+AudioDeviceStart                    st=0
+blocks=294   peak=0.0
+```
+
+Every status code says it worked. 294 IO blocks arrived. Every sample in all of
+them was zero. The control that proves audio really was playing: the microphone
+recorded the same speaker output over the same six seconds at peak **0.104**,
+while the tap read exactly **0.0**.
+
+No dialog appeared, and what macOS wrote instead was a row in the per-user TCC
+database, `kTCCServiceAudioCapture` with `auth_value=0`, **against the
+responsible process** (the terminal) rather than against the app.
+
+ScreenCaptureKit, asked the same question with the same permission missing,
+answers in words:
+
+```
+cannot see the system audio: The user declined TCCs for application,
+window, display capture
+```
+
+An error you find in an hour. Silence you find three weeks later, when somebody
+opens a transcript of a conversation that was never recorded. That is the whole
+reason ScreenCaptureKit won, and it is not a performance argument.
+
+### Audio only through ScreenCaptureKit, and what it costs
+
+There is no audio-only content filter: system audio is captured as part of
+sharing a display. What there is instead is a video side that can be made
+nearly free, and `SCStream` does not require you to consume it:
+
+```
+cfg.capturesAudio = true            // everybody else, 48kHz stereo float
+cfg.captureMicrophone = true        // you, a SEPARATE output (macOS 15+)
+cfg.excludesCurrentProcessAudio = true
+cfg.width = 2; cfg.height = 2
+cfg.minimumFrameInterval = CMTime(value: 2, timescale: 1)
+```
+
+Two outputs are added, `.audio` and `.microphone`, and `.screen` is never
+attached, so no frame is ever read. That `captureMicrophone` exists at all is
+what makes two tracks cost one permission prompt and one clock, and two tracks
+are what make "me" and "them" free. Diarization is never attempted.
+
+### TCC attributes a permission to the RESPONSIBLE process, not the binary
+
+Launching the bundle's executable directly from a terminal, even though it is
+correctly signed and inside a correctly identified `.app`, put the microphone
+request against **Terminal**. Launching the same bundle with `open` put it
+against **com.dictator.meeting**, which is the only name the user can recognise
+in the list. So the recorder is started through LaunchServices, and `-n` forces
+a new instance because otherwise the arguments go to whatever copy is already
+up.
+
+### Asking for two permissions in one run silently denies the second
+
+The screen recording request returns before the user has answered it. The
+microphone request that followed it arrived while a decision was pending, and
+macOS wrote
+
+```
+kTCCServiceMicrophone   com.dictator.meeting   auth_value=0
+```
+
+with no dialog ever shown. A denied row is much worse than no row, because the
+app never asks again and the user is left with a switch to find rather than a
+question to answer. One prompt per run: the microphone is only asked for once
+system audio is already allowed.
+
+### Nothing we could do raised a Screen Recording dialog on this machine
+
+Tried, all of them refused instantly with `The user declined TCCs`, and none of
+them created a row for the app at all:
+
+- `CGRequestScreenCaptureAccess()` before the run loop, and inside it
+- `SCShareableContent.getExcludingDesktopWindows` on its own
+- as a plain command line binary, and as an `NSApplication`
+- as `.accessory` (no Dock icon) and as `.regular` with `activate()`
+- launched directly, and launched through `open`
+
+The evidence for what is actually going on is in the database. Every one of the
+**11** `kTCCServiceScreenCapture` rows on this machine has `auth_reason=4`,
+which is the user setting it in System Settings. **Not one has `auth_reason` 2
+or 3**, which is what a granted prompt writes, while microphone rows on the same
+machine do have reason 2. So on this version of macOS this grant looks like a
+System Settings action rather than a prompt, and `dictator meeting permissions`
+is written for that: it reveals the bundle in Finder for the plus button and
+watches for the switch, exactly as the Accessibility walkthrough already does.
+
+**So the capture path is built, signed, wired and unproven on this machine.**
+The transcription and notes half below is proven on real audio.
+
+### Chunking: two failures that only showed up on real audio
+
+Both were invisible in tests and obvious the moment a real multi minute
+recording went through.
+
+**1. Dropping a segment by its start time loses a whole sentence.** With three
+seconds of overlap at each seam, the obvious filter is to ignore anything the
+previous chunk already heard. Done by start time, it threw away a segment that
+*began* inside the overlap and ran well past it. Measured against a known
+script, the words at the 43 percent mark of one track simply vanished. A
+segment is only skipped when the **whole** of it lies in the already-heard
+stretch; what genuinely repeats is removed from the words instead.
+
+**2. Whisper fills silence rather than reporting it.** A chunk that ended in
+about twenty seconds of nothing came back with its last **forty spoken words
+replaced** by a fluent sentence nobody said. Not `[BLANK_AUDIO]`, an ordinary
+English clause that reads exactly like a transcript.
+
+The fix for the second one is the design, not a filter: **chunk on speech, not
+on the clock.** Stretches of talking are found from a loudness envelope, split
+at any silence of three seconds or more, and joined back up only across gaps of
+six seconds or less and only up to two minutes. Silence between chunks is never
+handed to the model at all. On a meeting that is also most of the saving,
+because most of the microphone track is the owner listening.
+
+Overlap is still needed where somebody talks for longer than a whole chunk
+without pausing. There, and only there, the cut goes to the quietest moment
+within ten seconds of the target, three seconds are repeated, and the repeat is
+removed by matching **words** rather than characters, because the two passes are
+separate decodings of the same audio and their punctuation never agrees.
+
+### whisper-cli loads the model once for a list of files
+
+```
+1 file    3.37s        3 files   3.17s
+```
+
+Same work, one model load. The load itself is 2.0 to 3.4 seconds with
+`small.en`, against a few seconds of real work per chunk, so running chunks one
+at a time would spend a third of a long meeting loading the same file. Chunks go
+eight at a time: the load is amortised, and an interruption costs eight chunks
+rather than the whole meeting.
+
+`-pp` prints a percentage per file, which is what drives the progress line. The
+percentage restarting is how the caller knows a file finished.
+
+**The language is pinned once per track, not per chunk.** `-l auto` runs the
+encoder twice on every chunk, and a meeting is one language setting, not one per
+minute.
+
+**Parakeet is not used here even on the English path**, and that is a decision
+rather than an oversight. It is faster and more verbatim, and it returns no
+timestamps, so a transcript built on it could not say who spoke when.
+
+### What a meeting actually costs, measured
+
+A 3 minute 24 second two track meeting, on this M3:
+
+| | |
+|---|---|
+| audio recorded | 407s across two tracks, 13.0 MB |
+| of which anybody was talking | 218.6s |
+| chunks | 8 on one track, 7 on the other |
+| transcription | **55.2s** |
+| notes (three questions, model loaded and put away) | **73s** |
+| words recovered against a known script | **100%** and **98.7%** |
+| duplicated runs at the seams | none |
+
+So roughly **one minute of transcription per four minutes of meeting**, which
+puts a ten minute meeting at about 2.5 minutes and an hour at about 15. Disk is
+**3.8 MB per minute** of meeting, both tracks, uncompressed 16kHz mono.
+
+The notes call needed a **longer timeout than the recap's 30 seconds**. A
+meeting stretch is twenty times the size of a dictation session and reading it
+took more than that budget on a just loaded model. The symptom was a
+"Discussed" section that was quietly missing while the other two were fine,
+which is exactly the shape of failure this file exists for.
+
 ---
 
 ## macOS

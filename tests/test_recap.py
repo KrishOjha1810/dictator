@@ -167,7 +167,7 @@ def test_a_summary_longer_than_what_it_summarised_is_not_a_summary(monkeypatch):
     """Small models pad when there is little to work with, and padding is the
     whole failure this feature exists to avoid."""
     block = "- fix the loop\n- rerun it\n- ship it\n"
-    monkeypatch.setattr(recap, "_ask", lambda b: (
+    monkeypatch.setattr(recap, "_ask", lambda b, *a, **k: (
         "The person began by carefully considering the loop, and then, having "
         "given it some thought, decided that rerunning it would be sensible, "
         "before finally shipping the change once they were satisfied with the "
@@ -182,7 +182,7 @@ def test_the_report_never_shows_a_summary_the_guard_rejected(monkeypatch):
     monkeypatch.setattr(recap, "available", lambda: True)
     monkeypatch.setattr(recap, "_start", lambda: False)
     monkeypatch.setattr(recap, "up", lambda timeout=1.0: True)
-    monkeypatch.setattr(recap, "_ask", lambda block:
+    monkeypatch.setattr(recap, "_ask", lambda block, *a, **k:
                         "Met Sanjana to agree the pricing for the launch.")
 
     r = recap.report("7")
@@ -259,7 +259,8 @@ def test_the_number_of_model_calls_is_bounded(monkeypatch):
     monkeypatch.setattr(recap, "available", lambda: True)
     monkeypatch.setattr(recap, "_start", lambda: False)
     monkeypatch.setattr(recap, "up", lambda timeout=1.0: True)
-    monkeypatch.setattr(recap, "_ask", lambda block: asked.append(block) or "")
+    monkeypatch.setattr(recap, "_ask",
+                        lambda block, *a, **k: asked.append(block) or "")
 
     r = recap.report("7")
     assert len(r.sessions) > recap.MAX_CALLS
@@ -306,7 +307,7 @@ def test_the_summary_is_shown_with_a_line_that_was_actually_said(monkeypatch):
     monkeypatch.setattr(recap, "_start", lambda: False)
     monkeypatch.setattr(recap, "up", lambda timeout=1.0: True)
     monkeypatch.setattr(recap, "_ask",
-                        lambda block: "Fixed the paste helper case.")
+                        lambda block, *a, **k: "Fixed the paste helper case.")
     r = recap.report("7")
     assert r.source == "model"
     assert "Fixed the paste helper case." in r.text

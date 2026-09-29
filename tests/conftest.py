@@ -39,6 +39,12 @@ def _own_state_dir(tmp_path, monkeypatch):
             # rebuilt the real ~/Applications/Dictator.app and wrote a pytest
             # temporary directory into it as the log path, which has happened.
             ("always", "PLIST", tmp_path / "com.dictator.dictate.plist"),
+            # The same shape again, and the most expensive one to get wrong: a
+            # meeting directory holds other people's voices, and `forget`
+            # overwrites files before it unlinks them, so a test pointed at the
+            # real directory would not merely pollute it.
+            ("meeting", "MEETINGS", tmp_path / "meetings"),
+            ("meeting", "CURRENT", tmp_path / "meetings" / "current"),
     ):
         try:
             m = __import__(f"dictator.{mod}", fromlist=[mod])

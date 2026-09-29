@@ -28,6 +28,7 @@ import subprocess
 import time
 import urllib.parse
 import urllib.request
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -304,18 +305,26 @@ _SYSTEM = (
     "headings, no quotes.")
 
 
-def _ask(block: str) -> str:
-    """One summary, or '' meaning the caller shows the lines instead."""
+def _ask(block: str, system: str = _SYSTEM, max_tokens: int = 200,
+         limit: int = 6000, timeout: float = 0.0) -> str:
+    """One summary, or '' meaning the caller shows the lines instead.
+
+    `system` is a parameter rather than a constant because meeting notes ask
+    this same model three different questions of the same transcript. Two
+    summarisers would mean two places for the loopback check, the server
+    lifecycle and the grounding guard to drift apart, and the guard is the part
+    that must never drift."""
     if not local_only(BASE):
         return ""
-    body = {"messages": [{"role": "system", "content": _SYSTEM},
-                         {"role": "user", "content": block[:6000]}],
-            "max_tokens": 200, "temperature": 0.2, "stream": False}
+    body = {"messages": [{"role": "system", "content": system},
+                         {"role": "user", "content": block[:limit]}],
+            "max_tokens": max_tokens, "temperature": 0.2, "stream": False}
     try:
         req = urllib.request.Request(
             f"{BASE}/v1/chat/completions", data=json.dumps(body).encode(),
             headers={"Content-Type": "application/json"})
-        d = json.loads(urllib.request.urlopen(req, timeout=TIMEOUT).read())
+        d = json.loads(urllib.request.urlopen(
+            req, timeout=timeout or TIMEOUT).read())
         choice = (d.get("choices") or [{}])[0]
         return ((choice.get("message") or {}).get("content") or "").strip()
     except Exception as e:
@@ -502,22 +511,48 @@ def _clean(text: str) -> str:
     return re.sub(r"\s+", " ", text).replace(" ,", ",").strip()
 
 
-def prose_for(block: str) -> str:
-    """A summary of one session, or '' if we could not get an honest one."""
-    out = _clean(_ask(block))
+def prose_for(block: str, system: str = _SYSTEM, max_tokens: int = 200,
+              limit: int = 6000, against: str = "", what: str = "recap",
+              timeout: float = 0.0) -> str:
+    """A summary of one session, or '' if we could not get an honest one.
+
+    `against` is the text the answer is checked back against, when that is not
+    the same as the text the model was shown. Meeting notes need it: the model
+    is handed one stretch of a long transcript at a time, and the answer still
+    has to trace back to the whole transcript."""
+    out = _clean(_ask(block, system, max_tokens, limit, timeout))
     if not out:
         return ""
     # Longer than what it summarised is not a summary. Small models pad when
     # they have little to work with, and padding is the failure this whole
     # feature is supposed to avoid.
     if len(out) > max(160, len(block) * 0.9):
-        core.log("recap: the local model padded rather than compressed")
+        core.log(f"{what}: the local model padded rather than compressed")
         return ""
-    why = unsupported(out, block)
+    why = unsupported(out, against or block)
     if why:
-        core.log(f"recap: dropped a summary, {why}")
+        core.log(f"{what}: dropped a summary, {why}")
         return ""
     return out
+
+
+@contextmanager
+def model_up():
+    """Hold the local model up for the length of one command, and put it away.
+
+    Yields whether it is answering. The server is started and stopped per
+    invocation on purpose: a resident speech server was measured to make
+    dictation slower by contending for the same GPU (3.2s against 5.8s), and
+    2.5GB left resident after a once-a-day command is paid for by every hold
+    after it. A server somebody else started survives this, because we only
+    stop the one we started."""
+    started = False
+    try:
+        started = _start()
+        yield up()
+    finally:
+        if started:
+            _stop()
 
 
 # ---- the report ------------------------------------------------------------
@@ -601,10 +636,8 @@ def report(when: "str | int" = "today", prose: bool = True) -> Recap:
         r.source = "too-short"
     if prose and worth_prose and available():
         r.source = "rejected"       # until something usable comes back
-        started = False
-        try:
-            started = _start()
-            if up():
+        with model_up() as answering:
+            if answering:
                 # Longest first: if the ceiling bites, it should bite on the
                 # sessions with least in them.
                 for s in sorted(worth_prose,
@@ -612,9 +645,6 @@ def report(when: "str | int" = "today", prose: bool = True) -> Recap:
                     s["prose"] = prose_for(_block(s))
                     if s["prose"]:
                         r.source = "model"
-        finally:
-            if started:
-                _stop()
 
     r.text = render(r)
     return r

@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+  "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>CFBundleName</key><string>Dictator Meeting</string>
+  <key>CFBundleDisplayName</key><string>Dictator Meeting</string>
+  <!-- A bundle identifier of its own, and this is the load-bearing detail.
+       Permissions are remembered per bundle identifier, so the Screen
+       Recording grant this app needs lands on THIS app and cannot disturb
+       the Microphone and Accessibility grants the dictation app already
+       holds. Rebuilding one does not touch the other. -->
+  <key>CFBundleIdentifier</key><string>com.dictator.meeting</string>
+  <key>CFBundleExecutable</key><string>DictatorMeeting</string>
+  <key>CFBundlePackageType</key><string>APPL</string>
+  <key>CFBundleShortVersionString</key><string>1.0</string>
+  <key>CFBundleVersion</key><string>1</string>
+  <!-- No Dock icon: recording is announced by macOS's own screen recording
+       indicator in the menu bar, which cannot be suppressed and is a better
+       consent signal than anything this could draw itself. -->
+  <key>LSUIElement</key><true/>
+  <key>LSMinimumSystemVersion</key><string>15.0</string>
+  <!-- These strings ARE the permission dialogs. macOS shows them verbatim. -->
+  <key>NSMicrophoneUsageDescription</key>
+  <string>To record your own voice in a meeting you chose to record.</string>
+  <key>NSAudioCaptureUsageDescription</key>
+  <string>To record what the other people in the meeting say, which reaches this Mac as sound from the speakers.</string>
+</dict>
+</plist>
