@@ -116,12 +116,24 @@ class Dictation:
                 p.kill()
             except Exception:
                 pass
+        # Why it ended, read before anything else touches the file. A recorder
+        # that lost its input has already exited, so the terminate above was a
+        # no-op and the code waiting here is its own rather than ours.
+        # Imported here rather than at the top because this is the only place
+        # in this module that needs it, and it is already in sys.modules by the
+        # time a key can be released.
+        cut = ""
+        try:
+            from . import recorder as _rec
+            cut = _rec.why_it_stopped(p)
+        except Exception:
+            pass
         if held_ms < MIN_MS:
             core.set_hud("listening", 0.0)
             return
         core.set_hud("thinking", 0.0)
         threading.Thread(target=self._finish,
-                         args=(self.wav, self.app, held_ms / 1000.0),
+                         args=(self.wav, self.app, held_ms / 1000.0, cut),
                          daemon=True).start()
 
     def cancel(self):
@@ -136,13 +148,29 @@ class Dictation:
 
     # ---- off the key thread -----------------------------------------------
 
-    def _finish(self, wav, app, secs: float = 0.0):
+    def _finish(self, wav, app, secs: float = 0.0, cut: str = ""):
         """One hold, from the recording to the words being on screen.
 
         The pipeline itself lives in api.py and this calls it. It used to live
         here, which meant anything else wanting the same result had to
-        reproduce the order, and a reproduction drifts."""
+        reproduce the order, and a reproduction drifts.
+
+        `cut` is set when the recording ended early. What is in the file is
+        still transcribed and still delivered, because losing what somebody
+        said is the failure this product is least allowed to have and part of
+        a sentence is worth more than none of it. What must not happen is
+        delivering it as though nothing went wrong, so the reason is said
+        first and written where `dictator errors` can repeat it."""
         say = getattr(self, "note", lambda m: None)
+        if cut:
+            # Before the transcript rather than after. The user is about to be
+            # handed part of their own sentence, punctuated and capitalised
+            # exactly like a whole one, and a warning that arrives once they
+            # have read it is not a warning. Surfaced as well as said: `note`
+            # only prints in the foreground, and a listener under launchd has
+            # no terminal for anyone to be watching.
+            core.surface_error("record", cut, "Run: dictator doctor")
+            say(cut)
         try:
             size = os.path.getsize(wav)
         except Exception:

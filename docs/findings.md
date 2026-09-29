@@ -480,6 +480,51 @@ audio. The recorder handles SIGTERM for exactly this, and sets `SIG_IGN` first
 because the default action kills the process before the dispatch source ever
 sees the signal.
 
+### A recording that stops on its own, and why the file cannot tell you
+
+`AVAudioRecorder` stops when the input device changes underneath it, which is
+what a Bluetooth headset connecting mid sentence does. It leaves a **valid**
+WAV: correct header, correct rate, holding the first few seconds. So every
+check downstream passes, `loudness` is fine, whisper transcribes it happily,
+and the user is handed part of their own sentence with a capital letter at the
+front and a full stop at the end. There is nothing in the file that says it is
+a fragment. This is the same shape as the paste receipt that lied: silent, and
+the wrong answer is the believable one.
+
+The recorder's own exit code is the only place the difference can live, so:
+**0 ended when it was meant to** (we terminated it, or max-seconds came up),
+**1 never started**, **5 started and was stopped early**. The number is written
+down in `native/record.swift` and in `recorder.py` and a test asserts they
+still agree, because there is nowhere for Swift and Python to share a constant.
+
+Two things about this were not obvious and both were checked by running it:
+
+- **Calling `stop()` fires the same delegate callback an interruption does.**
+  `audioRecorderDidFinishRecording(successfully: true)` arrives for our own
+  stop, for reaching max-seconds, and (as far as the callback is concerned)
+  for an input that went away. A delegate alone therefore reports every
+  ordinary hold as cut short, which is a worse lie than the one being fixed.
+  Two things separate them: a `stopping` flag set before `stop()`, and whether
+  the recorder's own clock had reached max-seconds. Measured: terminate at
+  1.2s of a 60s cap exits **0**, running to a 2s cap exits **0** with 2.0s of
+  audio, and an external stop at 1.0s of a 60s cap exits **5** with 1.01s of
+  audio and a readable WAV.
+- **A route change could not be reproduced on this machine.** There is exactly
+  one input device (the built-in microphone) and no second one to switch to,
+  so what was tested is the decision, by stopping the recorder from outside,
+  which is what losing the device does to it. Whether AVFoundation delivers
+  that callback on a real Bluetooth connect is **not verified here**.
+
+What to do about a cut recording is a separate question from detecting one,
+and the answer is **transcribe it and say so**, not discard it. This file
+already records that never losing what was said is what decides whether people
+trust one of these tools, and `paste.py` leaves the whole text on the clipboard
+when delivery fails for the same reason. Part of a sentence is worth more than
+none of it. What must not happen is delivering it as though nothing went
+wrong, so the reason is said before the transcript and written to
+`core.surface_error`, which is the channel that survives a listener running
+under launchd with no terminal for anyone to be watching.
+
 ### What a static whisper.cpp build would take
 
 Not done. Here is what was measured, so the decision does not get re-derived.

@@ -292,3 +292,72 @@ def test_a_failed_build_does_not_replace_a_working_binary(tmp_path):
     assert swiftbuild.compile_if_needed(src, out, "test") == ""
     assert out.read_text() == "the working one"
     assert not (tmp_path / "bad.new").exists(), "left a half built binary behind"
+
+
+# ---- a recording that was cut short ------------------------------------------
+#
+# AVAudioRecorder stops on its own when the input device changes underneath it,
+# which is what a Bluetooth headset connecting mid sentence does. What is left
+# is a valid WAV holding the first few seconds, so every check downstream passes
+# and the user is handed part of their own sentence formatted exactly like a
+# whole one. These are about telling that apart from an ordinary stop.
+
+
+class _Exited:
+    """A recorder that has already finished, with a code."""
+
+    def __init__(self, code, native=True):
+        self.returncode = code
+        if native:
+            self.dictator_native = True
+
+    def poll(self):
+        return self.returncode
+
+
+def test_an_ordinary_exit_is_not_reported_as_a_problem():
+    assert recorder.why_it_stopped(_Exited(0)) == ""
+
+
+def test_a_cut_recording_says_so_in_words_the_user_can_act_on():
+    why = recorder.why_it_stopped(_Exited(recorder.CUT_SHORT))
+    assert why, "an interrupted recording explained nothing"
+    assert "cut short" in why
+    assert "microphone" in why or "input device" in why
+
+
+def test_sox_exit_codes_are_never_read_as_ours():
+    """sox answers the same interface and its numbers mean unrelated things. A
+    wrong explanation on the hold path is worse than none at all."""
+    assert recorder.why_it_stopped(_Exited(recorder.CUT_SHORT, native=False)) == ""
+
+
+def test_asking_a_process_that_has_not_exited_is_not_an_error():
+    """It is asked on the key-up edge, where a raised exception is a key press
+    that does nothing at all and shows the user no reason."""
+    assert recorder.why_it_stopped(_Exited(None)) == ""
+    assert recorder.why_it_stopped(None) == ""
+    assert recorder.why_it_stopped(object()) == ""
+
+
+def test_the_two_sides_agree_on_the_exit_code():
+    """Swift and Python cannot share a constant, so the number is written down
+    twice and this is what stops the two copies meaning different things."""
+    src = (ROOT / "native" / "record.swift").read_text()
+    assert f"let CUT_SHORT: Int32 = {recorder.CUT_SHORT}" in src
+
+
+@pytest.mark.skipif(not HAVE_SWIFTC, reason="no swiftc here")
+def test_reaching_max_seconds_is_not_an_interruption(tmp_path, monkeypatch):
+    """The dangerous regression in the other direction. Stopping at the cap
+    fires the same AVFoundation callback an interruption does, so a recorder
+    that cannot tell them apart would report every long hold as cut short and
+    the warning would mean nothing within a day."""
+    monkeypatch.setattr(recorder, "BIN", tmp_path / "bin" / "dictator-rec")
+    assert recorder.build(), "the recorder did not compile"
+    p = recorder.start(str(tmp_path / "capped.wav"), 2)
+    assert p is not None
+    assert p.wait(timeout=20) == 0, "reaching the cap was reported as a failure"
+    assert recorder.why_it_stopped(p) == ""
+    with wave.open(str(tmp_path / "capped.wav"), "rb") as w:
+        assert w.getnframes() / 16000 > 1.0, "the cap closed the file too early"

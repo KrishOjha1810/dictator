@@ -19,8 +19,30 @@
 //   dictator-rec <out.wav> [max-seconds]
 //
 // Records until SIGTERM or SIGINT, or until max-seconds, whichever is first.
+//
+// EXIT CODES, because a truncated recording looks exactly like a whole one
+//
+//   0  it ended when it was meant to: the caller said stop, or max-seconds
+//      came up. The file holds everything there was.
+//   1  it never started. Nothing was recorded and stderr says why.
+//   5  it started, recorded, and then something stopped it early. The file
+//      holds PART of what was said.
+//
+// The third one is the reason this section exists. AVAudioRecorder stops on
+// its own when the input device changes underneath it, which is what happens
+// when a Bluetooth headset connects while somebody is mid sentence. The file
+// that is left is a valid WAV holding the first few seconds, so every check
+// downstream passes and the user is handed a fragment of their own sentence
+// formatted as though it were the whole thought. Saying nothing here is the
+// same class of mistake as a paste receipt that lies: the failure is silent
+// and the wrong answer is the believable one.
 import AVFoundation
 import Foundation
+
+// Kept in step with recorder.CUT_SHORT on the Python side. There is no way to
+// share a constant across the two, so it is written down in both places and
+// tests/test_record.py asserts they agree.
+let CUT_SHORT: Int32 = 5
 
 let args = CommandLine.arguments
 
@@ -33,6 +55,26 @@ func say(_ m: String) {
 func fail(_ m: String) -> Never {
     say(m)
     exit(1)
+}
+
+/// Told when the recorder stops for a reason that was not us asking.
+///
+/// It holds no state and reads nothing outside itself on purpose: the decision
+/// about what a stop MEANS needs the recorder's clock and the stop flag, both
+/// of which live in the top level code below, so this only carries the event
+/// out to a closure installed there.
+final class Watcher: NSObject, AVAudioRecorderDelegate {
+    var onStop: ((Bool, String) -> Void)?
+
+    func audioRecorderDidFinishRecording(_ r: AVAudioRecorder,
+                                         successfully flag: Bool) {
+        onStop?(flag, "")
+    }
+
+    func audioRecorderEncodeErrorDidOccur(_ r: AVAudioRecorder, error: Error?) {
+        onStop?(false, error?.localizedDescription
+                ?? "the audio system reported an error")
+    }
 }
 
 guard args.count >= 2 else {
@@ -100,19 +142,56 @@ guard recorder.record(forDuration: maxSecs) else {
     fail("could not start recording")
 }
 
+// How much audio is actually in the file, sampled by the meter below while the
+// recorder is running. `currentTime` reads zero once it has stopped, so the
+// last sample taken while it was alive is the only honest answer afterwards.
+var captured = 0.0
+
 // Stopping is what finalises the WAV header: the RIFF and data chunk sizes are
 // written at stop, so a recorder that is SIGKILLed leaves a file whose header
 // claims zero samples. That is why the signals below are handled rather than
 // left to the default action, and why the caller should terminate and not kill.
+//
+// `stopping` also keeps the delegate quiet. Calling stop() makes AVFoundation
+// report that recording finished, which is true and is not news: without the
+// flag, every ordinary hold would end by telling the caller it had been cut
+// short, which is a worse lie than the one this change exists to fix.
 var stopping = false
-func finish(_ code: Int32) -> Never {
+func finish(_ code: Int32, _ why: String = "") -> Never {
     if !stopping {
         stopping = true
+        if !why.isEmpty { say(why) }
         recorder.stop()
         try? FileManager.default.removeItem(at: levelFile)
     }
     exit(code)
 }
+
+/// Whether stopping now means we reached max-seconds rather than lost the input.
+///
+/// A quarter of a second of slack because the meter samples every 0.05s, so the
+/// last reading before the cap is always a little short of it.
+func reachedTheCap() -> Bool {
+    return captured >= maxSecs - 0.25
+}
+
+func cutMessage(_ detail: String) -> String {
+    let got = String(format: "%.1f", captured)
+    return "the recording stopped on its own after \(got)s, before the caller "
+        + "asked it to"
+        + (detail.isEmpty ? "" : ": \(detail)")
+        + ". The input device changed or something else took the microphone. "
+        + "Only the audio up to that point is in the file."
+}
+
+let watcher = Watcher()
+watcher.onStop = { ok, detail in
+    // We asked for this, so there is nothing to report.
+    if stopping { return }
+    if ok && reachedTheCap() { finish(0) }
+    finish(CUT_SHORT, cutMessage(detail))
+}
+recorder.delegate = watcher
 
 // SIG_IGN first: the default action for SIGTERM kills us before the dispatch
 // source ever sees it, and the file would be left with an empty header.
@@ -139,9 +218,16 @@ func level() -> Double {
 }
 
 let meter = Timer(timeInterval: 0.05, repeats: true) { _ in
-    if !recorder.isRecording {
-        finish(0)                       // max-seconds reached, file is closed
+    // The delegate above normally gets here first and says why. This is the
+    // backstop for an input that simply goes away without telling anybody,
+    // and it decides the same way: reaching max-seconds is the one ordinary
+    // reason to stop on our own, and anything else means the file holds part
+    // of a sentence while looking exactly like a whole one.
+    guard recorder.isRecording else {
+        if reachedTheCap() { finish(0) }
+        finish(CUT_SHORT, cutMessage(""))
     }
+    captured = recorder.currentTime
     try? String(format: "%.4f", level())
         .write(to: levelFile, atomically: true, encoding: .utf8)
 }

@@ -197,3 +197,91 @@ def test_each_hold_records_to_its_own_file(monkeypatch):
     for _ in range(3):
         d.down()
     assert len(set(seen)) == 3, seen
+
+
+# ---- a recording that was cut short ------------------------------------------
+
+class _CutProc:
+    """A recorder that lost its input and exited on its own, so by the time the
+    key came up there was nothing left to terminate."""
+    from dictator import recorder as _rec
+    dictator_native = True
+    returncode = _rec.CUT_SHORT
+
+    def terminate(self):
+        pass
+
+    def wait(self, timeout=None):
+        return self.returncode
+
+    def kill(self):
+        pass
+
+
+def test_a_cut_recording_is_carried_from_the_key_to_the_report(monkeypatch):
+    """The wiring, not the message. This product's own history has four
+    entries of the shape "something that knows how to do the work, and nothing
+    calling it from where the work happens", so the reason the recorder
+    produces is followed all the way to the thread that reports it."""
+    _quiet(monkeypatch)
+    got = {}
+    d = dictate.Dictation()
+    d.proc = _CutProc()
+    d.wav = "/tmp/never-read.wav"
+    monkeypatch.setattr(dictate.threading, "Thread",
+                        lambda target, args, daemon=None: type(
+                            "T", (), {"start": lambda s: got.update(
+                                cut=args[3])})())
+    d.up(held_ms=900)
+    assert got.get("cut"), "the key-up edge threw the reason away"
+    assert "cut short" in got["cut"]
+
+
+def test_the_user_is_told_before_they_are_handed_the_fragment(monkeypatch):
+    """Part of a sentence is still delivered, because losing what somebody said
+    is the failure this product is least allowed to have. What must not happen
+    is delivering it as though nothing went wrong."""
+    _quiet(monkeypatch)
+    surfaced = []
+    monkeypatch.setattr(dictate.core, "surface_error",
+                        lambda where, msg, hint="", **k: surfaced.append((where, msg)))
+
+    class _Said:
+        text = "the part I managed to say"
+        heard = "the part I managed to say"
+
+    d = dictate.Dictation()
+    monkeypatch.setattr(d.sdk, "transcribe", lambda wav, app="": _Said())
+    d.sdk.last_learned = []
+    monkeypatch.setattr(dictate.mac, "frontmost_app", lambda: "Terminal")
+    pasted = []
+    monkeypatch.setattr(dictate.paste, "deliver",
+                        lambda text, app: pasted.append(text) or True)
+
+    d._finish("/tmp/never-read.wav", "Terminal", 1.0,
+              cut="the recording was cut short: something took the microphone")
+
+    assert surfaced, "nothing was written where `dictator errors` would find it"
+    assert surfaced[0][0] == "record"
+    assert pasted == ["the part I managed to say"], (
+        "the words were thrown away rather than delivered with a warning")
+
+
+def test_an_ordinary_hold_says_nothing_about_being_cut(monkeypatch):
+    """A warning that fires on every hold is a warning nobody reads."""
+    _quiet(monkeypatch)
+    surfaced = []
+    monkeypatch.setattr(dictate.core, "surface_error",
+                        lambda where, msg, hint="", **k: surfaced.append(msg))
+
+    class _Said:
+        text = "all of it"
+        heard = "all of it"
+
+    d = dictate.Dictation()
+    monkeypatch.setattr(d.sdk, "transcribe", lambda wav, app="": _Said())
+    d.sdk.last_learned = []
+    monkeypatch.setattr(dictate.mac, "frontmost_app", lambda: "Terminal")
+    monkeypatch.setattr(dictate.paste, "deliver", lambda text, app: True)
+    d._finish("/tmp/never-read.wav", "Terminal", 1.0)
+    assert surfaced == []
