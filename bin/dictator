@@ -694,13 +694,21 @@ def meeting_permissions() -> int:
                     "?Privacy_ScreenCapture"], capture_output=True)
 
     print("Watching. Ctrl-C to stop waiting.\n")
+    # Real seconds, not loop turns. Each turn is a sleep PLUS a `granted()`
+    # that launches a fresh instance of the recorder and can take eight
+    # seconds, so counting turns printed a number several times smaller than
+    # the time the person had actually been sitting there.
+    began = _t.monotonic()
+    said = 0.0
     try:
-        for i in range(120):
+        while _t.monotonic() - began < 120:
             if m.granted():
                 print("\nGranted. Start a meeting:  dictator meeting start")
                 return 0
-            if i % 15 == 0 and i:
-                print(f"  still not granted after {i}s")
+            waited = _t.monotonic() - began
+            if waited - said >= 15:
+                said = waited
+                print(f"  still not granted after {int(waited)}s")
             _t.sleep(1)
     except KeyboardInterrupt:
         print()

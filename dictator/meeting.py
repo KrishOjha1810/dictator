@@ -625,6 +625,10 @@ def speech(env: list, gap: float = GAP, step: float = STEP) -> list:
 # reading it six times to answer the same question is a few seconds of nothing.
 # Keyed on the file's size as well as its name, because a recording that is
 # still being written is a different file a moment later.
+# Bounded, because this is a library as well as a command. A CLI exits and
+# takes the cache with it; an embedder that transcribes a hundred meetings in
+# one process would hold every envelope it ever computed.
+_PIECES_MAX = 32
 _PIECES: dict = {}
 
 
@@ -700,6 +704,8 @@ def pieces(wav, chunk: float = CHUNK, overlap: float = OVERLAP,
                     piece["end"] = min(total, piece["end"] + still)
             piece["keep_from"] = min(piece["keep_from"], piece["end"])
 
+    if len(_PIECES) >= _PIECES_MAX:
+        _PIECES.pop(next(iter(_PIECES)), None)
     _PIECES[key] = out
     return out
 

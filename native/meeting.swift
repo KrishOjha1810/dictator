@@ -108,8 +108,11 @@ func fail(_ m: String, _ code: Int32 = 1) -> Never {
     exit(code)
 }
 
-// Exit codes the Python side reads, so it can tell "you have not granted this
-// yet" from "this broke", and say something different for each.
+// Exit codes. The Python side does NOT read these: it launches through `open`,
+// which reports whether LaunchServices accepted the launch and never what the
+// application went on to exit with. That is why `giveUp` writes the reason
+// into status.json, which is the channel that actually reaches Python. These
+// remain for anyone running the binary by hand, and for the log.
 let EXIT_NO_SCREEN = 3
 let EXIT_NO_MIC = 4
 
