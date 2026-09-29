@@ -198,17 +198,53 @@ def corrections(limit: int = 200) -> list:
     return out
 
 
-def forget(row_id: int = 0, before: float = 0.0) -> int:
-    """Delete one row, or everything older than a timestamp. Returns the count.
+def matching(text: str, limit: int = 500) -> list:
+    """Rows containing this text, in anything we recorded about them.
+
+    Searching `heard` as well as `shown` matters here more than in an ordinary
+    search: the reason to delete a line is often that it holds something you
+    did not want written down, and the version that holds it may be the one
+    the recogniser produced rather than the one that landed."""
+    needle = (text or "").strip().lower()
+    if not needle:
+        return []
+    return [r for r in recent(limit)
+            if needle in (r["heard"] or "").lower()
+            or needle in (r["shown"] or "").lower()
+            or needle in (r["kept"] or "").lower()]
+
+
+def forget(row_id: int = 0, before: float = 0.0,
+           containing: "str|None" = None) -> int:
+    """Delete one row, everything older than a timestamp, rows containing some
+    text, or everything. Returns the count.
 
     Deliberately easy to reach. A record of everything you have said needs a
     delete that is as simple as the record itself."""
+    # Found before the lock is taken, never inside it. `matching` reads through
+    # `recent`, which takes the same lock, and `_lock` is not reentrant: doing
+    # this the obvious way deadlocks the process that called it, which on the
+    # dictation path is the one holding the user's words.
+    # None means "no text search was asked for". An empty string means one was
+    # asked for and matched nothing, which must delete NOTHING: a mistyped
+    # argument falling through to "everything" is the worst accident this
+    # command can cause, and it is one keystroke away.
+    if containing is not None:
+        ids = [r["id"] for r in matching(containing, 5000)]
+        if not ids:
+            return 0
+    else:
+        ids = []
     try:
         with _lock:
             con = _db()
             try:
                 if row_id:
                     cur = con.execute("DELETE FROM said WHERE id=?", (int(row_id),))
+                elif ids:
+                    cur = con.execute(
+                        "DELETE FROM said WHERE id IN (%s)"
+                        % ",".join("?" * len(ids)), ids)
                 elif before:
                     cur = con.execute("DELETE FROM said WHERE at < ?", (float(before),))
                 else:

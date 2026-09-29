@@ -43,7 +43,8 @@ Teaching it your words:
   dictator history [n]   what you have said
   dictator find WORDS    search everything you have ever dictated
   dictator recap [today|week|N]   what you worked on, summarised locally
-  dictator forget        erase that history
+  dictator forget "words"  erase everything you said containing them
+  dictator forget all      erase the whole history
 
 Phrases you say often:
   dictator snippet "my work email" "krish@example.com"
@@ -279,8 +280,53 @@ def main(argv) -> int:
 
     if cmd == "forget":
         from dictator import history
-        n = history.forget(before=9e18)
-        print(f"erased {n} recorded utterance(s).")
+        import time as _t
+        what = " ".join(rest).strip()
+        # Deleting everything used to be the only thing this command did, and
+        # it did it without asking. Both halves of that were wrong: the usual
+        # reason to reach for it is one thing you wish you had not said, and
+        # an irreversible delete of everything you have ever dictated should
+        # take more than four letters and a Return.
+        if not what:
+            print("usage:")
+            print('  dictator forget "the words"   erase everything containing them')
+            print("  dictator forget all           erase the whole history")
+            return 2
+        if what == "all":
+            rows = history.recent(5000)
+            if not rows:
+                print("nothing recorded, so nothing to erase.")
+                return 0
+            print(f"This erases all {len(rows)} things you have dictated. "
+                  f"It cannot be undone.")
+            try:
+                if input("type ERASE to confirm: ").strip() != "ERASE":
+                    print("left alone.")
+                    return 0
+            except (EOFError, KeyboardInterrupt):
+                print("\nleft alone.")
+                return 0
+            print(f"erased {history.forget(before=9e18)} recorded utterance(s).")
+            return 0
+        rows = history.matching(what, 5000)
+        if not rows:
+            print(f'nothing recorded contains "{what}".')
+            return 0
+        print(f'{len(rows)} of the things you have dictated contain "{what}":\n')
+        for r in rows[:10]:
+            when = _t.strftime("%d %b %H:%M", _t.localtime(r["at"]))
+            line = r.get("shown") or r.get("heard") or ""
+            print(f"  {when}  {line[:80]}")
+        if len(rows) > 10:
+            print(f"  ... and {len(rows) - 10} more")
+        try:
+            if input("\nerase them? [y/N] ").strip().lower() not in ("y", "yes"):
+                print("left alone.")
+                return 0
+        except (EOFError, KeyboardInterrupt):
+            print("\nleft alone.")
+            return 0
+        print(f"erased {history.forget(containing=what)}.")
         return 0
 
     if cmd in ("meeting", "meetings"):
