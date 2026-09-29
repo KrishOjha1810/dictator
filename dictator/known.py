@@ -107,23 +107,38 @@ ALLOW |= {"has", "held", "paid", "became", "repaid", "hang", "goodbye",
 # found it the hard way, on a hold where the model that got the sentence RIGHT
 # scored 10% and the model that turned it into fluent English nonsense scored
 # zero, because every wrong word it chose was a real English word.
-ALLOW |= {
-    "aao", "apno", "apna", "apni", "apne", "aap", "aapko", "aapka", "aapki",
-    "seedha", "seedhe", "sirf", "matlab", "thoda", "zyada", "jyada",
-    "bilkul", "wapas", "abhi", "parso",
-    # possessives and pronouns
-    "mera", "meri", "mere", "tera", "teri", "tere", "uska", "uski", "unka",
-    "unki", "iska", "iski", "inka", "hamara", "humara", "hamari", "mujhe",
-    "tujhe", "usse", "isse", "jisse", "kisse",
-    # the commonest verbs, in the spellings people actually type
-    "pao", "paao", "karna", "karo", "kardo", "kardena", "karke", "hona",
-    "hoga", "hogi", "rahe", "raha", "rahi", "lekar", "lena", "dena",
-    "banao", "banvao", "banvaana", "likhna", "likho", "padhna", "padho",
-    "samjhao", "samjha", "gayi", "gaye", "gaya", "sakta", "sakte", "sakti",
-    "chahiye", "chahie", "bolna", "bolo", "suno", "sunna", "dekho", "dekhna",
-    # question words and connectives
-    "kab", "kya", "kyun", "kaise", "kahan", "kaun", "lekin", "agar",
+#
+# Their phonetic keys go in as well, and that is the part that stops this
+# being whack-a-mole. Hand-adding spellings one at a time builds a list of the
+# spellings ONE model happens to use: "seedha" was added and passed, "sidha"
+# was not and failed, and they are the same word with the same key. Registering
+# the key means any spelling of the sound passes, whichever model wrote it.
+HINDI_EXTRA = {
+    "aao", "apno", "apna", "apni", "apne", "aap",
+    "aapko", "aapka", "aapki", "seedha", "seedhe", "sirf",
+    "matlab", "thoda", "zyada", "jyada", "bilkul", "wapas",
+    "abhi", "parso", "mera", "meri", "mere", "tera",
+    "teri", "tere", "uska", "uski", "unka", "unki",
+    "iska", "iski", "inka", "hamara", "humara", "hamari",
+    "mujhe", "tujhe", "usse", "isse", "jisse", "kisse",
+    "pao", "paao", "karna", "karo", "kardo", "kardena",
+    "karke", "hona", "hoga", "hogi", "rahe", "raha",
+    "rahi", "lekar", "lena", "dena", "banao", "banvao",
+    "banvaana", "likhna", "likho", "padhna", "padho", "samjhao",
+    "samjha", "gayi", "gaye", "gaya", "sakta", "sakte",
+    "sakti", "chahiye", "chahie", "bolna", "bolo", "suno",
+    "sunna", "dekho", "dekhna", "kab", "kya", "kyun",
+    "kaise", "kahan", "kaun", "lekin", "agar",
+    # Ordinary nouns and verbs the lexicon does not have, found by checking a
+    # list of common Hindi against it rather than by waiting for each to turn
+    # up in a transcript, which is how the English gaps were found too.
+    "sawaal", "jawab", "baatein", "cheezein", "jagah", "hafta", "aadmi",
+    "ladki", "ladka", "darwaza", "khidki", "pehle", "baad",
+    "kehna", "poochna", "rakhna", "milna", "baithna", "daudna", "peena",
+    "padha", "banvana", "banvaya", "banvaaya",
 }
+ALLOW |= HINDI_EXTRA
+HINDI_KEYS |= {hindi.key(w) for w in HINDI_EXTRA}
 
 
 # A dictionary from 1934 has the singular and not the plural, the verb and not

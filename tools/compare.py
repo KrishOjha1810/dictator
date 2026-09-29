@@ -56,7 +56,21 @@ def transcribe(wav: Path, model: Path, lang: str,
         cmd += ["-ac", str(ac)]
     t0 = time.time()
     r = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
-    return (r.stdout or "").strip(), time.time() - t0
+    took = time.time() - t0
+    # Romanise, because the product does. Without this the comparison scored a
+    # model that answers in Devanagari on a fraction of the words it actually
+    # produced: the word regex is [A-Za-z], so an entire Hindi sentence in
+    # Devanagari contributed ONE token ("verify") to the benchmark, and the
+    # holds it was silently skipping were the hardest Hinglish ones. It was
+    # also not the pipeline: every one of these holds reaches the user through
+    # `_romanise`, so comparing the raw model output compares something nobody
+    # ever sees.
+    stt._force_multilingual = True
+    try:
+        text = stt._romanise((r.stdout or "").strip())
+    finally:
+        stt._force_multilingual = False
+    return text, took
 
 
 def hindi_share(text: str) -> float:
