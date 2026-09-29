@@ -180,3 +180,20 @@ class _FakeProc:
 class _NoThread:
     def start(self):
         pass
+
+
+def test_each_hold_records_to_its_own_file(monkeypatch):
+    """The path was built from the pid, which does not change, so a second
+    hold started recording over the file the first was still transcribing.
+    Both were lost with no transcript and no error: the log showed only
+    "could not keep the recording: No such file". A hold that produces nothing
+    at all is the worst failure this can have, because there is nothing left
+    to retry from."""
+    seen = []
+    monkeypatch.setattr(dictate.stt, "record_hold", lambda w, **k: seen.append(w))
+    d = dictate.Dictation()
+    monkeypatch.setattr(d, "_levels", lambda: None)
+    monkeypatch.setattr(dictate.mac, "frontmost_app", lambda: "Terminal")
+    for _ in range(3):
+        d.down()
+    assert len(set(seen)) == 3, seen

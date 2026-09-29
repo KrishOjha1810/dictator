@@ -50,6 +50,7 @@ class Dictation:
         self.send = send
         self.proc = None            # the recorder
         self.wav = ""
+        self._n = 0
         self.app = ""               # what was in front when you pressed
         self.started = 0.0
 
@@ -59,7 +60,13 @@ class Dictation:
         if self.proc:
             return
         self.app = mac.frontmost_app()
-        self.wav = f"/tmp/dictator-rec-{os.getpid()}.wav"
+        # A path per HOLD, not per process. It used to be the pid, which does
+        # not change, so a second hold started recording over the file the
+        # first one was still transcribing. Both were lost, silently: no
+        # transcript, no error, just a hold that produced nothing. The log
+        # showed it as "could not keep the recording: No such file".
+        self._n += 1
+        self.wav = f"/tmp/dictator-rec-{os.getpid()}-{self._n}.wav"
         # No silence detection: you are holding a key, so you are the
         # boundary. sox's `silence` effect would trim your first word (you
         # start speaking as you press) and end the take at your first pause.
