@@ -45,7 +45,8 @@ def _no_network_and_no_model(monkeypatch):
         calls.append(req if isinstance(req, str) else getattr(req, "full_url", ""))
         raise OSError("no network in tests")
 
-    monkeypatch.setattr(recap.urllib.request, "urlopen", spy)
+    # `_fetch`, the one choke point every HTTP call in recap goes through.
+    monkeypatch.setattr(recap, "_fetch", spy)
     monkeypatch.setattr(recap, "server_bin", lambda: "")
     monkeypatch.setattr(recap, "model_path", lambda: Path("/nonexistent.gguf"))
     monkeypatch.setattr(recap, "_start", lambda: pytest.fail(
@@ -210,13 +211,22 @@ def _recorded(tmp_path, lines):
     return mid
 
 
-def test_notes_never_call_anything_off_this_machine(tmp_path):
+def test_notes_never_call_anything_off_this_machine(tmp_path, monkeypatch):
     """Every URL this feature touches, over a whole run, must point at this
     Mac. Checked rather than asserted about, because the one place a mistake
     could send somebody else's voice off the machine is here."""
     mid = _recorded(tmp_path, [{"at": 0.0, "who": "them", "text": "hello"}])
+    # The model has to look present, or `notes` short-circuits before the one
+    # call that would actually carry a transcript anywhere and the assertion
+    # below passes on a health probe. That is what it used to do.
+    monkeypatch.setattr(recap, "available", lambda: True)
+    monkeypatch.setattr(recap, "up", lambda *a, **k: True)
+    monkeypatch.setattr(recap, "_start", lambda: False)
     meeting.notes(mid)
     assert meeting.calls, "nothing was recorded, so this proved nothing"
+    assert any("chat/completions" in u for u in meeting.calls), \
+        "the call that carries the transcript was never made, so this proved " \
+        "nothing about it"
     for url in meeting.calls:
         assert recap.local_only(url), url
 

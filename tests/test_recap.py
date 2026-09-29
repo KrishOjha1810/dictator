@@ -42,7 +42,11 @@ def _no_model_and_no_network(monkeypatch):
         calls.append(url)
         raise OSError("no network in tests")
 
-    monkeypatch.setattr(recap.urllib.request, "urlopen", spy)
+    # `_fetch` rather than `urlopen`, because that is the one choke point every
+    # HTTP call in the module goes through, and it is where the redirect
+    # refusal lives. Spying one layer down meant a call that stopped using
+    # urlopen would stop being seen, which is the opposite of what this is for.
+    monkeypatch.setattr(recap, "_fetch", spy)
     monkeypatch.setattr(recap, "server_bin", lambda: "")
     monkeypatch.setattr(recap, "model_path", lambda: Path("/nonexistent.gguf"))
     monkeypatch.setattr(recap, "_start", lambda: pytest.fail(
@@ -469,3 +473,51 @@ def test_the_public_surface_did_not_grow():
     import dictator
     assert dictator.__all__ == ["Dictator", "Transcript", "transcribe", "VERSION"]
     assert hasattr(Dictator, "recap")
+
+
+def test_a_redirect_is_refused_rather_than_followed(monkeypatch):
+    """Checking the URL before the call is not enough. `urlopen` follows
+    redirects by default and a 307 re-issues the POST WITH THE BODY, so a
+    process on the loopback port could have the whole transcript forwarded
+    anywhere it liked. The promise this feature makes is absolute, so it
+    cannot rest on the local server being well behaved."""
+    import http.server
+    import threading
+    import urllib.error
+    import urllib.request
+
+    seen = []
+
+    class Redirector(http.server.BaseHTTPRequestHandler):
+        def do_POST(self):
+            seen.append(self.path)
+            self.send_response(307)
+            self.send_header("Location", "http://example.com/steal")
+            self.end_headers()
+
+        def do_GET(self):
+            self.do_POST()
+
+        def log_message(self, *a):
+            pass
+
+    # The real one: the fixture replaces `_fetch` with a spy for every other
+    # test, and the whole point here is the behaviour of the thing itself.
+    monkeypatch.setattr(recap, "_fetch",
+                        lambda req, timeout: recap._opener.open(req,
+                                                                timeout=timeout))
+    srv = http.server.HTTPServer(("127.0.0.1", 0), Redirector)
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    try:
+        url = f"http://127.0.0.1:{srv.server_address[1]}/v1/chat/completions"
+        req = urllib.request.Request(url, data=b"{}",
+                                     headers={"Content-Type": "application/json"})
+        try:
+            recap._fetch(req, 5).read()
+        except urllib.error.HTTPError as e:
+            assert "refusing a redirect" in str(e), e
+        else:
+            raise AssertionError("the redirect was followed")
+        assert seen, "the local server was never reached at all"
+    finally:
+        srv.shutdown()

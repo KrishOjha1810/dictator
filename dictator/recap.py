@@ -26,6 +26,7 @@ import os
 import re
 import subprocess
 import time
+import urllib.error
 import urllib.parse
 import urllib.request
 from contextlib import contextmanager
@@ -189,6 +190,34 @@ def local_only(url: str) -> bool:
     return host.lower() in _LOOPBACK
 
 
+class _NoRedirects(urllib.request.HTTPRedirectHandler):
+    """Refuse every redirect rather than follow it.
+
+    Checking the URL before the call is not enough on its own. `urlopen`
+    follows redirects by default, and a 307 re-issues the POST **with the
+    body**, so a process on the loopback port could have the whole transcript
+    forwarded anywhere it liked. The promise this feature makes is absolute, so
+    it cannot rest on the server being well behaved: there is no legitimate
+    reason for a local llama-server to redirect a completion, and refusing
+    costs nothing.
+    """
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        raise urllib.error.HTTPError(
+            req.full_url, code,
+            f"refusing a redirect to {newurl}: this never leaves the machine",
+            headers, fp)
+
+
+_opener = urllib.request.build_opener(_NoRedirects)
+
+
+def _fetch(req, timeout: float):
+    """Every HTTP call this module makes goes through here, so the redirect
+    refusal cannot be forgotten at one call site."""
+    return _opener.open(req, timeout=timeout)
+
+
 def model_path() -> Path:
     """Where the summarising model lives, if it is here at all.
 
@@ -220,7 +249,7 @@ def up(timeout: float = 1.0) -> bool:
     if not local_only(BASE):
         return False
     try:
-        urllib.request.urlopen(f"{BASE}/health", timeout=timeout).read()
+        _fetch(f"{BASE}/health", timeout).read()
         return True
     except Exception:
         return False
@@ -323,8 +352,8 @@ def _ask(block: str, system: str = _SYSTEM, max_tokens: int = 200,
         req = urllib.request.Request(
             f"{BASE}/v1/chat/completions", data=json.dumps(body).encode(),
             headers={"Content-Type": "application/json"})
-        d = json.loads(urllib.request.urlopen(
-            req, timeout=timeout or TIMEOUT).read())
+        d = json.loads(_fetch(
+            req, timeout or TIMEOUT).read())
         choice = (d.get("choices") or [{}])[0]
         return ((choice.get("message") or {}).get("content") or "").strip()
     except Exception as e:
