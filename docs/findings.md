@@ -2022,3 +2022,72 @@ models under test exist to do. An instrument assembled by reading one model's
 output will, without anybody intending it, encode that model's habits as
 correctness. Reading the output is what finds it; reading the summary never
 will.
+
+
+---
+
+## The model decision, measured correctly: it is a tie, and turbo stays
+
+Fourth run, and the first one worth quoting. Full corpus, 111 holds over three
+seconds, full encoder on both so the sizing fitted to turbo is not doing the
+comparing, **`stt._romanise` applied exactly as the product applies it**, and
+the word list frozen with all four instrument faults fixed.
+
+| model | words | gibberish | secs | Devanagari |
+|---|---|---|---|---|
+| ggml-large-v3-turbo (shipped) | 5259 | **0.19%** | 5.5 | 0% |
+| Whisper-Hindi2Hinglish-Apex fp16 | 5300 | **0.19%** | 6.0 | 0% |
+
+**An exact tie.** The earlier "turbo wins at roughly half the error rate"
+(0.17% against 0.30%) was entirely the instrument. Once it stopped punishing a
+model for writing Hindi and started measuring the pipeline rather than the raw
+model output, the difference vanished.
+
+A detail worth keeping: turbo's error list now contains `sval`, `gya` and
+`cheee`. Those are compressed romanised Hindi, which an earlier section of this
+document called "the one category a Hinglish-specific model should improve" and
+attributed to Apex. **Both models do it.** They were invisible on turbo before
+because turbo wrote them in Devanagari, which was not being counted.
+
+### What the tie is decided on
+
+Two holds where the two models disagree about which language they heard, which
+the gibberish score cannot judge because a wrong English word is still an
+English word. Apex is right on both.
+
+1. Turbo answered a Hindi sentence in **Urdu script**. `roman.py` converts
+   Devanagari and not Arabic script, so it passes through untouched.
+2. The "pirated copy" hold, already written up above: turbo replaced a Hindi
+   sentence with an English one made entirely of real English words, and scored
+   0%.
+
+**But the first one is a benchmark artifact, not a shipped failure.** Checked
+rather than assumed: across all 149 transcripts the shipped pipeline has
+produced, **zero contain any script that is neither Latin nor Devanagari, and
+zero still contain Devanagari** after romanisation. The Urdu appears under the
+benchmark's configuration (full encoder, `-l auto`), not under the shipped one.
+
+Against that, Apex has a failure turbo does not: `voltpedia` for **Vault PDA**.
+That is the "pool rekvest" failure, on the exact vocabulary a coding tool is
+for, and it is the thing this product was built to get right.
+
+### The decision
+
+The rule written before any of this ran says a model wins if it **improves**
+and does not regress. A tie is not an improvement, and `voltpedia` is a
+regression on the one category that matters most here. **Nothing is switched.**
+
+That is a much weaker statement than the one this document carried an hour ago,
+and it is the true one. Turbo is not better. It is equal, already installed,
+and does not mangle technical English.
+
+### What would actually decide it
+
+Not another run of this. The measurable number is exhausted: both models sit at
+0.19% and the remaining difference lives entirely in holds this instrument
+cannot judge, because both models produce real words and only one of them is
+right. **That needs reference transcripts**, which is the one part of this
+benchmark that cannot be delegated and has not been done.
+
+Four runs, four instrument bugs, and the honest yield is a tie plus a much
+better ruler. Worth it, and worth saying plainly rather than dressing up.
