@@ -148,9 +148,13 @@ def check(wait: float = 8.0) -> dict:
             # -n: a fresh instance every time. Without it LaunchServices hands
             # the arguments to whatever copy is already running, which for a
             # cached TCC answer is the one thing that must not happen.
-            subprocess.run(["open", "-n", "-a", str(APP), "--args",
-                            "--check", str(out)],
-                           capture_output=True, timeout=20)
+            r = subprocess.run(["open", "-n", "-a", str(APP), "--args",
+                                "--check", str(out)],
+                               capture_output=True, text=True, timeout=20)
+            if r.returncode != 0:
+                core.log("meeting: open refused to run the check: "
+                         + ((r.stderr or "").strip() or str(r.returncode)))
+                return {}
         except Exception as e:
             core.log(f"meeting: could not check permissions: {e}")
             return {}
@@ -164,8 +168,15 @@ def check(wait: float = 8.0) -> dict:
 
 
 def granted() -> bool:
-    """Can this machine capture system audio for us yet?"""
-    return bool(check().get("screen"))
+    """Is everything a recording needs allowed yet.
+
+    Both permissions, not just Screen Recording. Checking only the screen
+    answered "Granted. Start a meeting" on a machine whose microphone was
+    denied, which starts a recording that captures the room and not the person
+    in it, and the walkthrough that exists to prevent exactly that said it was
+    fine."""
+    got = check()
+    return bool(got.get("screen")) and bool(got.get("mic"))
 
 
 def _dir(mid: str) -> Path:
@@ -296,11 +307,21 @@ def start(title: str = "", wait: float = 30.0) -> dict:
     # `open`, the row lands on com.dictator.meeting, which is the only way the
     # user can grant it to something they recognise.
     try:
-        subprocess.run(["open", "-n", "-a", str(APP), "--args", str(d),
-                        str(MAX_SECONDS)],
-                       capture_output=True, timeout=30)
+        r = subprocess.run(["open", "-n", "-a", str(APP), "--args", str(d),
+                            str(MAX_SECONDS)],
+                           capture_output=True, text=True, timeout=30)
     except Exception as e:
         return {"problem": "launch", "say": f"Could not start the recorder: {e}"}
+    # `open` refusing is instant and says why: a damaged or quarantined bundle,
+    # or one whose LSMinimumSystemVersion is newer than this macOS. Throwing
+    # that away turned every one of those into the user watching a progress
+    # line for thirty seconds and then being told the recorder "said nothing".
+    if r.returncode != 0:
+        why = (r.stderr or r.stdout or "").strip() or f"open exited {r.returncode}"
+        core.log(f"meeting: open refused to launch the recorder: {why}")
+        _scrap(mid)
+        return {"problem": "launch",
+                "say": f"macOS would not start the recorder: {why}"}
 
     t0 = time.time()
     while time.time() - t0 < wait:

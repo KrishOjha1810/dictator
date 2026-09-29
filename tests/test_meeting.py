@@ -385,6 +385,15 @@ def test_a_recording_is_listed_with_its_size(tmp_path):
 
 # ---- starting, which had no test at all and is where the bugs were ---------
 
+class _Launched:
+    """What `open` returns when it accepted the launch. The code reads
+    returncode now, because `open` refusing is instant and says why, and
+    throwing that away turned every refusal into a thirty second wait."""
+    returncode = 0
+    stdout = ""
+    stderr = ""
+
+
 def _fake_recorder(monkeypatch, phases, seconds=6.0):
     """A recorder that is really running, publishing the phases you give it.
 
@@ -402,7 +411,8 @@ def _fake_recorder(monkeypatch, phases, seconds=6.0):
              "elapsed": 0.1, "them_seconds": 0, "me_seconds": 0}))
 
     monkeypatch.setattr(meeting, "build_app", lambda: "/tmp/nowhere.app")
-    monkeypatch.setattr(meeting.subprocess, "run", lambda *a, **k: launch())
+    monkeypatch.setattr(meeting.subprocess, "run",
+                        lambda *a, **k: launch() or _Launched())
     return proc, written
 
 
@@ -468,7 +478,8 @@ def test_a_recorder_that_died_does_not_burn_the_whole_wait(monkeypatch):
             {"state": "starting", "pid": proc.pid, "started": time.time()}))
 
     monkeypatch.setattr(meeting, "build_app", lambda: "/tmp/nowhere.app")
-    monkeypatch.setattr(meeting.subprocess, "run", lambda *a, **k: launch())
+    monkeypatch.setattr(meeting.subprocess, "run",
+                        lambda *a, **k: launch() or _Launched())
     t0 = time.time()
     got = meeting.start(wait=30.0)
     assert got["problem"] == "died", got
@@ -593,3 +604,41 @@ def test_a_failure_while_transcribing_says_how_to_pick_it_up(monkeypatch,
     out = capsys.readouterr().out
     assert "recording is safe" in out
     assert f"dictator meeting transcribe {mid}" in out
+
+
+def test_permission_is_not_granted_when_only_the_screen_is(monkeypatch):
+    """"Granted. Start a meeting" on a machine whose microphone is denied
+    starts a recording that captures the room and not the person in it, and
+    the walkthrough that exists to prevent exactly that said it was fine."""
+    monkeypatch.setattr(meeting, "check",
+                        lambda *a, **k: {"screen": True, "mic": False,
+                                         "mic_asked": True})
+    assert meeting.granted() is False
+    monkeypatch.setattr(meeting, "check",
+                        lambda *a, **k: {"screen": False, "mic": True})
+    assert meeting.granted() is False
+    monkeypatch.setattr(meeting, "check",
+                        lambda *a, **k: {"screen": True, "mic": True})
+    assert meeting.granted() is True
+    monkeypatch.setattr(meeting, "check", lambda *a, **k: {})
+    assert meeting.granted() is False, "cannot tell is not the same as yes"
+
+
+def test_a_bundle_macos_refuses_to_open_says_so_at_once(monkeypatch):
+    """`open` refusing is instant and says why: a damaged or quarantined
+    bundle, or one whose LSMinimumSystemVersion is newer than this macOS.
+    Throwing that away turned every one of those into thirty seconds of a
+    progress line followed by "it said nothing"."""
+    class Refused:
+        returncode = 1
+        stdout = ""
+        stderr = ("The application cannot be opened because it is not "
+                  "supported on this version of macOS.")
+
+    monkeypatch.setattr(meeting, "build_app", lambda: "/tmp/nowhere.app")
+    monkeypatch.setattr(meeting.subprocess, "run", lambda *a, **k: Refused())
+    t0 = time.time()
+    got = meeting.start(wait=30.0)
+    assert got["problem"] == "launch", got
+    assert "not supported on this version" in got["say"]
+    assert time.time() - t0 < 5, "it waited out the whole timeout anyway"
