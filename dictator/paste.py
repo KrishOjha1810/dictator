@@ -86,21 +86,9 @@ def helper() -> str:
     not, while the code that knew how to build it sat in another module that
     nothing here called. Deleting the binary once was enough to send every
     delivery down a path that cannot work, quietly, for an hour."""
-    import shutil
-    try:
-        if _HELPER.exists() and _HELPER.stat().st_mtime >= _HELPER_SRC.stat().st_mtime:
-            return str(_HELPER)
-        if not _HELPER_SRC.exists() or not shutil.which("swiftc"):
-            core.log("paste: cannot build the helper (no source or no swiftc)")
-            return ""
-        _HELPER.parent.mkdir(parents=True, exist_ok=True)
-        subprocess.run(["swiftc", "-O", str(_HELPER_SRC), "-o", str(_HELPER)],
-                       check=True, capture_output=True, timeout=240)
-        core.log("paste: rebuilt the helper")
-        return str(_HELPER)
-    except Exception as e:
-        core.log(f"paste: helper build failed: {e}")
-        return ""
+    from . import swiftbuild
+    return swiftbuild.compile_if_needed(_HELPER_SRC, _HELPER, "paste",
+                                        timeout=240)
 
 _NEWLINE = re.compile(r"\r\n|\r|\n")
 

@@ -10,11 +10,10 @@ what it read: the caller compares it against what was pasted and keeps the
 difference, not the document.
 """
 import json
-import shutil
 import subprocess
 from pathlib import Path
 
-from . import core
+from . import core, swiftbuild
 
 SRC = Path(__file__).resolve().parent.parent / "native" / "readback.swift"
 BIN = core.STATE_DIR / "bin" / "dictator-readback"
@@ -23,24 +22,8 @@ BIN = core.STATE_DIR / "bin" / "dictator-readback"
 def build(force: bool = False) -> str:
     """Compile the reader if needed. Returns a path, or "" with a reason
     logged. Rebuilds when the source is newer than the binary."""
-    if not SRC.exists():
-        core.log(f"readback: source missing at {SRC}")
-        return ""
-    if BIN.exists() and not force and BIN.stat().st_mtime >= SRC.stat().st_mtime:
-        return str(BIN)
-    if not shutil.which("swiftc"):
-        core.log("readback: swiftc not found")
-        return ""
-    BIN.parent.mkdir(parents=True, exist_ok=True)
-    try:
-        subprocess.run(["swiftc", "-O", str(SRC), "-o", str(BIN)],
-                       check=True, capture_output=True, timeout=180)
-        return str(BIN)
-    except subprocess.CalledProcessError as e:
-        core.log(f"readback: build failed: {e.stderr.decode()[:400]}")
-    except Exception as e:
-        core.log(f"readback: build failed: {e}")
-    return ""
+    return swiftbuild.compile_if_needed(SRC, BIN, "readback",
+                                        force=force, timeout=180)
 
 
 def field() -> dict:

@@ -75,6 +75,37 @@ def build_app() -> str:
         return ""
 
 
+def build_all(force: bool = False) -> dict:
+    """Compile every helper now, rather than one at a time on first use.
+
+    There are five, and each one used to be built the first time something
+    reached for it: the key listener when dictation starts, the recorder on
+    the first hold, the indicator a moment later, the paste helper when the
+    first sentence is ready, the reader after that. swiftc takes one to three
+    seconds each, and they land in the middle of the first few holds, which is
+    the exact window where somebody is deciding whether this works. That is
+    the slow first few minutes in issue #1, and the installer is a far better
+    place to spend those seconds than the first sentence is.
+
+    Returns {name: path or ""}. Order matters: the app bundle goes last,
+    because it is the one whose rebuild costs a permission, and build_app
+    skips it when nothing changed."""
+    from . import hotkey, orbnative, paste, readback, recorder
+    built = {
+        "hotkey": hotkey.build(force),
+        "orb": orbnative.build(force),
+        "recorder": recorder.build(force),
+        "paste": paste.helper(),
+        "readback": readback.build(force),
+    }
+    # Deliberately NOT forced. Every rebuild of the bundle is, to macOS, an
+    # application that has never been granted anything, so forcing it here
+    # would trade a slow first minute for the Accessibility permission the
+    # user just granted. See build_app.
+    built["app"] = build_app()
+    return built
+
+
 def _sign(app: Path) -> None:
     """Sign the bundle so macOS keeps recognising it after a rebuild.
 
@@ -147,8 +178,8 @@ def on(key: str = "fn") -> str:
         "KeepAlive": True,
         "StandardOutPath": log,
         "StandardErrorPath": log,
-        # launchd hands a process almost no PATH, and both sox and whisper live
-        # in Homebrew. This is the single most common reason a thing that works
+        # launchd hands a process almost no PATH, and whisper lives in
+        # Homebrew. This is the single most common reason a thing that works
         # in a terminal does nothing as a login item.
         "EnvironmentVariables": {
             "PATH": "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin",

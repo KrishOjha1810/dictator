@@ -7,12 +7,11 @@ CoreAudio for whether a device is capturing and an flock for whether the open
 device is ours, so it cannot sit showing "idle" while a mic is open.
 """
 import os
-import shutil
 import signal
 import subprocess
 from pathlib import Path
 
-from . import core
+from . import core, swiftbuild
 
 SRC = Path(__file__).resolve().parent.parent / "native" / "orb.swift"
 BIN = core.STATE_DIR / "bin" / "dictator-orb"
@@ -21,23 +20,9 @@ PID = core.STATE_DIR / "orb.pid"
 
 def build(force: bool = False) -> str:
     """Compile if needed. Returns a path, or "" with the reason logged."""
-    if not SRC.exists():
-        return ""
-    if BIN.exists() and not force and BIN.stat().st_mtime >= SRC.stat().st_mtime:
-        return str(BIN)
-    if not shutil.which("swiftc"):
-        core.log("orb: swiftc not found; falling back to the Tkinter orb")
-        return ""
-    BIN.parent.mkdir(parents=True, exist_ok=True)
-    try:
-        subprocess.run(["swiftc", "-O", str(SRC), "-o", str(BIN)],
-                       check=True, capture_output=True, timeout=240)
-        return str(BIN)
-    except subprocess.CalledProcessError as e:
-        core.log(f"orb: build failed: {e.stderr.decode()[:400]}")
-    except Exception as e:
-        core.log(f"orb: build failed: {e}")
-    return ""
+    return swiftbuild.compile_if_needed(
+        SRC, BIN, "orb", force=force, timeout=240,
+        hint="falling back to the Tkinter orb")
 
 
 def running() -> bool:

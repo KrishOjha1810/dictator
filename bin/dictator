@@ -31,13 +31,14 @@ USAGE = """dictator: hold a key and talk, anywhere on your Mac.
   dictator log        the last thing it did
   dictator errors     failures it noticed
   dictator dictate    run it in the foreground (for debugging)
-  dictator build      build the app bundle without starting anything
+  dictator build      compile the helpers and the app without starting anything
 
 Teaching it your words:
   dictator learn WORD    fix this word when it mishears it
   dictator words         what it has learned
   dictator unlearn WORD  stop fixing it
   dictator history [n]   what you have said
+  dictator recap [today|week|N]   what you worked on, summarised locally
   dictator forget        erase that history
 
 Language:
@@ -85,10 +86,16 @@ def main(argv) -> int:
 
     if cmd == "build":
         from dictator import always
-        app = always.build_app()
-        print(f"built {app}" if app else
-              "could not build the app (needs Xcode command line tools)")
-        return 0 if app else 1
+        # Everything, not just the app. Building the helpers lazily put a
+        # swiftc run in the middle of the first holds, which is where a new
+        # user decides whether this works at all.
+        built = always.build_all(force="--force" in rest)
+        for name, path in built.items():
+            print(f"  {'ok ' if path else 'BAD'}  {name}"
+                  + (f"  {path}" if path else ""))
+        if not built.get("app"):
+            print("could not build the app (needs Xcode command line tools)")
+        return 0 if built.get("app") else 1
 
     if cmd == "dictate":
         from dictator import dictate
@@ -175,6 +182,19 @@ def main(argv) -> int:
             print(f"  {when}  {line[:90]}")
             if r.get("kept") and r["kept"] != r.get("shown"):
                 print(f"{'':16}  you changed it to: {r['kept'][:80]}")
+        return 0
+
+    if cmd == "recap":
+        from dictator import recap as _recap
+        when = next((a for a in rest if not a.startswith("-")), "today")
+        plain = "--plain" in rest or "--no-model" in rest
+        # Said before the wait rather than after it. Loading a 2.5GB model
+        # takes a few seconds and a command that sits there silently reads as
+        # a command that has hung.
+        if not plain and _recap.available():
+            print("  summarising on this machine, a few seconds...",
+                  file=sys.stderr, flush=True)
+        print(_recap.report(when, prose=not plain).text, end="")
         return 0
 
     if cmd == "forget":
@@ -323,9 +343,15 @@ def doctor() -> int:
     import shutil
     ok("swiftc (builds the key listener)", bool(shutil.which("swiftc")),
        "" if shutil.which("swiftc") else "run: xcode-select --install")
-    rec = shutil.which("rec") or shutil.which("sox")
-    ok("sox (records your voice)", bool(rec),
-       "" if rec else "run: brew install sox")
+    # Which recorder, by name. The native one is AVFoundation and needs
+    # nothing installed; sox is the fallback and is a Homebrew package the
+    # user had to go and get. Saying "records your voice: ok" without saying
+    # which one hides the difference that matters when a hold comes back empty.
+    which_rec = stt.recorder_in_use()
+    ok("records your voice", bool(which_rec),
+       {"native": "AVFoundation, nothing to install",
+        "sox": "sox (fallback: swiftc could not build the native recorder)",
+        "": "neither swiftc nor sox. Run: xcode-select --install"}[which_rec])
     whisper = shutil.which("whisper-cli") or shutil.which("whisper-cpp")
     ok("whisper (turns it into text)", bool(whisper),
        "" if whisper else "run: brew install whisper-cpp")

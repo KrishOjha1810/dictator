@@ -53,13 +53,12 @@ which is the same property that makes the hold safe. `--toggle-key space` is
 still available for anyone who wants it knowing that.
 """
 import os
-import shutil
 import subprocess
 import time
 from collections import namedtuple
 from pathlib import Path
 
-from . import core
+from . import core, swiftbuild
 
 SRC = Path(__file__).resolve().parent.parent / "native" / "hotkey.swift"
 BIN = core.STATE_DIR / "bin" / "dictator-hotkey"
@@ -160,24 +159,9 @@ def transcribes(ev):
 def build(force: bool = False) -> str:
     """Compile the listener if needed. Returns a path, or "" with a reason
     logged. Rebuilds when the source is newer than the binary."""
-    if not SRC.exists():
-        core.log(f"hotkey: source missing at {SRC}")
-        return ""
-    if BIN.exists() and not force and BIN.stat().st_mtime >= SRC.stat().st_mtime:
-        return str(BIN)
-    if not shutil.which("swiftc"):
-        core.log("hotkey: swiftc not found (install Xcode command line tools)")
-        return ""
-    BIN.parent.mkdir(parents=True, exist_ok=True)
-    try:
-        subprocess.run(["swiftc", "-O", str(SRC), "-o", str(BIN)],
-                       check=True, capture_output=True, timeout=180)
-        return str(BIN)
-    except subprocess.CalledProcessError as e:
-        core.log(f"hotkey: build failed: {e.stderr.decode()[:400]}")
-    except Exception as e:
-        core.log(f"hotkey: build failed: {e}")
-    return ""
+    return swiftbuild.compile_if_needed(
+        SRC, BIN, "hotkey", force=force, timeout=180,
+        hint="install Xcode command line tools")
 
 
 def listen(key: str = "fn", min_hold_ms: int = 0,
