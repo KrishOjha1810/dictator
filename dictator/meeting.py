@@ -365,33 +365,49 @@ def forget(mid: str) -> bool:
     """Delete a recording, and mean it.
 
     A meeting recording is other people's voices, so "forget" has to be more
-    than dropping a row. Every file is overwritten before it is unlinked, which
-    defeats anything that reads the directory back off the filesystem. It
-    cannot defeat an SSD's own wear levelling, and saying it could would be a
-    lie, so the README says so."""
+    than dropping a row. Every file is overwritten IN FULL before it is
+    unlinked, which defeats anything that reads the directory back off the
+    filesystem. It cannot defeat an SSD's own wear levelling, and saying it
+    could would be a lie, so the README says so.
+
+    It used to overwrite the first and last megabyte only, while the docstring,
+    the command and the README all said "every file". Measured on an 11MB file,
+    82% of the audio was still there at unlink time; an hour of meeting is
+    about 115MB a track, so roughly 98% of other people's voices survived a
+    delete that told the user they had not. A wrong claim here is worse than no
+    claim, because the sentence exists to tell somebody it is safe.
+
+    Returns False if any file could not be overwritten, because a caller that
+    is about to repeat the promise needs to know it was not kept."""
     d = _dir(mid)
     if not d.is_dir():
         return False
+    ok = True
     for p in sorted(d.rglob("*"), reverse=True):
         if p.is_file():
             try:
                 n = p.stat().st_size
                 with open(p, "r+b") as f:
-                    f.write(os.urandom(min(n, 1 << 20)))
-                    if n > (1 << 20):
-                        f.seek(n - (1 << 20))
-                        f.write(os.urandom(1 << 20))
+                    left = n
+                    while left > 0:
+                        block = min(1 << 20, left)
+                        f.write(os.urandom(block))
+                        left -= block
                     f.flush()
                     os.fsync(f.fileno())
-            except Exception:
-                pass
+                    f.truncate(0)
+                    f.flush()
+                    os.fsync(f.fileno())
+            except Exception as e:
+                core.log(f"meeting: could not overwrite {p.name}: {e}")
+                ok = False
     shutil.rmtree(d, ignore_errors=True)
     try:
         if CURRENT.read_text().strip() == mid:
             CURRENT.unlink()
     except Exception:
         pass
-    return True
+    return ok
 
 
 # ---- reading the audio -----------------------------------------------------

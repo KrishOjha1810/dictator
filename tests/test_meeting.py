@@ -319,14 +319,23 @@ def test_stopping_when_nothing_is_recording_is_not_an_error(tmp_path):
 
 # ---- forgetting ------------------------------------------------------------
 
-def test_forget_overwrites_the_audio_before_it_unlinks_it(tmp_path):
+def test_forget_overwrites_the_audio_before_it_unlinks_it(tmp_path,
+                                                          monkeypatch):
     """"Delete" has to mean more than dropping a directory entry when the file
-    is other people's voices."""
+    is other people's voices.
+
+    The file is deliberately larger than 2MiB. An earlier version of `forget`
+    overwrote the first and last megabyte only, and an earlier version of this
+    test used a one second WAV of about 32KB, which sits entirely inside the
+    first window: it passed on a function that left 82% of an eleven megabyte
+    recording intact. It also asserted only that something had changed, which
+    a single altered byte satisfies."""
     mid = "20260101-090000"
     meeting.save(mid, {"id": mid, "started": time.time()})
     wav = meeting._dir(mid) / "them.wav"
-    tone(wav, [(1, 0.5)])
-    original = wav.read_bytes()
+    payload = b"SECRET-VOICE-DATA"
+    wav.write_bytes(payload * 200_000)          # about 3.4MB
+    assert wav.stat().st_size > 2 << 20, "smaller than this cannot see the bug"
     seen = {}
 
     real = meeting.shutil.rmtree
@@ -335,13 +344,28 @@ def test_forget_overwrites_the_audio_before_it_unlinks_it(tmp_path):
         seen["before_removal"] = wav.read_bytes()
         return real(path, **kw)
 
-    meeting.shutil.rmtree = watch
-    try:
-        assert meeting.forget(mid) is True
-    finally:
-        meeting.shutil.rmtree = real
+    monkeypatch.setattr(meeting.shutil, "rmtree", watch)
+    assert meeting.forget(mid) is True
     assert not meeting._dir(mid).exists()
-    assert seen["before_removal"] != original
+    # Not "something changed". None of it is left.
+    assert payload not in seen["before_removal"]
+
+
+def test_forget_says_so_when_it_could_not_keep_the_promise(tmp_path,
+                                                           monkeypatch):
+    """A caller is about to repeat the sentence "nothing on the filesystem
+    reads it back" to the user. It must not say that after a failed
+    overwrite."""
+    mid = "20260101-090000"
+    meeting.save(mid, {"id": mid, "started": time.time()})
+    wav = meeting._dir(mid) / "them.wav"
+    wav.write_bytes(b"x" * 4096)
+
+    def refuse(*a, **kw):
+        raise PermissionError("read only")
+
+    monkeypatch.setattr(meeting, "open", refuse, raising=False)
+    assert meeting.forget(mid) is False
 
 
 def test_forgetting_something_that_is_not_there_says_so(tmp_path):
