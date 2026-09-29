@@ -75,14 +75,36 @@ ALLOW |= {
     "latency", "throughput", "changelog", "readme", "workflow", "workflows",
     "plugin", "plugins", "dashboard", "endpoint", "endpoints", "webhook",
     "timestamp", "uuid", "env", "dev", "prod", "staging", "localhost",
+    # What this person actually talks about. "pda" and "usdc" alone were a
+    # third of everything this tool was calling gibberish, and both are
+    # correct transcriptions of words he says several times a day.
+    "pda", "pdas", "usdc", "ltv", "struct", "structs", "lib", "libs",
+    "solana", "anchor", "blockchain", "devnet", "mainnet", "testnet",
+    "onchain", "defi", "wallet", "wallets", "escrow", "tokenomics",
+    "hyperlink", "hyperlinks", "playlist", "playlists", "checkpoint",
+    "checkpoints", "info", "pdf", "pdfs", "etc", "etcetera", "wanna",
+    "gonna", "gotta", "updation",
 }
+
+# Common English words the system word list does not contain. These are gaps in
+# the instrument, not errors by the speech model, and leaving them out means
+# measuring the dictionary instead of the transcript. "has" is in this list,
+# which is enough on its own to show the word list cannot be trusted as a
+# complete record of English.
+ALLOW |= {"has", "held", "paid", "became", "repaid", "hang", "fuck",
+          "fucking", "shit", "damn"}
+
+# Romanised Hindi the list is missing. Added one at a time, from words that
+# appeared in real recordings and were transcribed correctly.
+ALLOW |= {"aao", "apno", "apna", "apne", "seedha", "seedhe", "sirf",
+          "matlab", "thoda", "zyada", "bilkul", "wapas", "abhi"}
 
 
 # A dictionary from 1934 has the singular and not the plural, the verb and not
 # the contraction. Without this the measurement is mostly the tool failing to
 # recognise "agents" and "shouldn't", which says nothing about speech.
 _SUFFIXES = ("'s", "s'", "s", "es", "ed", "ing", "'re", "'ve", "'ll", "'d",
-             "n't", "'m")
+             "n't", "'m", "er", "est", "ly", "ers", "ings")
 
 
 def _known(w: str) -> bool:
@@ -91,17 +113,33 @@ def _known(w: str) -> bool:
     if hindi.key(w) in HINDI_KEYS:           # a spelling variant of Hindi
         return True
     for suf in _SUFFIXES:
-        # A contraction can be shorter than its suffix rule allows ("we're" is
-        # five letters), so those only need a stem at all.
-        floor = 1 if suf.startswith("'") or suf == "n't" else len(suf) + 2
-        if w.endswith(suf) and len(w) > floor:
+        # The floor used to be expressed against the whole word, which
+        # rejected any short stem: "using" is five letters and "ing" wanted
+        # six, so an ordinary word counted as one the model invented. What has
+        # to be long enough is the stem. A contraction needs no stem length at
+        # all, because "we're" leaves two letters behind.
+        floor = 0 if suf.startswith("'") or suf == "n't" else 2
+        if w.endswith(suf) and len(w) - len(suf) >= floor:
             stem = w[: -len(suf)]
             if stem in ENGLISH or stem in ALLOW or stem in HINDI:
                 return True
-            # tries -> try, running -> run
+            # tries to try, running to run
             if stem.endswith("i") and (stem[:-1] + "y") in ENGLISH:
                 return True
             if len(stem) > 3 and stem[-1] == stem[-2] and stem[:-1] in ENGLISH:
+                return True
+            # delegated to delegate, preparing to prepare. English drops a
+            # silent e before a vowel suffix, and without putting it back this
+            # counted ordinary past tenses as gibberish: on the real corpus,
+            # "delegated", "approved", "preparing", "liquidated", "completed",
+            # "including", "managed", "deriving", "updating" and "arriving"
+            # were all being reported as words the speech model invented.
+            if (suf and suf[0] in "aeiou" and suf not in ("er", "ers")
+                    and (stem + "e") in ENGLISH):
+                return True
+            # Irregular spellings the -ise ending gives a British speaker, which
+            # a dictionary holding only "finalize" refuses.
+            if stem.endswith("is") and (stem[:-2] + "ize") in ENGLISH:
                 return True
     return False
 
