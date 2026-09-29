@@ -101,6 +101,8 @@ the list, then `dictator off && dictator on` and say yes.
 | `dictator meeting start\|stop` | record a meeting and get notes from it |
 | `dictator find WORDS` | search everything you have ever dictated |
 | `dictator snippet "PHRASE" "TEXT"` | say the phrase, get the text |
+| `dictator review` | it asks you about the words it got wrong |
+| `dictator forget "WORDS"` | erase everything you said containing them |
 | `dictator log` | the last thing it did |
 | `dictator errors` | failures it noticed |
 
@@ -189,6 +191,43 @@ dictator recap today
 dictator recap week
 dictator recap 3
 ```
+
+### It asks you about what it got wrong
+
+The correction loop watches what you do to the text after it lands, which
+works in a text field and does not work in a terminal: a terminal hands back
+its whole scrollback rather than the line you are editing. Most dictation goes
+into a terminal, so the words it gets wrong most often are the ones it is
+never told about.
+
+`dictator review` goes the other way. It finds the words in neither
+dictionary, most often said first, and asks:
+
+```
+  it heard "acur" in Google Chrome, 2 times
+    ...And that too from the acur interest part...
+    what did you say? accuracy
+    learned "accuracy". Things that sound like it will come out right.
+```
+
+Press Return to skip one, `q` to stop. Nothing is learned from silence, and a
+word you have already taught is never raised again.
+
+Names are what this is for. Of the errors left in a hundred real recordings,
+the largest single group was names and acronyms, which no speech model will
+ever know and one answer here fixes for good.
+
+### Erasing it
+
+```
+dictator forget "the deploy key"   # shows what matches, then asks
+dictator forget all                # everything, and you have to type ERASE
+```
+
+It searches what it heard as well as what it pasted, because the reason to
+delete a line is usually that it holds something that should not have been
+written down, and the copy holding it may be the one the recogniser produced.
+
 
 It reads back what you dictated in that period: your day grouped into stretches
 of work, with the times and the applications next to each one so every line can
