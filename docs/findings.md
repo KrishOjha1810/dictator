@@ -1432,3 +1432,64 @@ What that means for how the number may be used:
 Said plainly because the section above ends with "print the words, not only
 the number", and the fix to that lesson was partly to write the dictionary.
 Both things are true.
+
+
+---
+
+## Two commands that came out of reading the errors rather than counting them
+
+### `dictator review`, because the correction loop cannot see a terminal
+
+The learning loop reads the text field back after a paste and keeps the
+difference. That works where the field can be read, and a terminal is not such
+a place: it hands back the whole scrollback rather than the line being edited,
+and most dictation here goes into one. So the words it gets wrong most often
+are exactly the words it is never told about, and instrumenting that path
+measures the problem rather than fixing it.
+
+The count that justified building the other direction: **8 of the 21 genuine
+errors are names and acronyms**, the largest single category, and no speech
+model will ever know them. `dictator learn` fixes each in one line, and
+nothing was asking.
+
+Four things that decided the shape, each from running it on the real history:
+
+1. **One question per word, not per utterance.** Walking utterances asks about
+   the same name forty times. Walking words asks once and fixes forty. On the
+   real history this is the difference between 56 prompts and a list the user
+   can work down.
+2. **Most frequent first**, so stopping halfway has still got the value.
+3. **The longest example, not the first.** The shortest utterance containing a
+   word is often the word on its own, which is unanswerable. Nobody can say
+   what a mangled name was meant to be; everybody can say it when they can see
+   it was a greeting.
+4. **Nothing is learned from silence.** A guess accepted quietly would rewrite
+   correct words in every later dictation.
+
+### `dictator forget`, which had exactly one setting and no question
+
+It deleted the entire history, with no argument and no confirmation. Both
+halves were wrong. The usual reason to reach for this command is one thing
+somebody wishes they had not said out loud, and an irreversible delete of
+every word they have ever dictated should take more than four letters and a
+Return.
+
+It now takes text, shows what matches before deleting it, and asks. `all`
+still exists and now requires typing the word out.
+
+Two bugs found by its own tests, both worth recording because both are shapes
+that recur:
+
+- **A deadlock.** `forget(containing=...)` read through `matching`, which takes
+  the same lock, and `threading.Lock` is not reentrant. The obvious way to
+  write it hangs the calling process, which on the dictation path is the one
+  holding the user's words. The rows are now found before the lock is taken.
+- **An empty search meant everything.** `forget(containing="")` fell through to
+  `DELETE FROM said`, so a mistyped argument erased the lot. `containing` is
+  now `None` for "no search was asked for" and `""` for "a search was asked
+  for and matched nothing", which deletes nothing.
+
+Searching `heard` as well as `shown` matters more here than in an ordinary
+search: the reason to delete a line is often that it holds something that
+should not have been written down, and the copy holding it may be the one the
+recogniser produced rather than the one that landed.
