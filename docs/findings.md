@@ -1365,3 +1365,26 @@ On a loop, `_transcribe_ex` runs the same command again with `-ac` removed,
 and keeps the second answer **only if it is not also a loop**. A loop on both
 passes means the audio is the problem, and the first answer is then no worse
 than the second. The cost is one extra pass on roughly 2% of holds.
+
+### The failure is not deterministic, which is the argument for a retry
+
+Running all three recordings through the pipeline as it stands now, they do
+not loop. They come back as "Sousharshan.in.", "Slack summary." and "What
+happened? Everything is done.", which are plausible.
+
+That is not because the sizing was fixed afterwards. `audio_ctx_for()` took
+its current shape on 23 September, and both loops were recorded on the 24th
+and the 27th, **under exactly this sizing**. The same audio, the same model
+and the same sizing loop on one run and not on another.
+
+So the encoder size is not a switch between working and looping, it is a
+pressure that makes looping more likely, and whisper's temperature fallback
+decides the rest. That means **no static setting prevents this**, which is the
+case for catching it at the output instead. It is also why it is worth having
+even though turbo now passes all three: the Apex comparison run above produced
+`iririririr` and `plplplplar` under the current sizing on the same day, so the
+failure is live for any model the sizing was not fitted to.
+
+Written down plainly because the first version of this section claimed the
+retry fixes three current failures. It does not. It catches an intermittent
+one, which is a weaker claim to make and a better reason to keep the code.
