@@ -1958,3 +1958,67 @@ one of them turned Hindi into English in front of a person, which is the same
 **The honest summary of the whole exercise: the benchmark did not pick a
 model. It found four bugs in itself, and the fourth one was the instrument
 punishing the thing it was built to measure.**
+
+
+---
+
+## Three more ways the same benchmark was measuring the wrong thing
+
+Having published "turbo 0.17%, Apex 0.30%" and then corrected it once, reading
+the per-model word lists found three further faults, all in the instrument and
+all favouring turbo. Written out because the pattern matters more than the
+numbers: **every time this benchmark was made to print more of what it was
+doing, it turned out to be doing something else.**
+
+### 1. Devanagari was not counted as words at all
+
+`_WORD` is `[A-Za-z][A-Za-z']*`. So a hold that turbo answered in Devanagari
+contributed **one token** to the whole benchmark:
+
+    सारी लिंक्स एक बार और verify कर लो, जित्ती भी है.   1 word, 0 unknown
+    Saari links ek baar aur verify kar lo jitni bhi hai.  11 words, 0 unknown
+
+Turbo emitted Devanagari on 4% of holds, and those are precisely the hardest
+Hinglish ones. **They were being scored out of one word each while the other
+model was scored out of eleven.** Turbo's percentage was computed on the easy
+subset of its own output.
+
+### 2. The benchmark was not measuring the pipeline
+
+`compare.py` ran `whisper-cli` and scored the raw output. The product does not
+ship the raw output: every one of these holds reaches the user through
+`stt._romanise`, which turns that Devanagari into `sari links ek bar aur
+verify kar lo, jittee bhi hai.` and scores 11 words like everything else.
+
+So the earlier claim in this document that "turbo wins **with** `roman.py` in
+the path" was wrong. `roman.py` was never in the path. It is now, because the
+benchmark should run what the user runs.
+
+### 3. Hand-added words did not register their phonetic keys
+
+`ALLOW` is checked by exact spelling. `HINDI_KEYS` is checked by sound. Words
+added by hand went into the first and not the second, so:
+
+    seedha   added by hand, from turbo's output     passes
+    sidha    the same word, the same key "sida"     fails
+
+That is the spelling bias the critic predicted, and adding `sidha` would not
+have fixed it, it would have added a third spelling to the same list. The fix
+is structural: hand-added Hindi now contributes its keys, so any spelling of
+the sound passes whichever model wrote it.
+
+### The pattern
+
+Four faults now, all found the same way, by printing what the tool was
+actually looking at rather than what it reported:
+
+1. it did not know ordinary English morphology
+2. it did not know the commonest romanised Hindi
+3. it did not count Devanagari as language at all
+4. it accepted one spelling of a sound and rejected another
+
+Faults 2, 3 and 4 all penalise **writing Hindi**, which is the one thing the
+models under test exist to do. An instrument assembled by reading one model's
+output will, without anybody intending it, encode that model's habits as
+correctness. Reading the output is what finds it; reading the summary never
+will.
