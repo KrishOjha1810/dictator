@@ -106,6 +106,20 @@ the list, then `dictator off && dictator on` and say yes.
 | `dictator log` | the last thing it did |
 | `dictator errors` | failures it noticed |
 
+Every command reads `~/.dictator`. `DICTATOR_STATE` points one at a different
+installation, which is what you want when the Mac has two user accounts and
+the dictation you are trying to explain happened in the other one:
+
+```
+DICTATOR_STATE=/Users/someone/.dictator dictator log
+DICTATOR_STATE=/Users/someone/.dictator dictator errors
+```
+
+It reads whatever that account has left world readable, which is the log and
+the error list. The history is not: it holds everything that account has ever
+said and is theirs. Put this on the one command, never in a shell profile, or
+a listener started from that shell writes into somebody else's directory.
+
 The key can be `fn` (the default), `rightcmd`, `rightopt` or `leftcmd`.
 
 **Hold, do not tap.** macOS fires the Globe key's own action on a clean tap and

@@ -14,7 +14,28 @@ import os
 import time
 from pathlib import Path
 
-STATE_DIR = Path(os.path.expanduser("~/.dictator"))
+# DICTATOR_STATE points every command at a different installation's files.
+# The case it is for: one Mac, two user accounts, and the dictation that
+# matters happening in the one you are not sitting in. Without it there is no
+# way to read another installation's log at all, so "why did it do that over
+# there" could only be answered by logging out and back in.
+#
+# It is read once, here, because every module computes its own paths from this
+# at import time. Reading a second installation is what it is for; pointing a
+# LIVE listener at somebody else's directory would have it write there, so the
+# variable belongs on a one-off command and not in a shell profile.
+def state_dir(override: "str|None" = None) -> Path:
+    """Where this run keeps its files. A function so it can be tested without
+    reloading the module, which leaks into every other test that has already
+    imported it."""
+    where = override if override is not None else os.environ.get("DICTATOR_STATE")
+    # An empty string is what `DICTATOR_STATE=` in a shell profile gives, and
+    # treating it as a path puts the state at the filesystem root.
+    return Path(os.path.expanduser(where.strip() if where and where.strip()
+                                   else "~/.dictator"))
+
+
+STATE_DIR = state_dir()
 LOG_FILE = STATE_DIR / "log"
 HUD_FILE = STATE_DIR / "hud.json"
 ERRORS_FILE = STATE_DIR / "errors.jsonl"

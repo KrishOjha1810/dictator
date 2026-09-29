@@ -66,10 +66,16 @@ def test_built_bundle_points_at_a_real_checkout():
 
 
 def test_state_is_our_own_directory():
-    """Checked in the source, because the suite redirects STATE_DIR to a
-    temporary directory so tests cannot write into the user's real data."""
-    src = (PKG / "core.py").read_text()
-    assert 'expanduser("~/.dictator")' in src, "state directory is not ~/.dictator"
+    """dictator keeps its files in ~/.dictator and not in a sibling project's
+    directory. Asked of the resolver rather than grepped out of the source,
+    which is why this broke the first time the line was refactored: a test that
+    reads source text fails on a rewording and passes on a rewrite."""
+    import os
+
+    from dictator import core
+    assert core.state_dir("") == Path(os.path.expanduser("~/.dictator"))
+    assert core.state_dir(None) == Path(os.path.expanduser("~/.dictator")) \
+        or os.environ.get("DICTATOR_STATE")
 
 
 def test_models_are_found_not_redownloaded(tmp_path, monkeypatch):
