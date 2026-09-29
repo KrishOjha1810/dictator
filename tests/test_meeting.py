@@ -642,3 +642,51 @@ def test_a_bundle_macos_refuses_to_open_says_so_at_once(monkeypatch):
     assert got["problem"] == "launch", got
     assert "not supported on this version" in got["say"]
     assert time.time() - t0 < 5, "it waited out the whole timeout anyway"
+
+
+def test_one_bad_chunk_does_not_take_the_rest_of_the_batch_with_it(monkeypatch,
+                                                                   tmp_path):
+    """`whisper-cli` stops processing the remaining files when one fails, and
+    an empty result is indistinguishable from "this stretch was silent". So a
+    single bad chunk silently lost up to BATCH * CHUNK minutes of a meeting,
+    with one line in a log nobody reads."""
+    paths = [tmp_path / f"c{i}.wav" for i in range(3)]
+    for q in paths:
+        q.write_bytes(b"")
+    runs = []
+
+    def fake_run(cmd, **kw):
+        files = [cmd[i + 1] for i, a in enumerate(cmd) if a == "-f"]
+        runs.append(files)
+        # The first file is poison. In a batch it kills everything after it.
+        poisoned = str(paths[0]) in files
+        for f in files:
+            if poisoned and f != str(paths[0]):
+                continue            # whisper stopped, no json for these
+            if f == str(paths[0]) and len(files) > 1:
+                continue            # nor for the one that failed
+            Path(f + ".json").write_text(json.dumps(
+                {"transcription": [{"text": f"said in {Path(f).name}",
+                                    "offsets": {"from": 0, "to": 1000}}]}))
+
+        class Done:
+            stdout, stderr, returncode = None, iter([]), 0
+
+            def wait(self, timeout=None):
+                return 0
+        return Done()
+
+    monkeypatch.setattr(meeting.stt, "whisper_bin", lambda: "/bin/true")
+    monkeypatch.setattr(meeting.stt, "stt_lang_mode",
+                        lambda: (tmp_path, "en"))
+    monkeypatch.setattr(meeting.subprocess, "Popen", fake_run)
+    monkeypatch.setattr(meeting, "_watchdog", lambda *a, **k: None)
+    (tmp_path / "model").write_bytes(b"")
+    monkeypatch.setattr(meeting.stt, "stt_lang_mode",
+                        lambda: (tmp_path / "model", "en"))
+
+    got = meeting._whisper(paths, "en")
+    # The two good chunks must survive the one bad one.
+    assert got[str(paths[1])], "the chunk after the bad one was lost"
+    assert got[str(paths[2])], "the chunk after the bad one was lost"
+    assert len(runs) > 1, "it never retried them on their own"

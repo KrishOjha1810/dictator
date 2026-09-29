@@ -794,13 +794,19 @@ def _whisper(paths, lang: str, progress=None) -> dict:
         core.log(f"meeting: whisper failed on a batch: {e}")
         return {}
     out = {}
+    missing = []
     for p in paths:
         js = Path(str(p) + ".json")
         try:
             data = json.loads(js.read_text())
         except Exception as e:
+            # whisper-cli stops processing the remaining files when one of them
+            # fails, so a single bad chunk took every chunk after it in the same
+            # batch with it. An empty list here is indistinguishable from "this
+            # stretch was silent", which is how up to BATCH * CHUNK minutes of a
+            # meeting went missing with one line in a log nobody reads.
             core.log(f"meeting: no transcript for {p}: {e}")
-            out[str(p)] = []
+            missing.append(p)
             continue
         finally:
             try:
@@ -824,6 +830,21 @@ def _whisper(paths, lang: str, progress=None) -> dict:
                 continue    # a repetition loop, not somebody saying it twice
             segs.append({"at": at, "until": until, "text": text})
         out[str(p)] = segs
+
+    # Anything the batch dropped gets its own run. One bad chunk should cost
+    # that chunk, not the seven behind it in the queue.
+    if missing and len(paths) > 1:
+        core.log(f"meeting: {len(missing)} chunk(s) came back empty, "
+                 f"running them one at a time")
+        for p in missing:
+            got = _whisper([p], lang, None)
+            out[str(p)] = got.get(str(p), [])
+            if not out[str(p)]:
+                core.log(f"meeting: {Path(p).name} produced nothing on its "
+                         f"own either, so that stretch is lost")
+    else:
+        for p in missing:
+            out[str(p)] = []
     return out
 
 
