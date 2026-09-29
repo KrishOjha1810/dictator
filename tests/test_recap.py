@@ -117,6 +117,44 @@ def test_a_number_nobody_said_is_dropped():
     assert "4000" in why
 
 
+@pytest.mark.parametrize("said, wrote", [
+    ("twenty five USDC", "25 USDC"),
+    ("two hundred rupees", "200 rupees"),
+    ("two hundred and fifty rupees", "250 rupees"),
+    ("twenty five thousand rows", "25000 rows"),
+    ("one lakh fifty thousand", "150000"),
+    ("hundred USDC", "100 USDC"),
+    # And the other way round, because the model is free to write it out.
+    ("25 USDC", "twenty five USDC"),
+    ("1 and 2", "1 and 2"),
+])
+def test_an_amount_that_takes_two_words_is_still_one_number(said, wrote):
+    """A number word used to count as its own value, so "twenty five" was 20
+    and 5 and a summary writing 25 was accused of inventing it. The guard then
+    threw away a correct summary and told the user the model had made
+    something up, which is the worst shape a false alarm can have: it teaches
+    them to stop believing the guard that catches the real thing."""
+    source = f"- we moved {said} across this morning\n"
+    why = recap.unsupported(f"Moved {wrote} across this morning.", source)
+    assert "number nobody dictated" not in why, why
+
+
+@pytest.mark.parametrize("said, wrote", [
+    ("twenty five USDC", "4000 USDC"),
+    ("two hundred rupees", "900 rupees"),
+    ("12 pull requests", "21 pull requests"),
+    ("nothing numeric at all", "3 places"),
+])
+def test_reading_a_number_properly_does_not_stop_it_catching_one(said, wrote):
+    """The loosening above must not cost the check its job. An invented figure
+    inside an otherwise faithful paragraph barely moves the ratio, which is
+    the reason numbers are checked exactly rather than statistically."""
+    source = f"- we moved {said} across this morning\n"
+    why = recap.unsupported(f"Moved {wrote} across this morning.", source)
+    assert "number nobody dictated" in why
+
+
+
 def test_a_summary_about_something_else_entirely_is_dropped():
     source = ("- check the index on the staging database\n"
               "- rerun the suite after the migration\n")

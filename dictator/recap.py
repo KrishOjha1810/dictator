@@ -334,8 +334,13 @@ def _stem(word: str) -> str:
 
 # Numbers get spoken as words and summarised as digits, so "hundred USDC" in
 # the source has to count as 100 in the summary or the guard below fires on a
-# correct sentence. Measured: this was the only false positive in ten real
-# sessions.
+# correct sentence. That was the only false positive in the ten sessions this
+# was first measured on, and reading a number word as its own value was enough
+# to fix it. It is not enough in general: ten sessions happened not to contain
+# an amount that takes two words. "twenty five" is one number and not two, so
+# comparing sets of values called a correct summary an invention every time
+# somebody dictated an amount above twenty. Runs of number words are therefore
+# read as the number they spell, which is what the sections below do.
 _NUM_WORDS = {
     "one": 1, "two": 2, "three": 3, "four": 4, "five": 5, "six": 6,
     "seven": 7, "eight": 8, "nine": 9, "ten": 10, "eleven": 11, "twelve": 12,
@@ -347,12 +352,85 @@ _NUM_WORDS = {
 }
 
 
-def _numbers(text: str) -> set:
-    out = {int(n) for n in re.findall(r"\d+", text)}
-    for w in re.findall(r"[a-z]+", text.lower()):
-        if w in _NUM_WORDS:
-            out.add(_NUM_WORDS[w])
+_TOKEN = re.compile(r"\d[\d,]*\d|\d|[A-Za-z]+")
+
+
+def _runs(text: str) -> list:
+    """Every number in the text, as the list of values it was written with.
+
+    A run is the number words and digits that sit next to each other, so
+    "twenty five USDC" is one run of [20, 5] and "5 tests and 3 failures" is
+    two runs. "and" continues a run rather than breaking it, because "two
+    hundred and fifty" is one amount."""
+    out, run = [], []
+    for tok in _TOKEN.findall(text):
+        low = tok.lower()
+        if low[0].isdigit():
+            try:
+                run.append(int(low.replace(",", "")))
+            except ValueError:
+                pass
+        elif low in _NUM_WORDS:
+            run.append(_NUM_WORDS[low])
+        elif low == "and" and run:
+            continue
+        elif run:
+            out.append(run)
+            run = []
+    if run:
+        out.append(run)
     return out
+
+
+def _compose(parts: list) -> int:
+    """A run of number words read as the one number somebody said.
+
+    The ordinary school algorithm: values add up until a scale word multiplies
+    what has been collected so far. "twenty five" is 25, "two hundred fifty"
+    is 250, "one lakh fifty thousand" is 150000, and a bare "hundred" is 100,
+    which is the case this guard was first fixed for."""
+    total = current = 0
+    for value in parts:
+        if value >= 1000:
+            current = (current or 1) * value
+            total += current
+            current = 0
+        elif value == 100:
+            current = (current or 1) * 100
+        else:
+            current += value
+    return total + current
+
+
+def _offered(text: str) -> set:
+    """Every number the source can honestly be read as offering.
+
+    Both the composed number and the pieces it was spelled with, because the
+    summary is free to quote either: the source says "twenty five" and the
+    model may write 25, or the source says 25 and the model may write it out.
+    Being generous here is the safe direction. This set only ever excuses a
+    number, and the check that matters is whether the summary invented one."""
+    out = set()
+    for run in _runs(text):
+        out.add(_compose(run))
+        out.update(run)
+    return out
+
+
+def _claimed(text: str) -> list:
+    """Every number the summary asserts, as (the number, the pieces).
+
+    Two chances to be explained, because one is not enough in either
+    direction. The composed value covers a summary that wrote 25 for a source
+    that said "twenty five". The pieces cover the opposite, a summary that
+    wrote "one and two" for a source that said "1 and 2", where composing
+    would have invented a 3 that nobody claimed."""
+    return [(_compose(r), set(r)) for r in _runs(text)]
+
+
+def _numbers(text: str) -> set:
+    """Kept for callers that only want the values. See `_offered`."""
+    return _offered(text)
 
 
 def _propers(text: str) -> set:
@@ -393,9 +471,11 @@ def unsupported(prose: str, source: str, floor: float = GROUND_FLOOR) -> str:
     one costs the reader's trust in every other line of the report."""
     if not prose.strip():
         return "empty"
-    made_up = _numbers(prose) - _numbers(source)
-    if made_up:
-        return f"a number nobody dictated ({sorted(made_up)[0]})"
+    offered = _offered(source)
+    for value, pieces in _claimed(prose):
+        if value in offered or pieces <= offered:
+            continue
+        return f"a number nobody dictated ({value})"
     known_words = {re.sub(r"'s$", "", w) for w in
                    re.findall(r"[a-z][a-z'\-]+", source.lower())}
     invented = sorted(p for p in _propers(prose) if p not in known_words)
