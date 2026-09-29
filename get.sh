@@ -28,9 +28,20 @@ if [ -d "$DIR/.git" ]; then
   echo "Updating the copy already in $DIR"
   git -C "$DIR" pull --ff-only || {
     echo
-    echo "Could not fast-forward $DIR, which means it has local changes."
-    echo "Nothing was touched. Sort that out, or set DICTATOR_DIR to install"
-    echo "somewhere else."
+    echo "Could not update $DIR without overwriting something."
+    echo "Nothing was touched. That means one of two things:"
+    echo
+    echo "  1. You changed a file in there. See which:"
+    echo "       git -C \"$DIR\" status"
+    echo "     Keep those changes for later and update:"
+    echo "       git -C \"$DIR\" stash && git -C \"$DIR\" pull --ff-only"
+    echo "     Or throw them away and take the new version:"
+    echo "       git -C \"$DIR\" reset --hard origin/main && git -C \"$DIR\" pull"
+    echo
+    echo "  2. You want to leave that copy alone. Install a separate one:"
+    echo "       DICTATOR_DIR=\"\$HOME/dictator-new\" bash <(curl -fsSL \\"
+    echo "         https://raw.githubusercontent.com/KrishOjha1810/dictator/main/get.sh)"
+    echo
     exit 1
   }
 elif [ -e "$DIR" ]; then
