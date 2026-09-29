@@ -168,7 +168,15 @@ def recent(limit: int = 50, since: float = 0.0) -> list:
                     "LIMIT ?", (float(since), int(limit))).fetchall()
             finally:
                 con.close()
-    except Exception:
+    except Exception as e:
+        # Said out loud, unlike every other failure here, because an empty
+        # answer from this function is indistinguishable from a person who
+        # has not dictated anything. A migration that did not take makes the
+        # whole history read as empty, and then `find` reports nothing, the
+        # recap reports nothing, and the guard that stops a snippet eating a
+        # phrase you really say sees no history and lets it through. None of
+        # that looks like a fault from outside.
+        core.log(f"history: could not read it back: {e}")
         return []
     cols = ("id", "at", "heard", "shown", "kept", "app", "lang", "engine",
             "secs", "conf", "saw")
