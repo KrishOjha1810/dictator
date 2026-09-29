@@ -294,17 +294,32 @@ def start(title: str = "", wait: float = 30.0) -> dict:
             CURRENT.parent.mkdir(parents=True, exist_ok=True)
             CURRENT.write_text(mid)
             return {"id": mid, "started": time.time()}
-        why = _reason(mid)
-        if "screen recording" in why.lower() or "declined TCCs" in why:
+        # The recorder says why it gave up in `state`, not in its prose. This
+        # used to grep the recorder's own log, where the line announcing that
+        # it was ASKING for Screen Recording matched the same test as the line
+        # saying it had been refused. So an ordinary first run, where the
+        # permission is being requested exactly as designed, was read as a
+        # refusal, and `_scrap` deleted the working directory of a recorder
+        # that was still running and about to open its tracks in it.
+        state = st.get("state") or ""
+        if state == "no-screen":
             _scrap(mid)
             return {"problem": "screen", "say": _SCREEN_HELP}
-        if "microphone" in why.lower():
+        if state == "no-mic":
             _scrap(mid)
             return {"problem": "mic", "say":
                     "macOS has not allowed the meeting recorder to use the "
                     "microphone, so it could not record your half.\n"
                     "  System Settings, Privacy and Security, Microphone, and "
                     "switch on Dictator Meeting."}
+        # A recorder that has exited without saying why is not coming back, so
+        # there is no reason to sit out the rest of the wait.
+        pid = int(st.get("pid") or 0)
+        if pid and not _alive(pid):
+            _scrap(mid)
+            return {"problem": "died",
+                    "say": "The recorder stopped before it started recording. "
+                           + (_reason(mid) or "See ~/.dictator/log.")}
         time.sleep(0.3)
     _scrap(mid)
     return {"problem": "timeout",

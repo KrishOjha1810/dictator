@@ -311,8 +311,8 @@ func askForMicrophone() {
     case .authorized:
         return
     case .denied, .restricted:
-        fail("microphone permission denied: System Settings, Privacy and "
-             + "Security, Microphone", Int32(EXIT_NO_MIC))
+        giveUp("microphone permission denied: System Settings, Privacy and "
+             + "Security, Microphone", "no-mic", Int32(EXIT_NO_MIC))
     case .notDetermined:
         let waiting = DispatchSemaphore(value: 0)
         var granted = false
@@ -321,9 +321,11 @@ func askForMicrophone() {
             waiting.signal()
         }
         if waiting.wait(timeout: .now() + 60) == .timedOut {
-            fail("microphone permission was never answered", Int32(EXIT_NO_MIC))
+            giveUp("microphone permission was never answered", "no-mic",
+                   Int32(EXIT_NO_MIC))
         } else if !granted {
-            fail("microphone permission refused", Int32(EXIT_NO_MIC))
+            giveUp("microphone permission refused", "no-mic",
+                   Int32(EXIT_NO_MIC))
         }
     @unknown default:
         return
@@ -356,6 +358,16 @@ if selftest {
 let started = Date()
 let statusFile = dir.appendingPathComponent("status.json")
 
+// What the heartbeat republishes. It used to publish the literal word
+// "recording" from half a second after launch, before SCShareableContent had
+// answered and before the microphone dialog had been shown, so the Python side
+// saw success and told the user the meeting was being recorded while the
+// recorder was still asking permission to record it. If the user then said no,
+// the recorder exited with no audio and `dictator meeting stop` answered "No
+// meeting is being recorded". The one failure this file's own docstrings say
+// it must never make.
+var phase = "starting"
+
 func writeStatus(_ state: String) {
     let payload: [String: Any] = [
         "state": state,
@@ -372,6 +384,19 @@ func writeStatus(_ state: String) {
     // a half-written file reads as a crashed recorder.
     try? d.write(to: statusFile, options: .atomic)
 }
+
+// Say why it is giving up in a form the Python side can match on. It used to
+// grep this process's own prose out of the log, which matched the line saying
+// "asking for Screen Recording" as well as the line saying it had been
+// refused, so an ordinary first run looked like a refusal and the working
+// directory of a live recorder was deleted underneath it. Prose is for people.
+func giveUp(_ m: String, _ kind: String, _ code: Int32) -> Never {
+    phase = kind
+    writeStatus(kind)
+    say(m)
+    exit(code)
+}
+
 
 final class Sink: NSObject, SCStreamOutput, SCStreamDelegate {
     func stream(_ s: SCStream, didOutputSampleBuffer sb: CMSampleBuffer,
@@ -437,8 +462,8 @@ if !CGPreflightScreenCaptureAccess() {
 SCShareableContent.getExcludingDesktopWindows(false, onScreenWindowsOnly: false) {
     content, error in
     if let error {
-        say("cannot see the system audio: \(error.localizedDescription)")
-        exit(Int32(EXIT_NO_SCREEN))
+        giveUp("cannot see the system audio: \(error.localizedDescription)",
+               "no-screen", Int32(EXIT_NO_SCREEN))
     }
     guard let display = content?.displays.first else {
         say("no display to attach the audio capture to")
@@ -487,7 +512,8 @@ SCShareableContent.getExcludingDesktopWindows(false, onScreenWindowsOnly: false)
             say("could not start capturing: \(err.localizedDescription)")
             exit(1)
         }
-        writeStatus("recording")
+        phase = "recording"
+        writeStatus(phase)
         say("recording. macOS shows a screen recording indicator in the menu "
             + "bar for as long as this runs.")
     }
@@ -502,7 +528,7 @@ let beat = Timer(timeInterval: 0.5, repeats: true) { _ in
         say("reached the maximum length, stopping")
         finish(0)
     }
-    writeStatus("recording")
+    writeStatus(phase)
 }
 RunLoop.main.add(beat, forMode: .common)
 

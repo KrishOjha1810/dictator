@@ -380,3 +380,95 @@ def test_a_recording_is_listed_with_its_size(tmp_path):
     assert mid in out
     assert "MB" in out
     assert "audio only" in out
+
+
+# ---- starting, which had no test at all and is where the bugs were ---------
+
+def _fake_recorder(monkeypatch, phases, seconds=6.0):
+    """A recorder that is really running, publishing the phases you give it.
+
+    A live pid matters: the whole class of bug here is Python deciding what a
+    running recorder is doing, so a stubbed `_alive` would test nothing."""
+    import subprocess
+    proc = subprocess.Popen(["sleep", str(seconds)])
+    written = {}
+
+    def launch(*a, **kw):
+        d = meeting._dir(written["mid"])
+        d.mkdir(parents=True, exist_ok=True)
+        (d / "status.json").write_text(json.dumps(
+            {"state": phases[0], "pid": proc.pid, "started": time.time(),
+             "elapsed": 0.1, "them_seconds": 0, "me_seconds": 0}))
+
+    monkeypatch.setattr(meeting, "build_app", lambda: "/tmp/nowhere.app")
+    monkeypatch.setattr(meeting.subprocess, "run", lambda *a, **k: launch())
+    return proc, written
+
+
+def test_starting_is_not_reported_as_recording(monkeypatch):
+    """The heartbeat used to publish the word "recording" from half a second
+    after launch, before the capture had been asked for and before the
+    microphone dialog had been shown. Python saw that, told the user the
+    meeting was being recorded, and if they then refused the microphone the
+    recorder exited with no audio and `stop` answered "No meeting is being
+    recorded"."""
+    proc, written = _fake_recorder(monkeypatch, ["starting"])
+    written["mid"] = time.strftime("%Y%m%d-%H%M%S")
+    try:
+        got = meeting.start(wait=1.0)
+    finally:
+        proc.terminate()
+        proc.wait(timeout=5)
+    assert "id" not in got, got
+    assert got["problem"] == "timeout", got
+
+
+def test_a_refusal_is_read_from_the_state_and_not_from_the_prose(monkeypatch):
+    """`_reason` matched the recorder's own line announcing that it was ASKING
+    for Screen Recording, which is what an ordinary first run prints. So the
+    directory of a live recorder was deleted while it was starting up."""
+    proc, written = _fake_recorder(monkeypatch, ["starting"])
+    mid = written["mid"] = time.strftime("%Y%m%d-%H%M%S")
+    d = meeting._dir(mid)
+    d.mkdir(parents=True, exist_ok=True)
+    (d / "recorder.err").write_text(
+        "asking for Screen Recording, which is the permission that carries "
+        "system audio\n")
+    try:
+        got = meeting.start(wait=1.0)
+    finally:
+        proc.terminate()
+        proc.wait(timeout=5)
+    assert got.get("problem") != "screen", \
+        "an ordinary first run was read as a refusal"
+
+
+def test_a_real_refusal_is_still_reported(monkeypatch):
+    proc, written = _fake_recorder(monkeypatch, ["no-screen"])
+    written["mid"] = time.strftime("%Y%m%d-%H%M%S")
+    try:
+        got = meeting.start(wait=1.0)
+    finally:
+        proc.terminate()
+        proc.wait(timeout=5)
+    assert got["problem"] == "screen", got
+
+
+def test_a_recorder_that_died_does_not_burn_the_whole_wait(monkeypatch):
+    import subprocess
+    proc = subprocess.Popen(["true"])
+    proc.wait()
+    mid = time.strftime("%Y%m%d-%H%M%S")
+
+    def launch(*a, **kw):
+        d = meeting._dir(mid)
+        d.mkdir(parents=True, exist_ok=True)
+        (d / "status.json").write_text(json.dumps(
+            {"state": "starting", "pid": proc.pid, "started": time.time()}))
+
+    monkeypatch.setattr(meeting, "build_app", lambda: "/tmp/nowhere.app")
+    monkeypatch.setattr(meeting.subprocess, "run", lambda *a, **k: launch())
+    t0 = time.time()
+    got = meeting.start(wait=30.0)
+    assert got["problem"] == "died", got
+    assert time.time() - t0 < 5, "it sat out the whole wait for a dead process"
