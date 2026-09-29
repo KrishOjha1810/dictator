@@ -449,6 +449,26 @@ def permissions(reset: bool = False) -> int:
         subprocess.run([str(always.REPO / "bin" / "dictator"), "on"],
                        capture_output=True)
         print("Rebuilt and restarted.\n")
+    elif not _has_listener() and always.running():
+        # The identity is good and the app is up, yet it is not listening. So
+        # whatever macOS remembers about this bundle was granted to a DIFFERENT
+        # identity, which is exactly what happens the first time an ad-hoc app
+        # gets a real certificate: the old entry is still in the list, still
+        # ticked, next to an app macOS no longer recognises. Nothing the user
+        # can do in that pane fixes it, because the tick they can see is not
+        # the tick that counts.
+        print("The app is running but not listening, which means the")
+        print("permission macOS remembers was granted to an older version")
+        print("of it. Clearing that so it can ask again.\n")
+        for service in ("Accessibility", "Microphone", "ListenEvent"):
+            subprocess.run(["tccutil", "reset", service, "com.dictator.dictation"],
+                           capture_output=True)
+        subprocess.run([str(always.REPO / "bin" / "dictator"), "off"],
+                       capture_output=True)
+        subprocess.run([str(always.REPO / "bin" / "dictator"), "on"],
+                       capture_output=True)
+        import time as _t2
+        _t2.sleep(3)
 
     if reset:
         # Clears a half-granted state where the box is ticked next to an app

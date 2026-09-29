@@ -212,3 +212,15 @@ def test_no_listener_is_reported_as_a_problem():
     added to answer."""
     src = (ROOT / "bin" / "dictator").read_text()
     assert "n == 1" in src, "the listener count check accepts zero again"
+
+
+def test_permissions_clears_a_grant_made_to_an_older_identity():
+    """The first time an ad-hoc app gets a real certificate its identity
+    changes, so the permission the user already granted stops applying. The
+    old entry stays in the list, still ticked, next to an app macOS no longer
+    recognises, and nothing the user can do in that pane fixes it because the
+    tick they can see is not the tick that counts."""
+    src = (ROOT / "bin" / "dictator").read_text()
+    assert "not _has_listener() and always.running()" in src, \
+        "permissions no longer notices a stale grant"
+    assert src.count("tccutil") >= 2, "it no longer clears what macOS remembers"
