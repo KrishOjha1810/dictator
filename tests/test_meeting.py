@@ -735,3 +735,15 @@ def test_widening_a_short_piece_stays_inside_the_track(tmp_path):
         assert piece["start"] >= 0.0, piece
         assert piece["end"] <= meeting._seconds(wav) + 0.001, piece
         assert piece["keep_from"] <= piece["end"], piece
+
+
+def test_the_tests_cannot_touch_the_installed_meeting_bundle():
+    """`build_app` runs swiftc, writes into ~/Applications and codesigns the
+    result; `check` and `start` launch it through LaunchServices and can raise
+    a permission dialog in the middle of a run. None of that may happen because
+    somebody added a test. The state directory has been leaked three times in
+    this project already, and this is the same shape one directory over."""
+    for name in ("APP", "EXE", "PLIST", "MEETINGS", "CURRENT"):
+        where = str(getattr(meeting, name))
+        assert "/.dictator/" not in where, (name, where)
+        assert "/Applications/" not in where, (name, where)

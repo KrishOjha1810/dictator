@@ -45,6 +45,18 @@ def _own_state_dir(tmp_path, monkeypatch):
             # real directory would not merely pollute it.
             ("meeting", "MEETINGS", tmp_path / "meetings"),
             ("meeting", "CURRENT", tmp_path / "meetings" / "current"),
+            # And the bundle, which is one test away from being the same
+            # problem one directory over. Anything that reaches `build_app`
+            # would run swiftc, write into ~/Applications and codesign it, and
+            # anything reaching `check` or `start` would launch the real
+            # recorder through LaunchServices and raise a permission dialog in
+            # the middle of a test run. Redirected rather than trusted not to
+            # be called, for the same reason always.PLIST is.
+            ("meeting", "APP", tmp_path / "app" / "Dictator Meeting.app"),
+            ("meeting", "EXE", tmp_path / "app" / "Dictator Meeting.app"
+                               / "Contents" / "MacOS" / "DictatorMeeting"),
+            ("meeting", "PLIST", tmp_path / "app" / "Dictator Meeting.app"
+                                 / "Contents" / "Info.plist"),
     ):
         try:
             m = __import__(f"dictator.{mod}", fromlist=[mod])
