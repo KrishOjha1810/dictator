@@ -40,7 +40,8 @@ CREATE TABLE IF NOT EXISTS said (
     lang   TEXT NOT NULL DEFAULT '',
     engine TEXT NOT NULL DEFAULT '',
     secs   REAL NOT NULL DEFAULT 0,
-    conf   REAL NOT NULL DEFAULT 0
+    conf   REAL NOT NULL DEFAULT 0,
+    saw    TEXT NOT NULL DEFAULT ''
 );
 CREATE INDEX IF NOT EXISTS said_at ON said(at DESC);
 """
@@ -50,6 +51,16 @@ def _db():
     con = sqlite3.connect(str(DB), timeout=10)
     con.execute("PRAGMA journal_mode=WAL")
     con.executescript(_SCHEMA)
+    # `saw` arrived after the table did, so an existing database needs it
+    # added rather than created. Without this every read below raises on the
+    # one path that must never raise.
+    try:
+        have = {r[1] for r in con.execute("PRAGMA table_info(said)")}
+        if "saw" not in have:
+            con.execute("ALTER TABLE said ADD COLUMN saw TEXT NOT NULL DEFAULT ''")
+            con.commit()
+    except Exception as e:
+        core.log(f"history: {e}")
     try:
         DB.chmod(0o600)          # it is a record of everything you have said
     except Exception:
@@ -103,6 +114,49 @@ def kept(row_id: int, text: str) -> None:
         core.log(f"history: {e}")
 
 
+# What became of our attempt to read the text back afterwards. The point of
+# recording this is that an empty `kept` used to mean two opposite things, "you
+# changed nothing" and "we never managed to look", and the learning loop
+# cannot be judged without telling them apart.
+SAW = {
+    "same":       "pasted, and you left it alone",
+    "edited":     "pasted, and you corrected it",
+    "gone":       "pasted, and it was not there afterwards",
+    "unreadable": "could not read the field",
+    "moved":      "you had moved to another application",
+}
+
+
+def saw(row_id: int, outcome: str) -> None:
+    """Record what happened when we went back to look. See SAW."""
+    if not row_id or outcome not in SAW:
+        return
+    try:
+        with _lock:
+            con = _db()
+            try:
+                con.execute("UPDATE said SET saw=? WHERE id=?",
+                            (outcome, int(row_id)))
+                con.commit()
+            finally:
+                con.close()
+    except Exception as e:
+        core.log(f"history: {e}")
+
+
+def watching(limit: int = 200) -> dict:
+    """How often we actually get to see what became of a dictation.
+
+    Returns {outcome: count} over the most recent rows, plus "unrecorded" for
+    rows predating this being measured at all. This is the number that says
+    whether learning from corrections works, as opposed to whether it ran."""
+    out = {}
+    for r in recent(limit):
+        key = r.get("saw") or "unrecorded"
+        out[key] = out.get(key, 0) + 1
+    return out
+
+
 def recent(limit: int = 50, since: float = 0.0) -> list:
     try:
         with _lock:
@@ -110,14 +164,14 @@ def recent(limit: int = 50, since: float = 0.0) -> list:
             try:
                 rows = con.execute(
                     "SELECT id, at, heard, shown, kept, app, lang, engine, "
-                    "secs, conf FROM said WHERE at >= ? ORDER BY at DESC "
+                    "secs, conf, saw FROM said WHERE at >= ? ORDER BY at DESC "
                     "LIMIT ?", (float(since), int(limit))).fetchall()
             finally:
                 con.close()
     except Exception:
         return []
     cols = ("id", "at", "heard", "shown", "kept", "app", "lang", "engine",
-            "secs", "conf")
+            "secs", "conf", "saw")
     return [dict(zip(cols, r)) for r in rows]
 
 

@@ -99,8 +99,11 @@ def test_the_spoken_list_comes_from_what_was_actually_said(monkeypatch):
     rows = [{"kept": "", "shown": "the loop is slow", "heard": ""}] * 3
     monkeypatch.setattr(vocab, "history", __import__("types").SimpleNamespace(
         recent=lambda limit=0: rows), raising=False)
-    import sys
-    sys.modules["dictator.history"].recent = lambda limit=0: rows
+    # Through monkeypatch rather than a plain assignment: vocab reaches for the
+    # real module, and an unrestored stub here left every later test in the run
+    # reading a fake history.
+    from dictator import history as _history
+    monkeypatch.setattr(_history, "recent", lambda limit=0: rows)
     got = box.spoken(least=2)
     assert "loop" in got and "slow" in got
     assert "is" not in got, "two letter words are noise, not vocabulary"

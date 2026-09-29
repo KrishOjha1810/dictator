@@ -198,6 +198,11 @@ def test_only_the_last_piece_restores_the_clipboard(monkeypatch):
     seen = []
     monkeypatch.setattr(paste, "_paste_once",
                         lambda t, keep=False: seen.append(keep) or True)
+    # Between pieces deliver() asks what is in front and stops if it moved, so
+    # without this the test only passed when the window running it happened to
+    # be a terminal, and reported a chunking bug when it was not.
+    monkeypatch.setattr(paste.mac, "frontmost_app", lambda: "Terminal")
+    monkeypatch.setattr(paste, "GAP", 0)
     paste.deliver("word " * 400, "Terminal")
     assert len(seen) > 1, "this text should have been split"
     assert seen[:-1] == [True] * (len(seen) - 1), seen

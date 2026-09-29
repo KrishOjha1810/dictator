@@ -25,7 +25,9 @@ USAGE = """dictator: hold a key and talk, anywhere on your Mac.
   dictator off        stop, and do not start again
   dictator status     is it set up, and is it running
   dictator doctor     check everything and say what is wrong
-  dictator permissions  open the right settings pane and watch for the toggle
+  dictator permissions  say why macOS is not trusting it, and walk you out
+  dictator permissions --explain   say it and stop, without changing anything
+  dictator permissions --reset     remove the stale entry and ask again
   dictator delivery [type|clipboard]   how the words get in
   dictator capture on|off        keep recordings, to compare speech models
   dictator log        the last thing it did
@@ -38,8 +40,15 @@ Teaching it your words:
   dictator words         what it has learned
   dictator unlearn WORD  stop fixing it
   dictator history [n]   what you have said
+  dictator find WORDS    search everything you have ever dictated
   dictator recap [today|week|N]   what you worked on, summarised locally
   dictator forget        erase that history
+
+Phrases you say often:
+  dictator snippet "my work email" "krish@example.com"
+                         say the phrase, get the text
+  dictator snippets      what expands into what
+  dictator unsnippet "my work email"
 
 Language:
   dictator language              which language it expects
@@ -51,6 +60,10 @@ Formatting:
   dictator format lists on|off     spoken lists become real lists
   dictator format punctuation on|off
   dictator format off              paste exactly what was said
+  dictator format in Slack         what is on in one application
+  dictator format in Slack lists on      change it there and nowhere else
+  dictator format in terminal sentences off
+  dictator format in Slack default       back to the global rules
 """
 
 
@@ -59,6 +72,31 @@ def _key_from(args, default="fn"):
         if a in KEYS:
             return a
     return default
+
+
+def _watching(limit: int = 200) -> None:
+    """Say how often it gets to see what became of a dictation.
+
+    It can only learn from a correction it witnessed, so a low number here
+    explains a vocabulary that never grows, and no other command reports it.
+    """
+    from dictator import history
+    counts = history.watching(limit)
+    counts.pop("unrecorded", None)      # rows from before this was measured
+    total = sum(counts.values())
+    if not total:
+        print("\n  no dictations yet where it went back to look.")
+        return
+    looked = total - counts.get("unreadable", 0) - counts.get("moved", 0)
+    print(f"\n  it saw what became of {looked} of your last {total} "
+          f"dictations.")
+    for key, label in history.SAW.items():
+        n = counts.get(key, 0)
+        if n:
+            print(f"    {n:4d}  {label}")
+    if not counts.get("edited"):
+        print("    it has not caught a correction yet, so it has learned "
+              "nothing from your edits.")
 
 
 def main(argv) -> int:
@@ -159,6 +197,7 @@ def main(argv) -> int:
             for t, rec in sorted(pending.items()):
                 was = ", ".join(rec.get("heard", [])[:2])
                 print(f"    {t}" + (f"   heard as: {was}" if was else ""))
+        _watching()
         return 0
 
     if cmd == "unlearn":
@@ -204,6 +243,8 @@ def main(argv) -> int:
         return 0
 
     if cmd == "format":
+        if rest and rest[0] == "in":
+            return format_in(rest[1:])
         import json
         from dictator import api as _d
         flags = _d.shaping_flags()
@@ -211,6 +252,7 @@ def main(argv) -> int:
             for k in _d.DEFAULT_SHAPING:
                 print(f"  {k:12} {'on' if flags.get(k) else 'off'}")
             print("\n  change with: dictator format lists on")
+            print("  or in one application only: dictator format in Slack lists on")
             return 0
         if rest[0] in ("on", "off"):
             flags["enabled"] = rest[0] == "on"
@@ -224,6 +266,38 @@ def main(argv) -> int:
         for k, v in flags.items():
             print(f"  {k:12} {'on' if v else 'off'}")
         return 0
+
+    if cmd == "snippet":
+        return snippet(rest)
+
+    if cmd in ("snippets", "expansions"):
+        from dictator import snippets as _sn
+        items = _sn.shared().items
+        if not items:
+            print('nothing yet. Add one with:\n'
+                  '  dictator snippet "my work email" "krish@example.com"')
+            return 0
+        for trigger, rec in sorted(items.items()):
+            body = " / ".join(rec.get("text", "").splitlines())
+            print(f'  say "{trigger}"')
+            print(f"       get {body[:100]}"
+                  + ("..." if len(body) > 100 else ""))
+            if rec.get("count"):
+                print(f"       used {rec['count']} time(s)")
+        return 0
+
+    if cmd in ("unsnippet", "forgetsnippet"):
+        trigger = " ".join(rest).strip()
+        if not trigger:
+            print('usage: dictator unsnippet "my work email"')
+            return 2
+        from dictator import snippets as _sn
+        print(f'removed "{trigger}".' if _sn.shared().remove(trigger)
+              else f'"{trigger}" was not a snippet. See: dictator snippets')
+        return 0
+
+    if cmd in ("find", "search"):
+        return find(rest)
 
     if cmd in ("language", "lang"):
         from dictator import stt
@@ -243,7 +317,7 @@ def main(argv) -> int:
         return 0
 
     if cmd in ("permissions", "permission", "perms"):
-        return permissions("--reset" in rest)
+        return permissions("--reset" in rest, "--explain" in rest)
 
     if cmd in ("delivery", "paste"):
         from dictator import paste as _p
@@ -321,6 +395,140 @@ def main(argv) -> int:
     return 2
 
 
+def snippet(rest) -> int:
+    """Teach it a phrase and the exact text that phrase stands for.
+
+    Two arguments rather than a prompt, because this is a thing people set up
+    once and then forget, and an interactive form would be one more thing to
+    learn for a command that is used five times in its life."""
+    from dictator import snippets as _sn
+    force = "--anyway" in rest or "--force" in rest
+    args = [a for a in rest if not a.startswith("--")]
+    if len(args) < 2:
+        print('usage: dictator snippet "my work email" "krish@example.com"')
+        print("\n  The trigger is what you SAY. The second half is what you")
+        print("  get, character for character. It needs at least two words,")
+        print("  because a one word trigger fires in the middle of sentences.")
+        return 2
+    trigger, text = args[0], " ".join(args[1:]) if len(args) > 2 else args[1]
+    rec = _sn.shared().add(trigger, text, force=force)
+    if not rec.get("ok"):
+        print(f'not added: {rec.get("why", "")}.')
+        # The override is only worth mentioning where it applies. Offering it
+        # against a one word trigger would be offering somebody a way to
+        # break their own dictation.
+        if "already dictated" in rec.get("why", ""):
+            print(f'\n  add it anyway with: dictator snippet '
+                  f'"{trigger}" "..." --anyway')
+        return 1
+    print(f'  say "{rec["trigger"]}"')
+    print(f'  get {rec["text"]}')
+    return 0
+
+
+def find(rest) -> int:
+    """Search everything ever dictated, by any of the three texts we keep."""
+    from dictator import mac, search
+    days, app, limit, copy = 0.0, "", 20, False
+    words = []
+    i = 0
+    while i < len(rest):
+        a = rest[i]
+        if a in ("--days", "-d") and i + 1 < len(rest):
+            try:
+                days = float(rest[i + 1])
+            except ValueError:
+                days = 0.0
+            i += 2
+        elif a in ("--app", "-a") and i + 1 < len(rest):
+            app, i = rest[i + 1], i + 2
+        elif a in ("--limit", "-n") and i + 1 < len(rest):
+            limit, i = int(rest[i + 1]), i + 2
+        elif a in ("--copy", "-c"):
+            copy, i = True, i + 1
+        else:
+            words.append(a)
+            i += 1
+    query = " ".join(words).strip()
+    if not query:
+        print('usage: dictator find the loop [--app Slack] [--days 7] [--copy]')
+        return 2
+
+    hits = search.find(query, days=days, app=app, limit=limit)
+    if not hits:
+        where = f" in {app}" if app else ""
+        when = f" in the last {days:.0f} days" if days else ""
+        print(f'nothing you dictated{where}{when} has "{query}" in it.')
+        return 1
+
+    if copy:
+        # The most recent match, not the closest one. "The thing I said about
+        # the loop" is almost always the last thing said about the loop, and a
+        # command that copies something has to be predictable about what.
+        best = max(hits, key=lambda h: h.at)
+        mac._pbcopy(best.text)
+        print(f"copied what you said at {search.stamp(best.at)}"
+              f"{' in ' + best.app if best.app else ''}:\n")
+        print(f"  {best.text}")
+        return 0
+
+    for h in hits:
+        print(f"  {search.stamp(h.at)}  {h.app or 'unknown':<14}  {h.around()}")
+    print(f"\n  {len(hits)} of what you have said."
+          " Add --copy to put the most recent one on your clipboard.")
+    return 0
+
+
+def format_in(rest) -> int:
+    """The formatting rules for one application, and how to change them.
+
+    `terminal` is a group rather than an application, because nobody wants to
+    say the same thing separately about Ghostty, iTerm and Terminal."""
+    from dictator import api as _d, profiles
+    if not rest:
+        all_rules = profiles.rules()
+        if not all_rules:
+            print("  nothing is set per application; the global rules apply")
+            print("  everywhere. Change one with:")
+            print("    dictator format in Slack lists on")
+            print(f"  groups: {', '.join(profiles.GROUPS)}")
+            return 0
+        for name in sorted(all_rules):
+            on = ", ".join(f"{k} {'on' if v else 'off'}"
+                           for k, v in sorted(all_rules[name].items()))
+            print(f"  {name:14} {on}")
+        return 0
+
+    app = rest[0]
+    args = rest[1:]
+    if not args:
+        flags = _d.shaping_flags(app)
+        over = {k: v for _, r in profiles.applying(app) for k, v in r.items()}
+        for k in _d.DEFAULT_SHAPING:
+            mark = "  (set here)" if k in over else ""
+            print(f"  {k:12} {'on' if flags.get(k) else 'off'}{mark}")
+        if not over:
+            print(f"\n  nothing is set for {app}, so the global rules apply.")
+        return 0
+
+    if args[0] in ("default", "clear", "reset"):
+        print(f"  {app}: back to the global rules."
+              if profiles.clear(app) else f"  nothing was set for {app}.")
+        return 0
+
+    if len(args) >= 2 and args[0] in _d.DEFAULT_SHAPING and args[1] in ("on", "off"):
+        profiles.set_rule(app, args[0], args[1] == "on")
+        flags = _d.shaping_flags(app)
+        for k in _d.DEFAULT_SHAPING:
+            print(f"  {k:12} {'on' if flags.get(k) else 'off'}")
+        return 0
+
+    print("usage: dictator format in APP "
+          + "|".join(_d.DEFAULT_SHAPING) + " on|off")
+    print("       dictator format in APP default")
+    return 2
+
+
 def doctor() -> int:
     """Check the things that actually break, and say which one it is.
 
@@ -329,7 +537,7 @@ def doctor() -> int:
     downloaded, an app whose signature had changed so its permissions were
     quietly revoked, and a second listener from another install that pasted
     everything twice."""
-    from dictator import always, signing, stt
+    from dictator import always, signing, stt, tcc
     bad = 0
 
     def ok(label, good, detail=""):
@@ -337,6 +545,12 @@ def doctor() -> int:
         if not good:
             bad += 1
         print(f"  {'ok ' if good else 'BAD'}  {label}" + (f"  {detail}" if detail else ""))
+
+    def unknown(label, detail=""):
+        """Not every question has an answer on every machine, and reporting
+        "cannot tell" as "fine" is how a doctor comes to pass the exact state
+        it exists to report."""
+        print(f"  ??   {label}" + (f"  {detail}" if detail else ""))
 
     print("dictator doctor\n")
 
@@ -394,6 +608,49 @@ def doctor() -> int:
         ok("app identity survives a rebuild", stable,
            "" if stable else "ad-hoc signed: macOS will forget its permissions")
 
+    # The one that cost days. A ticked checkbox in System Settings and an
+    # untrusted app are the same picture, so "is Accessibility on" is not a
+    # question anyone can answer by looking. Ask macOS which SIGNATURE the tick
+    # was written for and whether this build satisfies it.
+    #
+    # There are three answers here, not two, and flattening the third into
+    # "fine" is the bug this file already had once: a doctor that passes the
+    # state it exists to report is worse than no doctor.
+    info = tcc.state("accessibility")
+    if info["state"] == tcc.GRANTED:
+        ok("macOS trusts this build for Accessibility", True,
+           "the grant matches the signature it is running under")
+    elif info["state"] == tcc.UNREADABLE:
+        w = tcc.waiting()
+        if w and w.get("trusted") is False:
+            ok("macOS trusts this build for Accessibility", False,
+               "the listener says it is NOT trusted. Run: dictator permissions")
+        else:
+            unknown("macOS trusts this build for Accessibility",
+                    "cannot read what macOS remembers (needs Full Disk "
+                    "Access). Run: dictator permissions")
+    elif info["state"] == tcc.NO_APP:
+        pass                          # already reported as a missing bundle
+    else:
+        ok("macOS trusts this build for Accessibility", False,
+           tcc.summary(info) + ". Run: dictator permissions")
+    if info["state"] == tcc.STALE:
+        # Name the signature on both sides. This is the difference the user
+        # cannot see and the only evidence that the tick is the wrong tick.
+        print(f"       macOS remembers:  {info['held_by']}")
+        print(f"       this build is:    {info['wanted']}")
+
+    # What the app itself last saw. This is the only signal that survives on a
+    # machine where the databases cannot be read, and it is the exact state
+    # issue #2 is about: a listener sitting in a loop, silent, forever.
+    w = tcc.waiting()
+    if w.get("trusted") is False:
+        import time as _time
+        mins = max(0, int((_time.time() - float(w.get("at") or 0)) / 60))
+        ok("the listener is past the permission and running", False,
+           f"it has been waiting for Accessibility for {mins} min. "
+           "Run: dictator permissions")
+
     on_path = shutil.which("dictator")
     ok("the dictator command is on your PATH", bool(on_path),
        "" if on_path else "run ./install.sh again, or call it by full path")
@@ -431,22 +688,40 @@ def doctor() -> int:
     return 0 if not bad else 1
 
 
-def permissions(reset: bool = False) -> int:
-    """Walk the user to the two toggles, and notice the moment they flip.
+def permissions(reset: bool = False, explain: bool = False) -> int:
+    """Say which way this is broken, then walk the user out of it.
 
-    Every part of this exists because of something that actually goes wrong.
-    The app can ask for Accessibility and still not appear in the list, and
-    then there is nothing to switch on and no way to make it appear, so this
-    also reveals the bundle in Finder for the plus button. And there is no
-    notification when a permission changes, so the only way to know is to look
-    again, once a second, which is what turns "now restart it" into nothing at
-    all to do."""
+    Every part of this exists because of something that actually goes wrong,
+    and the worst of them is the one that looks like nothing: a ticked
+    checkbox next to Dictator with an app macOS does not trust behind it. The
+    tick is drawn from a TCC row; trust is decided by a code requirement
+    stored next to it. Change the app's signature and the row survives with
+    the old requirement, so the switch stays on, the app stays untrusted, and
+    because a row already exists macOS never prompts again. Nothing the user
+    can do in that pane fixes it. The entry has to be removed.
+
+    So the first job here is not to open a pane, it is to work out which of
+    "never granted" and "granted to a signature that is no longer ours" this
+    is, because they need opposite instructions."""
     import time as _t
-    from dictator import always
-
-    from dictator import signing
+    from dictator import always, signing, tcc
 
     app = always.APP
+
+    # --explain is what the app bundle calls from inside its waiting loop, so
+    # it must be fast, must print rather than prompt, and above all must not
+    # BUILD anything: a rebuild changes the signature, which is the thing that
+    # caused this state in the first place.
+    if explain:
+        print(tcc.report(app=app))
+        w = tcc.waiting()
+        if w.get("trusted") is False:
+            mins = max(0, int((_t.time() - float(w.get("at") or 0)) / 60))
+            print(f"\nThe listener has been waiting {mins} minute(s). It "
+                  "picks the permission\nup on its own, so there is nothing "
+                  "to restart once you have done the above.")
+        return 0 if tcc.state("accessibility", app)["state"] == tcc.GRANTED else 1
+
     if not app.exists():
         print("The app is not built yet. Building it now.")
         if not always.build_app():
@@ -467,55 +742,44 @@ def permissions(reset: bool = False) -> int:
             return 1
         # A new identity means macOS has never seen this app before, so
         # whatever it remembered about the old one is in the way.
-        for service in ("Accessibility", "Microphone", "ListenEvent"):
-            subprocess.run(["tccutil", "reset", service, "com.dictator.dictation"],
-                           capture_output=True)
-        subprocess.run([str(always.REPO / "bin" / "dictator"), "off"],
-                       capture_output=True)
-        subprocess.run([str(always.REPO / "bin" / "dictator"), "on"],
-                       capture_output=True)
+        _forget(tcc.state("accessibility", app), everything=True)
+        _restart(always)
         print("Rebuilt and restarted.\n")
-    elif not _has_listener() and always.running():
-        # The identity is good and the app is up, yet it is not listening. So
-        # whatever macOS remembers about this bundle was granted to a DIFFERENT
-        # identity, which is exactly what happens the first time an ad-hoc app
-        # gets a real certificate: the old entry is still in the list, still
-        # ticked, next to an app macOS no longer recognises. Nothing the user
-        # can do in that pane fixes it, because the tick they can see is not
-        # the tick that counts.
-        print("The app is running but not listening, which means the")
-        print("permission macOS remembers was granted to an older version")
-        print("of it. Clearing that so it can ask again.\n")
-        for service in ("Accessibility", "Microphone", "ListenEvent"):
-            subprocess.run(["tccutil", "reset", service, "com.dictator.dictation"],
-                           capture_output=True)
-        subprocess.run([str(always.REPO / "bin" / "dictator"), "off"],
-                       capture_output=True)
-        subprocess.run([str(always.REPO / "bin" / "dictator"), "on"],
-                       capture_output=True)
-        import time as _t2
-        _t2.sleep(3)
 
-    if reset:
-        # Clears a half-granted state where the box is ticked next to an app
-        # macOS no longer recognises. The prompt then fires fresh.
-        for service in ("Accessibility", "Microphone", "ListenEvent"):
-            subprocess.run(["tccutil", "reset", service, "com.dictator.dictation"],
-                           capture_output=True)
-        print("Cleared what macOS remembered about Dictator.\n")
-
+    info = tcc.state("accessibility", app)
     print(f"The app asking for permission is:\n  {app}\n")
-    print("Opening Privacy & Security > Accessibility.")
-    print("If Dictator is in the list, switch it on.")
-    print("If it is NOT in the list, click the + button and choose the app")
-    print("from the Finder window that just opened.\n")
+    print(tcc.report(app=app))
+    print()
 
+    if info["state"] == tcc.GRANTED and not _has_listener():
+        # The grant is genuinely ours and the key still does nothing, which
+        # means the listener, not the permission. Restarting is cheap and is
+        # the only thing left.
+        print("The permission is fine, so this is the listener. Restarting "
+              "it.\n")
+        _restart(always)
+        _t.sleep(3)
+
+    if reset or (info["state"] == tcc.STALE and _asked_to_clear()):
+        # The command-line equivalent of selecting the row and pressing the
+        # minus button. Only the services that are actually stale: an earlier
+        # version cleared Microphone as well, on a guess, which threw away a
+        # working grant every time it ran.
+        cleared = _forget(info)
+        if cleared:
+            print(f"Removed what macOS remembered about Dictator for: "
+                  f"{', '.join(cleared)}.\n")
+        _restart(always)
+        print("Restarted, so it can ask again.\n")
+
+    print("Opening Privacy & Security > Accessibility, and showing you the")
+    print("app in the Finder in case you need the plus button.\n")
     subprocess.run(["open", "-R", str(app)], capture_output=True)
     subprocess.run(["open",
                     "x-apple.systempreferences:com.apple.preference.security"
                     "?Privacy_Accessibility"], capture_output=True)
 
-    print("Watching. This updates itself the moment you flip the toggle.")
+    print("Watching. This updates itself the moment it starts working.")
     print("Ctrl-C to stop waiting.\n")
     was = None
     try:
@@ -533,10 +797,73 @@ def permissions(reset: bool = False) -> int:
             _t.sleep(1)
     except KeyboardInterrupt:
         print()
-    print("\nStill not listening. Two things worth checking:")
-    print("  1. The toggle next to Dictator is actually on, not just present.")
-    print("  2. dictator doctor")
+    after = tcc.state("accessibility", app)
+    print("\nStill not listening.")
+    print(f"  {tcc.summary(after)}")
+    if after["state"] == tcc.STALE:
+        print("  The tick you can see is still the old one. Remove the row "
+              "with the\n  minus button, or run: dictator permissions --reset")
+    else:
+        print("  Next: dictator doctor")
     return 1
+
+
+def _forget(info: dict, everything: bool = False) -> list:
+    """Remove the TCC rows macOS is holding for us, and say which.
+
+    This is what the minus button does, and `tccutil reset` is the only way to
+    do it without the user's hands. It is deliberately narrow: clearing a
+    permission the user has granted and that WORKS is the most expensive thing
+    this program can do, so only a service we have positively established is
+    stale, denied, or unreadable-and-stuck gets cleared."""
+    from dictator import tcc
+    names = {"accessibility": "Accessibility",
+             "input monitoring": "ListenEvent",
+             "microphone": "Microphone"}
+    if everything:
+        want = list(names.values())
+    else:
+        want = []
+        for service, flag in names.items():
+            s = tcc.state(service)["state"] if service != info["service"] \
+                else info["state"]
+            if s in (tcc.STALE, tcc.DENIED):
+                want.append(flag)
+        if not want:
+            # Unreadable databases, so we cannot prove which one is wrong.
+            # Accessibility is the one that traps people and the one the user
+            # asked about, so clear that and leave the microphone alone.
+            want = ["Accessibility"]
+    done = []
+    for flag in want:
+        r = subprocess.run(["tccutil", "reset", flag, "com.dictator.dictation"],
+                           capture_output=True, text=True)
+        if r.returncode == 0:
+            done.append(flag)
+    return done
+
+
+def _asked_to_clear() -> bool:
+    """A stale entry cannot be fixed from the pane, so offer the one fix.
+
+    Asked rather than done, because it removes something the user granted and
+    they should see that sentence before it happens. A pipe with no terminal
+    on it answers no, so the app bundle calling this in the background never
+    clears anything behind somebody's back."""
+    if not sys.stdin.isatty():
+        return False
+    try:
+        return input("Remove that stale entry now and let the app ask "
+                     "again? [y/N] ").strip().lower().startswith("y")
+    except (EOFError, KeyboardInterrupt):
+        print()
+        return False
+
+
+def _restart(always) -> None:
+    cli = str(always.REPO / "bin" / "dictator")
+    subprocess.run([cli, "off"], capture_output=True)
+    subprocess.run([cli, "on"], capture_output=True)
 
 
 def _has_listener() -> bool:

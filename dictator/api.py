@@ -73,19 +73,32 @@ def capturing() -> bool:
     return CAPTURE_FLAG.exists()
 
 
-def shaping_flags() -> dict:
+def shaping_flags(app: str = "") -> dict:
     """Which shaping rules are on. The conservative ones are the defaults.
 
     Kept in a file rather than in code because the user has to be able to turn
     this off without editing anything, which is the single most common
-    complaint about every tool that reshapes dictated text."""
+    complaint about every tool that reshapes dictated text.
+
+    `app` applies whatever the user set for that application on top. A spoken
+    list belongs in Slack and is four lines with numbers in front of them at a
+    shell prompt, so the same rule cannot be right in both places. See
+    profiles.py. Passing nothing gives the global rules, which is what a
+    caller transcribing a file rather than a hold wants."""
     flags = dict(DEFAULT_SHAPING)
     try:
         import json
         flags.update(json.loads(FORMAT_FILE.read_text()))
     except Exception:
         pass
-    return {k: bool(v) for k, v in flags.items() if k in DEFAULT_SHAPING}
+    flags = {k: bool(v) for k, v in flags.items() if k in DEFAULT_SHAPING}
+    if app:
+        try:
+            from . import profiles
+            flags = profiles.overlay(flags, app)
+        except Exception as e:
+            core.log(f"dictator: per-application formatting failed: {e}")
+    return flags
 
 
 class Dictator:
@@ -97,11 +110,18 @@ class Dictator:
     hundred archived files wants neither."""
 
     def __init__(self, learn: bool = True, remember: bool = True,
-                 shaping: "dict | None" = None, keep_audio: bool = True):
+                 shaping: "dict | None" = None, keep_audio: bool = True,
+                 expand: bool = True):
         self.learning = learn
         self.remember = remember
         self.shaping = shaping
         self.keep_audio = keep_audio
+        # Whether a spoken phrase may stand for a fixed piece of text. On,
+        # because the user had to create every one of them by hand and a
+        # store with nothing in it is already the off switch. Off is for a
+        # caller transcribing somebody ELSE's audio, where this user's
+        # shorthand has no business firing.
+        self.expanding = expand
         self._last = None       # (row id, text, app) for correction watching
         # What the most recent transcribe() learned from a correction. Worth
         # surfacing: a tool that silently changes how it hears you is alarming,
@@ -137,7 +157,7 @@ class Dictator:
             said.took = time.time() - started
             return said
         said.heard = self.romanise(said.heard)
-        said.text = self.polish(said.heard) if said.heard else ""
+        said.text = self.polish(said.heard, app=app) if said.heard else ""
         if said.text and self.remember:
             said.row = self.record(said, app)
             self._last = (said.row, said.text, app)
@@ -157,8 +177,16 @@ class Dictator:
             return roman.to_latin(text)
         return text
 
-    def polish(self, text: str) -> str:
-        """The words this user has taught it, then punctuation and casing."""
+    def polish(self, text: str, app: str = "") -> str:
+        """The words this user has taught it, then punctuation and casing,
+        then the phrases they have given a fixed text to.
+
+        The order is not arbitrary. The vocabulary runs first because a
+        snippet trigger the recogniser mangled has to be put right before
+        anything can match it. Snippets run LAST, after shaping, because the
+        text they insert is literal: an email address that went through the
+        sentence capitaliser would come out with a capital letter the user
+        never typed."""
         if not text:
             return text
         try:
@@ -166,9 +194,13 @@ class Dictator:
         except Exception as e:
             core.log(f"dictator: vocabulary failed: {e}")
         try:
-            text = _shape.shape(text, **(self.shaping or shaping_flags()))
+            text = _shape.shape(text,
+                                **(self.shaping or shaping_flags(app)))
         except Exception as e:
             core.log(f"dictator: shaping failed: {e}")
+        if self.expanding:
+            from . import snippets
+            text = snippets.expand(text)
         return text
 
     def record(self, said: Transcript, app: str = "") -> int:
@@ -190,16 +222,31 @@ class Dictator:
             return []
         row_id, shown, last_app = self._last
         self._last = None
-        if not row_id or (app and last_app and app != last_app):
+        if not row_id:
+            return []
+        if app and last_app and app != last_app:
+            history.saw(row_id, "moved")
             return []
         try:
             from . import readback
             seen = readback.field()
             if not seen.get("ok") or not isinstance(seen.get("value"), str):
+                history.saw(row_id, "unreadable")
+                core.log("dictator: could not read the field back: "
+                         + str(seen.get("why", ""))[:120])
                 return []
-            kept = _learn.locate(shown, seen["value"])
+            field = seen["value"]
+            kept = _learn.locate(shown, field)
             if not kept:
+                # locate() answers "" for two opposite reasons, so ask the
+                # cheap question itself rather than inferring. Recording them
+                # apart is the whole point: one says the loop is working and
+                # you had nothing to correct, the other says it never saw a
+                # thing and has been learning from nothing.
+                history.saw(row_id, "same" if (shown or "").strip() in field
+                            else "gone")
                 return []
+            history.saw(row_id, "edited")
             history.kept(row_id, kept)
             return _learn.observe(shown, kept)
         except Exception as e:
