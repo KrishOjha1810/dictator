@@ -71,8 +71,15 @@ if args[1] == "--check" {
     exit(0)
 }
 
-let dir = URL(fileURLWithPath: args[1], isDirectory: true)
-let maxSecs = args.count > 2 ? (Double(args[2]) ?? 14400.0) : 14400.0
+// --selftest writes a known tone through exactly the conversion the capture
+// feeds, and needs no permission at all. That matters more here than it
+// usually would: system audio is behind a grant macOS only gives by hand, so
+// without this the resampling, the downmix and the WAV writing would ship
+// having never run once.
+let selftest = args[1] == "--selftest"
+let dir = URL(fileURLWithPath: args[selftest ? 2 : 1], isDirectory: true)
+let maxSecs = args.count > (selftest ? 3 : 2)
+    ? (Double(args[selftest ? 3 : 2]) ?? 14400.0) : 14400.0
 try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
 
 // Everything this says goes to a file beside the recording as well as to
@@ -151,7 +158,16 @@ final class Track {
     }
 
     func append(_ sb: CMSampleBuffer) {
-        guard let input = Track.pcm(from: sb), input.frameLength > 0 else { return }
+        guard let input = Track.pcm(from: sb) else { return }
+        append(input)
+    }
+
+    /// The half that can be tested without a permission, and is: see --selftest
+    /// and tests/test_meeting.py. Capturing system audio needs a grant macOS
+    /// only gives by hand, so the conversion underneath it would otherwise
+    /// have been shipped having never converted anything.
+    func append(_ input: AVAudioPCMBuffer) {
+        guard input.frameLength > 0 else { return }
         lock.lock()
         defer { lock.unlock() }
         guard let file else { return }
@@ -209,6 +225,56 @@ final class Track {
         }
         return min(1.0, sqrt(m))
     }
+}
+
+// ---- proving the conversion, with no permission involved ------------------
+
+/// Write a known tone through both tracks in the exact shape ScreenCaptureKit
+/// delivers, and report what came out.
+///
+/// The capture itself cannot be exercised without a grant macOS only gives by
+/// hand, so this exercises everything downstream of it: 48kHz stereo float in,
+/// 16kHz mono 16-bit out, resampled and downmixed by the same code path the
+/// real sample buffers take. A conversion that has never converted anything is
+/// the kind of thing that ships broken and is blamed on the capture.
+func selfTest() -> Never {
+    let seconds = 2.0
+    let rate = 48000.0
+    guard let inFmt = AVAudioFormat(commonFormat: .pcmFormatFloat32,
+                                    sampleRate: rate, channels: 2,
+                                    interleaved: false),
+          let buf = AVAudioPCMBuffer(pcmFormat: inFmt,
+                                     frameCapacity: AVAudioFrameCount(rate * seconds))
+    else { fail("selftest: could not make a buffer") }
+    buf.frameLength = buf.frameCapacity
+    // 440Hz at half scale, which is well under Nyquist at 16kHz so resampling
+    // must keep it. A tone above 8kHz would be lost legitimately and would
+    // make this test lie in the comfortable direction.
+    for ch in 0..<2 {
+        guard let p = buf.floatChannelData?[ch] else { continue }
+        for i in 0..<Int(buf.frameLength) {
+            p[i] = 0.5 * sinf(Float(2.0 * Double.pi * 440.0 * Double(i) / rate))
+        }
+    }
+    do {
+        them = try Track("them", at: dir.appendingPathComponent("them.wav"))
+        me = try Track("me", at: dir.appendingPathComponent("me.wav"))
+    } catch {
+        fail("selftest: could not open the files: \(error.localizedDescription)")
+    }
+    them.append(buf)
+    me.append(buf)
+    let levels = [Double(them.level), Double(me.level)]
+    let secs = [them.seconds, me.seconds]
+    them.close()
+    me.close()
+    let out: [String: Any] = ["them_seconds": secs[0], "me_seconds": secs[1],
+                              "them_level": levels[0], "me_level": levels[1]]
+    if let d = try? JSONSerialization.data(withJSONObject: out) {
+        try? d.write(to: dir.appendingPathComponent("selftest.json"),
+                     options: .atomic)
+    }
+    exit(0)
 }
 
 // ---- permissions, asked for by name and never assumed --------------------
@@ -279,6 +345,12 @@ func openTracks() {
     } catch {
         fail("could not open the recording files: \(error.localizedDescription)")
     }
+}
+
+// Before anything asks for a permission, because the whole point of the self
+// test is that it needs none.
+if selftest {
+    selfTest()
 }
 
 let started = Date()
