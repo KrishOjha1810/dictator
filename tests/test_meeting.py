@@ -543,3 +543,53 @@ def test_forgetting_the_meeting_being_recorded_stops_it_first(monkeypatch):
         except Exception:
             pass
         proc.wait(timeout=5)
+
+
+def test_a_meeting_can_be_transcribed_after_the_fact(monkeypatch, capsys):
+    """Anything that interrupts the transcribing half, a Ctrl-C, a missing
+    whisper, a full disk, used to strand the recording as "audio only" with no
+    command anywhere that would ever process it. By that point the audio exists
+    and the people in the room have already agreed to it."""
+    import importlib.machinery
+    import importlib.util
+    mid = "20260101-090000"
+    meeting.save(mid, {"id": mid, "started": time.time(), "seconds": 60})
+    tone(meeting._dir(mid) / "them.wav", [(1, 0.5)])
+
+    done = []
+    monkeypatch.setattr(meeting, "chunks_expected", lambda m: 1)
+    monkeypatch.setattr(meeting, "transcribe",
+                        lambda m, p=None: done.append(m))
+    monkeypatch.setattr(meeting, "notes", lambda m: meeting.load(m))
+    monkeypatch.setattr(meeting, "render", lambda r, **k: "notes here\n")
+
+    loader = importlib.machinery.SourceFileLoader("dcli", "bin/dictator")
+    spec = importlib.util.spec_from_loader("dcli", loader)
+    cli = importlib.util.module_from_spec(spec)
+    loader.exec_module(cli)
+    assert cli.meeting(["transcribe"]) == 0
+    assert done == [mid]
+
+
+def test_a_failure_while_transcribing_says_how_to_pick_it_up(monkeypatch,
+                                                             capsys):
+    import importlib.machinery
+    import importlib.util
+    mid = "20260101-090000"
+    meeting.save(mid, {"id": mid, "started": time.time(), "seconds": 60})
+    tone(meeting._dir(mid) / "them.wav", [(1, 0.5)])
+
+    def boom(*a, **k):
+        raise RuntimeError("no room on the disk")
+
+    monkeypatch.setattr(meeting, "chunks_expected", lambda m: 1)
+    monkeypatch.setattr(meeting, "transcribe", boom)
+
+    loader = importlib.machinery.SourceFileLoader("dcli", "bin/dictator")
+    spec = importlib.util.spec_from_loader("dcli", loader)
+    cli = importlib.util.module_from_spec(spec)
+    loader.exec_module(cli)
+    assert cli.meeting(["transcribe"]) == 1
+    out = capsys.readouterr().out
+    assert "recording is safe" in out
+    assert f"dictator meeting transcribe {mid}" in out

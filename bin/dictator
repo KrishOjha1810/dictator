@@ -489,6 +489,7 @@ MEETING_USAGE = """dictator meeting: record a meeting, and get notes afterwards.
 
   dictator meeting start [title]   start recording, now, because you said so
   dictator meeting stop            stop, transcribe it here, write the notes
+  dictator meeting transcribe [id]  transcribe one that was never finished
   dictator meeting list            everything recorded, with its size
   dictator meeting show [id]       the notes for one   (--full for every word)
   dictator meeting forget id|all   delete a recording, and mean it
@@ -558,14 +559,28 @@ def meeting(rest) -> int:
         print("  Stop with: dictator meeting stop")
         return 0
 
-    if what == "stop":
-        got = m.stop()
-        if got.get("problem"):
-            print(got.get("say", ""))
-            return 1
-        mid = got["id"]
-        mins = got.get("seconds", 0) / 60.0
-        print(f"  Stopped. {mins:.1f} minutes recorded.")
+    if what in ("stop", "transcribe"):
+        if what == "stop":
+            got = m.stop()
+            if got.get("problem"):
+                print(got.get("say", ""))
+                return 1
+            mid = got["id"]
+            mins = got.get("seconds", 0) / 60.0
+            print(f"  Stopped. {mins:.1f} minutes recorded.")
+        else:
+            # The audio is already recorded and the consent conversation has
+            # already been had. Anything that interrupted the transcribing
+            # half, a Ctrl-C, a missing whisper, a full disk, used to strand
+            # the recording as "audio only" with no command anywhere that
+            # would ever process it.
+            wanted = next((a for a in args if not a.startswith("-")), "")
+            rows = m.ids()
+            mid = wanted if wanted in rows else (rows[0] if rows else "")
+            if not mid:
+                print("No meetings recorded.  (dictator meeting start)")
+                return 1
+            print(f"  {mid}")
         n = m.chunks_expected(mid)
         # Said BEFORE the wait, not after it. Transcribing an hour of meeting
         # takes minutes, and a command that sits there silently reads as a
@@ -584,14 +599,27 @@ def meeting(rest) -> int:
                   f"{int(at) // 60:02d}:{int(at) % 60:02d})   ",
                   end="", file=sys.stderr, flush=True)
 
-        m.transcribe(mid, progress)
-        print(f"\r  transcribed in {_t.time() - t0:.0f}s"
-              + " " * 30, file=sys.stderr, flush=True)
-        from dictator import recap as _recap
-        if _recap.available():
-            print("  Writing the notes on this machine, a few seconds...",
-                  file=sys.stderr, flush=True)
-        rec = m.notes(mid)
+        # The recording survives whatever happens to the transcribing. Saying
+        # how to pick it up again matters more than a traceback, because by
+        # this point the audio exists and the people in the room have already
+        # agreed to it.
+        try:
+            m.transcribe(mid, progress)
+            print(f"\r  transcribed in {_t.time() - t0:.0f}s"
+                  + " " * 30, file=sys.stderr, flush=True)
+            from dictator import recap as _recap
+            if _recap.available():
+                print("  Writing the notes on this machine, a few seconds...",
+                      file=sys.stderr, flush=True)
+            rec = m.notes(mid)
+        except KeyboardInterrupt:
+            print(f"\n  Stopped. The recording is safe. Pick it up with:"
+                  f"\n    dictator meeting transcribe {mid}")
+            return 1
+        except Exception as e:
+            print(f"\n  The recording is safe, but transcribing it failed: {e}"
+                  f"\n  Try again with:  dictator meeting transcribe {mid}")
+            return 1
         print()
         print(m.render(rec), end="")
         return 0
