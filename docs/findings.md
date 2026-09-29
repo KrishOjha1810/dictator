@@ -781,3 +781,283 @@ picks us if they mix Hindi and English inside one sentence and want Latin
 script out, or if they refuse to send audio anywhere. They pick Spokenly if
 they want it working in five minutes with no terminal, or on Windows, or on a
 phone.
+
+## Wispr Flow, the market leader, and what of it can exist offline
+
+Researched September 2026 from their own site, help centre, changelog, App
+Store and Microsoft Store listings, and their model-hosting vendor's write-up.
+Everything quoted below is theirs, verbatim, so that nothing here rests on a
+reviewer's paraphrase.
+
+### The one sentence that decides the whole comparison
+
+From wisprflow.ai/data-controls:
+
+> Transcription always occurs on the cloud. This is the best way for us to
+> provide accurate, low latency transcription.
+
+There is no offline mode, no on-device model, and a dedicated support article
+saying you cannot even upload an audio file. Their security FAQ says the same
+thing in different words. So the honest way to read their feature list is not
+"what do they have that we do not", it is "which of these could exist at all
+without a server", and the answer is: very few of them, and the few that can
+are the ones we had not built.
+
+Two smaller facts worth knowing before quoting their privacy page at anyone:
+model improvement (training on your audio, transcripts and edits) **defaults
+ON for Free and Pro**, and **signing out resets cloud storage to enabled**.
+
+### The inventory, with the only column that matters
+
+| Theirs | What it is | Can it be local | Ours |
+|---|---|---|---|
+| Push to talk, hands free | hold a key, or double tap to latch | yes | have both |
+| Auto Edits / Backtrack | LLM removes false starts and self-corrections | **no** | filler removal only, deterministic |
+| Auto Cleanup, 4 levels | LLM rewrites for "clarity and conciseness" | **no** | refused, see shape.py |
+| Smart Formatting | punctuation, capitals, lists | yes, and ours is | have |
+| Styles | Formal, Casual, very casual, Excited, per app category | **yes, this is just which caps and punctuation rules are on** | BUILT, see below |
+| Transforms | rewrite selected text by prompt, 9 custom | **no** | refused |
+| Command Mode | speak an instruction, it edits the text | **no**, and paid tier only | refused |
+| Context Awareness | screen text, selected text, code symbols, **screenshots**, uploaded with your audio | capture yes, use no | refused |
+| Dictionary | manual words, plus auto-add on spelling correction | yes | have, and ours learns by sound |
+| Snippets | say a phrase, get fixed text | **yes, entirely** | BUILT |
+| Flow Bar | floating status bubble, dockable | yes | orb, smaller |
+| Scratchpad | tabbed local rich text notes | yes | not built, not wanted |
+| History | list by date, tap to copy, audio playback 14 days | yes | have list; **search BUILT** |
+| Usage dashboard | wpm, totals, heatmap, streaks, leaderboard | yes | not built, see below |
+| Whisper mode | dictating quietly | model property | nothing to build |
+| 100+ languages | one language per dictation | model property | see the next paragraph |
+| Notetaker | meetings, system audio, summaries, MCP | **no** | issue #5 |
+| Mobile, teams, SSO, SCIM | | n/a | issue #9 |
+
+### Their multilingual claim is weaker than ours, in writing
+
+Their own docs: **"Flow detects one language per dictation, not per word."**
+With Chinese and English both selected, "English words can appear in Chinese
+characters or vice versa".
+
+They do have a Hinglish model, and it is a serious bet rather than a checkbox:
+they employ linguistics PhDs on it, they say India is their second market by
+revenue, and they published the same conclusion we reached independently, that
+a Hinglish speaker wants Latin script and not Devanagari. An Indian reviewer's
+six month hands-on calls the accuracy "surprisingly good". So this is not a
+competitor to be dismissive about on the one axis this project cares about.
+
+But two lines in their own help centre describe the shape of the gap exactly:
+
+> Select Hinglish, not Hindi or English. Auto-detect never produces Hinglish,
+> so select it explicitly.
+
+And selecting Hinglish removes Hindi as an option, because the two conflict.
+So for them Hinglish is a **third discrete mode the user picks by hand**, it is
+invisible to their own language detection, and a person who dictates Hinglish
+into one field and plain English into the next is changing a setting between
+them. That is the second competitor in a row (after Spokenly's Modes) whose
+architecture puts the language decision in front of the user, and it is the
+same argument in both cases: somebody who mixes two languages inside one
+sentence cannot choose in advance. Automatic routing is not a convenience
+here, it is the feature.
+
+### "Styles" is a marketing word for a boolean
+
+Their Styles feature reads as tone control and is not. Reading the actual
+definitions: Formal is "caps and punctuation everywhere", Casual is "caps,
+reduced punctuation", very casual is "no caps, minimal punctuation". That is
+two flags, chosen by an app category their client already knows. Everything
+above the flags (which words to use, how to sound) is the Auto Cleanup LLM,
+which is a different feature with a different switch.
+
+So the buildable half is per-application formatting flags, and it is
+deterministic, and it is `profiles.py`. The rule that makes it safe is that an
+override may only move a flag the caller already had: these flags are passed
+to `shape()` as keyword arguments, so a stray key in a hand-edited file would
+not be a formatting mistake, it would be a `TypeError` inside the delivery
+thread, and the only symptom the user would see is a hold that produced
+nothing.
+
+Terminals are one group rather than an entry per emulator, and the membership
+test is `paste.py`'s, which already had to know what a terminal was. Two lists
+of terminal emulators in one codebase drift the first time somebody installs
+a new one.
+
+### Snippets are the clearest thing they charge for that needs no server
+
+Voice triggered text expansion, on every tier including free: trigger up to 60
+characters, expansion up to 4000. There is no part of this that needs a model,
+and we did not have it.
+
+It is also the single most requested thing in the user chatter, in a way that
+crosses products. People end up building a replacement table by hand and then
+talk about it as though it were a hack rather than the feature:
+
+- a Wispr Flow user keeping a dictionary rule mapping "asian" to "agent",
+  which is a phonetic correction done with a string replacement
+- somebody listing what the free alternatives lack: "dictionary, shortcuts
+  (say 'linkedin link' and it pastes your actual link)"
+- Superwhisper shipping the same thing under two names, Vocabulary (hints fed
+  to the model) and Replacements (deterministic, no AI), and leading their
+  documentation of it with symbols: say "at sign", get `@`
+- VoiceInk shipping "Smart Replace" alongside its dictionary
+
+Three of the four are deterministic substitution, not recognition. Which is
+the point: for a term the model cannot be taught, a table is not a fallback,
+it is the correct mechanism.
+
+Ours differs in one place that matters. Theirs blocks duplicate triggers.
+Ours refuses a trigger **you have already dictated**, with the count, checked
+against your own history at the moment you create it:
+
+```
+$ dictator snippet "check the loop" "https://example.com/loop"
+not added: you have already dictated that phrase 7 times, so it would start
+replacing things you meant to say.
+```
+
+This is the same move `vocab.admit` makes with `spoken()`, and for the same
+reason. A guard the user meets while making the mistake can explain itself; a
+guard that fires silently three weeks later cannot. `--anyway` overrides it.
+
+The other rule is a two word minimum. One spoken word is something a person
+says by accident a hundred times a day, and every text expander horror story
+is a one word trigger.
+
+### Searching the history: measured, and no index is needed
+
+`dictator find` scans every row in Python rather than keeping a full text
+index. Measured on this machine with a synthetic history of 20,004 rows, which
+is roughly six months of heavy dictation:
+
+| | |
+|---|---|
+| SQLite fetch of all 20,004 rows | 67 ms |
+| the whole of `find()`, matching query | 117 to 152 ms |
+| the whole of `find()`, matching nothing | 114 ms |
+
+An index would save at most a tenth of a second on a command a person runs a
+few times a week, and would cost a second copy of the text and a way for it to
+fall out of step with the rows. Revisit at roughly 200k rows.
+
+It searches `heard`, `shown` and `kept`, not just what landed. Searching only
+the final text fails precisely when the recogniser did, which is the case
+where the history is the only record of what actually happened.
+
+### What was deliberately not built, and why
+
+- **Auto Cleanup, Transforms, Command Mode, Backtrack.** All four are an LLM
+  rewriting the user's words. Three of them need a cloud model. The fourth,
+  Backtrack, has a deterministic core ("scratch that" as a spoken command,
+  like "new paragraph") and is the only one worth revisiting; the rest of it,
+  inferring a self-correction from "actually", is a guess about meaning and
+  shape.py exists to refuse those.
+- **Context Awareness.** Their own privacy page lists screenshots, on-screen
+  text and conversation history among what is captured and says it "can
+  accompany your dictation". On this product it would need a new macOS
+  permission and would break the one promise being made.
+- **The usage dashboard.** Words dictated, streaks, a heatmap and a team
+  leaderboard. `history.stats()` already computes the honest half of it and
+  nothing asks for it, which is the correct amount of demand. A streak counter
+  is a retention mechanic for a subscription, and this is not one.
+- **Scratchpad.** A note editor inside a dictation tool, for a user who
+  already has an editor open.
+
+### What the complaints say to build next, which is not in this change
+
+Reading what people say rather than what is marketed, the ranking is not the
+one the feature list suggests.
+
+1. **Streaming.** The sharpest and most repeated complaint about the market
+   leader is not accuracy, it is that it "does the entire transcription in one
+   pass after you finish speaking". We have the same shape and issue #7 is
+   already about it. One user reports moving to a LOCAL Whisper Large and
+   getting lower latency than the cloud product, which is worth knowing: the
+   round trip is not free and local is not automatically slower.
+2. **Never losing what was said.** Stated repeatedly as the thing that decides
+   whether a tool is trusted. `paste.py` already leaves the whole text on the
+   clipboard when a delivery fails, which is this, and it is worth keeping
+   that way.
+3. **Minimal context, opt in.** Several people say in almost the same words
+   that a tool needing screenshots to work is one they stop using everywhere.
+
+Also worth recording because it will come up: there is a detailed independent
+teardown of the market leader's client (wensenwu.com, September 2026) claiming
+a system wide keystroke tap, accessibility tree scraping of the focused app,
+a 694MB local database holding raw audio and captured field contents, and
+hourly uploads that continue with usage sharing switched off. It is one
+person's analysis of their own machine and is not verified here, so it is a
+thing to be aware of rather than a thing to repeat as fact. The defensible
+version of the same claim, and the only one worth making, is about this
+product rather than theirs: no keystroke logging, no accessibility scraping
+beyond the one field we just pasted into, no analytics, and no upload of
+anything, ever.
+
+
+---
+
+## The Apex benchmark, and the mistake in the first run of it
+
+Run on 20 real held recordings from `~/.dictator/corpus`, using `tools/compare.py`
+and `tools/nonwords.py`, against `Marquestra/Whisper-Hindi2Hinglish-Apex-GGML`
+q8_0. No references were written by hand: the score is the share of tokens in
+neither an English nor a romanised Hindi dictionary, and the word count sits
+next to it because a model that says less scores well by saying less.
+
+| configuration | turbo gibberish | turbo secs | Apex gibberish | Apex secs |
+|---|---|---|---|---|
+| A, trimmed encoder, vocabulary prompt, `-l auto` | 1.30% | 5.1 | **3.56%** | 10.5 |
+| B, full encoder, vocabulary prompt, `-l auto` | 1.49% | 5.7 | **1.64%** | 6.7 |
+| C, full encoder, no prompt, `-l auto` | 1.68% | 7.3 | 2.03% | 6.6 |
+| D, full encoder, no prompt, `-l en` | | | 2.03% | **4.1** |
+
+### The first run was measuring our own setting, not the model
+
+Configuration A is what the product ships, and under it Apex looks far worse
+than turbo: 3.56% against 1.30%, at double the latency, with output like
+`iririririririr` and `semesnirkkorpray`. The obvious conclusion is that Apex is
+bad.
+
+It is the wrong conclusion. `audio_ctx_for()` shrinks the whisper encoder by
+duration, and that sizing was tuned against turbo. This document already
+records that **undershooting `audio_ctx` causes decoder repetition loops**, and
+`iririririr` is exactly that failure. Running the same audio through the same
+model with the full encoder takes Apex from 3.56% to **1.64%**, level with
+turbo, while producing **more** words (487 against 469), which rules out the
+"scored well by saying less" explanation.
+
+So a benchmark that leaves a per-model speed setting on is not comparing
+models. `tools/compare.py` now has `--full-ctx` and `--no-prompt` for exactly
+this reason. **Turbo is robust to the trimming and Apex is not**, which is
+itself worth knowing: it is a fact about turbo that the sizing was fitted to
+turbo, and it means the shipped setting cannot be reused when the model
+changes.
+
+### The vocabulary prompt helps both models
+
+Configuration C drops it and both get worse: turbo 1.49% to 1.68%, Apex 1.64%
+to 2.03%. This confirms the earlier note in this document that the English
+`initial_prompt` helps rather than hurts, now on a second model.
+
+### `-l auto` costs 2.5 seconds, measured
+
+Configuration D differs from C only in pinning the language, and is identical
+on every accuracy number (2.03%, 492 words) while dropping from 6.6s to
+**4.1s**. That is the double encoder pass this document predicted, now with a
+price on it: **38% of the wall clock of a hold**, for a decision that is
+already known for a Hinglish-output model, because Apex only ever emits Latin
+script.
+
+### Where this leaves the model question
+
+Not yet decided, and deliberately so. What is settled:
+
+1. The first measurement was invalid and the conclusion drawn from it would
+   have been wrong.
+2. On equal terms Apex and turbo are within noise of each other on 20 holds,
+   which is too few to separate them.
+3. The remaining candidates are not tested: Apex at **fp16** (q8_0 was used
+   first, and this document already records that quantisation buys nothing on
+   Metal, so a quantised model was the wrong thing to judge the family by) and
+   **Prime**, the sibling that wins on read speech where Apex wins on
+   conversational audio.
+
+The decision rule stated earlier in this document still stands and has not
+been met by anything yet.
