@@ -1223,3 +1223,79 @@ both directions, including that 60 random letter strings still score at least
 90% unknown, and that real truncations like `collater` are still caught. That
 last one is why `-er` deliberately does not get the silent e rule: it would
 turn `collater`, a genuine truncation of "collateral", into `collate`.
+
+
+---
+
+## What the remaining errors actually are, and why a better model fixes few of them
+
+Once the instrument stopped counting its own dictionary, only **16 of the 130
+recordings contain a single error**, and the 21 errors in them fall into four
+kinds. Listing them is more useful than the number, because they do not have
+the same cure.
+
+### Proper nouns and acronyms, 8 of 21
+
+`Manit`, `Manmichar`, `Landborough`, `Amandi`, `AMANDWEP`, `LRDR`, `Ellis'`,
+`Checkmone`. Names of people, places and acronyms.
+
+**No speech model fixes these.** They are not in any model's vocabulary and
+they never will be. The cure is `dictator learn`, which already exists, and
+the reason it has not learned them is the subject of a different finding: the
+learning loop had no way of knowing whether it had ever seen a correction.
+
+One of them is worth reading closely. `Checkmone` is "check once", and **the
+same recording says "check once" correctly a few words later**:
+
+> Checkmone again full PDF full HTML and all video links and all things check
+> once again everything should be at the point
+
+Same speaker, same two words, same hold, right the second time and wrong the
+first. So this is not a vocabulary failure at all, it is a **failure at the
+start of an utterance**, where the decoder has no preceding context to condition
+on. That points at the first moments of audio rather than at the model.
+
+### Truncations, 3 of 21
+
+`accura` and `acur` for "accuracy", `collater` for "collateral". One of them
+gives the mechanism away:
+
+> the collater collateral vault thing
+
+The model produced a broken attempt and then the correct word immediately
+after. That is a restart, not a mishearing. Combined with the `Checkmone`
+case above, the pattern is that the **beginning of a word or an utterance is
+where this pipeline loses information**, which is a recording and context
+problem rather than a weights problem.
+
+Relevant, and already measured elsewhere in this document: the native recorder
+loses about 0.15s less of the start of every sentence than sox did.
+
+### Compressed romanised Hindi, 5 of 21
+
+`sval` for "sawaal", `bnvay` for "banvaao", `klo` for "karlo", `kaite` for
+"kehte", `rjmn`. The model hears Hindi and writes it in a Latin spelling too
+short to read. **This is the one category a Hinglish-specific model should
+actually improve**, and it is five errors in 5664 words.
+
+### Repetition loops on near-silent audio, 3 of 21
+
+`ndernderndernder`, `Ondernder`, `Oof`, all from recordings that are nearly
+empty. This is the `audio_ctx` failure mode documented above, and it is ours
+rather than the model's.
+
+### What this means for the model question
+
+The case for changing models rests on **five errors in 5664 words**, which is
+0.09%. Eight of the errors are proper nouns that no model knows, three are
+utterance-start truncations, and three are our own encoder sizing on silence.
+
+**So the model is not the biggest lever left, and the benchmark that was
+supposed to choose one has instead argued against needing to.** The larger
+wins available are, in order: feeding the vocabulary (the proper nouns),
+protecting the start of an utterance (the truncations), and not running the
+decoder on silence (the loops).
+
+That is not a reason to skip the comparison, which is still worth finishing
+because a model that is equally accurate and meaningfully faster would still
+be worth having. It is a reason not to expect much from it.
