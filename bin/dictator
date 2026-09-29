@@ -645,15 +645,29 @@ def meeting(rest) -> int:
             print("usage: dictator meeting forget <id>|all")
             return 2
         targets = m.ids() if wanted == "all" else [wanted]
-        gone = [mid for mid in targets if m.forget(mid)]
-        if not gone:
+        # `forget` answers False when it could not overwrite everything, and
+        # the sentence below is the reason somebody reached for this command.
+        # Saying it about a delete that did not keep the promise is worse than
+        # saying nothing, because it is about other people's voices.
+        gone, partial = [], []
+        for mid in targets:
+            if m.forget(mid):
+                gone.append(mid)
+            elif not m.load(mid):
+                partial.append(mid)
+        if not gone and not partial:
             print(f'no meeting called "{wanted}".')
             return 1
-        print(f"deleted {len(gone)} recording(s), audio and transcript.")
-        print("  Overwritten before unlinking, so nothing on the filesystem "
-              "reads it back.\n"
-              "  An SSD moves blocks around underneath us, so that is as far "
-              "as software can honestly go.")
+        if gone:
+            print(f"deleted {len(gone)} recording(s), audio and transcript.")
+            print("  Overwritten before unlinking, so nothing on the "
+                  "filesystem reads it back.\n"
+                  "  An SSD moves blocks around underneath us, so that is as "
+                  "far as software can honestly go.")
+        if partial:
+            print(f"  {len(partial)} could not be overwritten and were only "
+                  f"deleted. See ~/.dictator/log.")
+            return 1
         return 0
 
     print(MEETING_USAGE)
