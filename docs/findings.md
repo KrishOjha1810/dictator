@@ -431,27 +431,51 @@ timestamps, so a transcript built on it could not say who spoke when.
 
 ### What a meeting actually costs, measured
 
-A 3 minute 24 second two track meeting, on this M3:
+Two track meetings against a known script, on this M3:
 
-| | |
-|---|---|
-| audio recorded | 407s across two tracks, 13.0 MB |
-| of which anybody was talking | 218.6s |
-| chunks | 8 on one track, 7 on the other |
-| transcription | **55.2s** |
-| notes (three questions, model loaded and put away) | **73s** |
-| words recovered against a known script | **100%** and **98.7%** |
-| duplicated runs at the seams | none |
+| | 3m 24s | 10m 11s |
+|---|---|---|
+| audio recorded, both tracks | 407s, 13.0 MB | 1221s, 39.1 MB |
+| of which anybody was talking | 218.6s | 664.9s |
+| chunks | 15 | 43 |
+| transcription | **55.2s** | **161.5s** |
+| notes, model loaded and put away | **73s** | **121.3s** |
+| end to end after `stop` | 2m 8s | **4m 43s** |
+| words recovered against the script | 100% and 98.7% | |
 
-So roughly **one minute of transcription per four minutes of meeting**, which
-puts a ten minute meeting at about 2.5 minutes and an hour at about 15. Disk is
-**3.8 MB per minute** of meeting, both tracks, uncompressed 16kHz mono.
+And on a real acoustic recording, a voice played through the speakers and
+recorded through the microphone rather than generated as a file: 4m 10s, 8.0 MB,
+transcribed in 48.3s, **97.7 percent** of the words recovered, no duplication at
+the seam.
+
+So a **ten minute meeting is about two and a half minutes to transcribe and
+under five minutes to finish**, and an hour is roughly sixteen and twenty five.
+Disk is **3.8 MB per minute** of meeting, both tracks, uncompressed 16kHz mono.
+
+Transcription runs at about **3.8 times real time**, which is much faster than
+the audio length suggests because roughly **45 percent of a two track recording
+is nobody talking** and none of that is transcribed at all.
 
 The notes call needed a **longer timeout than the recap's 30 seconds**. A
 meeting stretch is twenty times the size of a dictation session and reading it
 took more than that budget on a just loaded model. The symptom was a
 "Discussed" section that was quietly missing while the other two were fine,
 which is exactly the shape of failure this file exists for.
+
+### The grounding check has to exempt "there was nothing"
+
+Asked what was decided in a meeting where nothing was, the honest answer is
+"nothing was decided", and the grounding check threw exactly that away, because
+none of those words traces back to anything anybody said. The section then read
+as rejected when it had been answered correctly, which is the opposite fact.
+
+That is worth stating generally: **an answer that reports an absence is not a
+claim about the source and cannot be checked against it.** It is exempted by
+exact text, not by pattern, so nothing longer can slip through with it.
+
+For the same reason the report names a section that was **dropped**. A blank
+"Decided" otherwise reads as "there were no decisions", when what happened was
+that something was said and could not be believed.
 
 ---
 
