@@ -269,6 +269,81 @@ The override is worse than folklore suggests: **control-click Open was removed
 in Sequoia**. Apple's own page now says System Settings, Privacy & Security,
 scroll, "Open Anyway", then a second warning.
 
+### The tick in System Settings and the trust macOS acts on are two different things
+
+This is the failure that costs days rather than minutes, and it was live on the
+owner's own machine while this was written.
+
+TCC keeps a row per (service, client) and stores a **code requirement** next to
+it. The list in System Settings is drawn from the row. Trust is decided by the
+requirement. Change the app's signature and the row survives with the old
+requirement, so:
+
+- the checkbox stays ticked,
+- `AXIsProcessTrusted()` stays false,
+- and **no prompt ever appears again**, because a row already exists.
+
+The measured state, read straight out of the databases:
+
+```
+system TCC.db  kTCCServiceAccessibility  com.dictator.dictation  auth_value=2
+               certificate leaf = H"cbd3aabec79d29dcfc329c1bbba154709b13462a"
+the bundle     certificate leaf = H"8501b12ce31fe51f7ee209340e355c18398a0d23"
+```
+
+Read out of the pane at the same moment, through the accessibility API:
+`Dictator :: 1`. The switch really was on. The listener really was waiting.
+
+**Toggling that switch does not fix it.** It rewrites `auth_value` and leaves
+the requirement alone, which is the half that is wrong. The entry has to be
+**removed** so the next ask writes a fresh one, which is the minus button, and
+nothing in the product used to say so.
+
+Two other facts fall out of this and are worth keeping:
+
+- **Accessibility and Input Monitoring live in the machine-wide database**
+  (`/Library/Application Support/com.apple.TCC/TCC.db`) and Microphone lives in
+  the per-user one. Looking in the wrong one reports "never granted" for a
+  permission granted months ago. On the same machine, in the same minute,
+  Microphone read `granted` and Accessibility read `stale`, because the mic
+  prompt fires again after a signature change and the Accessibility one does
+  not.
+- **Reading either database needs Full Disk Access for whoever is reading.**
+  The app bundle itself does not have it, so the app's own diagnosis is always
+  the by-eye version; a terminal that has been given Full Disk Access gets the
+  exact answer, including which certificate the grant was written for. There is
+  no unprivileged API for this, `tccutil` only resets.
+
+Two system tools do the work and neither needs privileges:
+
+- `/usr/bin/csreq -r <blob> -t` turns a stored requirement back into the text
+  `codesign -d -r-` prints, so the two can be shown side by side.
+- `codesign --verify -R=<text> <app>` asks the same question TCC asks. Note the
+  **equals sign**: `-R <text>` treats the argument as a file path and fails with
+  "invalid requirement specification", which reads like a malformed requirement
+  rather than a wrong flag.
+
+### Wording, read off the pane rather than remembered
+
+On macOS 26.5.1 the shipped `SecurityPrivacyExtension.appex` localization table
+gives the exact strings, which is worth using instead of a screenshot or a
+memory:
+
+- the list is headed **"Allow the applications below to control your computer."**
+- the two buttons under it are labelled **"Add"** (the plus) and **"Remove"**
+  (the minus)
+- an empty list reads "Applications that have requested access to control your
+  computer will appear here."
+
+### A process launched from a trusted terminal is trusted, which hides this bug
+
+Running the app bundle straight from Terminal reports
+`AXIsProcessTrusted() == true` even when its own TCC entry is stale, because
+macOS attributes responsibility to the launching application and Terminal has
+the grant. Launching the same bundle with `open` or through `launchd` reports
+false. So the broken state **cannot be reproduced from a shell**, which is
+exactly why it kept being reported as working.
+
 ### The signing keychain, and how it can rot
 
 A self-signed certificate in its own keychain under `~/.dictator` gives a
@@ -1074,3 +1149,77 @@ Not yet decided, and deliberately so. What is settled:
 
 The decision rule stated earlier in this document still stands and has not
 been met by anything yet.
+
+
+---
+
+## The measuring instrument was wrong by a factor of six
+
+Everything above about model accuracy was scored with `tools/nonwords.py`,
+which counts the share of words in neither an English nor a romanised Hindi
+dictionary. On the 130 real recordings in `~/.dictator/corpus` it reported
+**2.35%**. The true figure is **0.37%**.
+
+The difference was not the speech model. It was the tool not knowing English.
+
+### What it was actually counting
+
+Listing the words it objected to, rather than only the number, made it obvious
+within a minute. The most common were `pda` (17 times), `usdc` (16), `struct`
+(8), then `delegated`, `approved`, `preparing`, `liquidated`, `completed`,
+`including`, `managed`, `deriving`, `updating`, `arriving`, `liked`,
+`introduced`. Every one of those is correct.
+
+Four separate faults, each systematic:
+
+1. **No silent e restoration.** English drops a silent `e` before a vowel
+   suffix, so `delegated` stems to `delegat`, which is in no dictionary. This
+   one fault accounted for most of the English false alarms on its own.
+2. **No comparatives, superlatives or adverbs.** `-er`, `-est` and `-ly` were
+   not in the suffix list at all, so `earlier`, `simplest` and `smallest`
+   counted as invented words.
+3. **The length floor was measured against the wrong string.** It required the
+   whole word to be longer than the suffix plus two, so `using` (five letters,
+   `-ing` wanting six) was gibberish, along with every other short stem.
+4. **The system word list is not a record of English.** It does not contain
+   `has`. Nor `held`, `paid`, `became`, `repaid` or `hang`. Checking a list of
+   the most common English words against it is how to find these, rather than
+   waiting for each to turn up in a transcript.
+
+Plus vocabulary: `pda` and `usdc` alone were a third of everything being
+counted, and both are words this person says several times a day.
+
+### What was left once it was fixed
+
+21 occurrences in 5664 words. Every remaining one is a genuine failure:
+`accura`, `acur` and `collater` (truncations), `ndernderndernder` and
+`ondernder` (repetition loops), `lrdr`, `rjmn`, `bnvay`, `sval`, `klo`,
+`manmichar`, `checkmone`, `landborough`, `amandi`, `amandwep`, `kaite`,
+`manit`, `dismatched`.
+
+**So the shipped pipeline is already at 0.37% on real Hinglish, and the noise
+floor of the instrument had been six times the signal it was measuring.**
+
+### What this invalidates
+
+The Apex comparison in the section above. Turbo at 1.49% against Apex at 1.64%
+was a difference of 0.15 points inside an instrument whose own error was 2.0
+points. **That comparison could not have separated the two models and should
+not be read as if it did.** The configuration findings from the same run
+survive, because they are large effects measured against themselves: the
+encoder trimming (3.56% against 1.64%), the vocabulary prompt, and the 2.5
+seconds that `-l auto` costs.
+
+### The rule this gives
+
+**Print the words, not only the number.** A summary statistic over a
+dictionary you did not write will measure the dictionary. The list of
+offending words took a minute to read and moved the answer by a factor of six;
+the number alone had been believed for a day.
+
+The second guard matters as much as the first: a dictionary loose enough to
+accept anything scores every model as perfect. `tests/test_nonwords.py` asserts
+both directions, including that 60 random letter strings still score at least
+90% unknown, and that real truncations like `collater` are still caught. That
+last one is why `-er` deliberately does not get the silent e rule: it would
+turn `collater`, a genuine truncation of "collateral", into `collate`.
