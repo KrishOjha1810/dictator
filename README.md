@@ -78,6 +78,8 @@ It checks the things that actually break and names the one that is wrong.
 | `dictator status` | is it set up, is it running |
 | `dictator doctor` | check everything, say what is wrong |
 | `dictator recap [today\|week\|N]` | what you dictated, summarised here |
+| `dictator find WORDS` | search everything you have ever dictated |
+| `dictator snippet "PHRASE" "TEXT"` | say the phrase, get the text |
 | `dictator log` | the last thing it did |
 | `dictator errors` | failures it noticed |
 
@@ -90,6 +92,72 @@ anything the system already does.
 While you hold it, a small indicator appears and its bars move with your
 voice. That is not decoration: it is the honest answer to "is the microphone
 actually open", so you never talk into a dead mic and find out afterwards.
+
+---
+
+## Phrases you say often
+
+An email address is thirty characters of dots and an at sign that no speech
+model will ever produce from speech. Spelling it out loud is slower than
+typing it. So give the address a phrase instead:
+
+```bash
+dictator snippet "my work email" "krish@example.com"
+dictator snippet "the repo path" "/Users/krish/dictator"
+```
+
+Say "send it to my work email" and the address is what lands.
+
+The trigger needs at least two words. One spoken word is something you say by
+accident a hundred times a day, and a one word trigger is how a text expander
+turns into a thing you fight. It also refuses a phrase you have already
+dictated, and says how many times, because your own history is the only honest
+test of whether a phrase is one you use:
+
+```
+$ dictator snippet "check the loop" "https://example.com/loop"
+not added: you have already dictated that phrase 7 times, so it would start
+replacing things you meant to say.
+```
+
+`dictator snippets` lists them, `dictator unsnippet "..."` removes one.
+
+---
+
+## Finding something you said
+
+```bash
+dictator find the loop
+dictator find deploy --app Slack --days 7
+dictator find rebase --copy          # the most recent one, on your clipboard
+```
+
+It searches what the recogniser HEARD as well as what landed, which is the
+whole reason to keep both. When a sentence came out wrong, the wrong words are
+the only ones you can search for.
+
+---
+
+## Different rules in different applications
+
+A spoken list belongs in Slack. At a shell prompt it is four lines with
+numbers in front of them, and the shell will try to run the first one. So the
+formatting rules can differ by where the words are going:
+
+```bash
+dictator format in Slack lists on
+dictator format in terminal sentences off
+dictator format in Slack default      # back to the global rules
+```
+
+`terminal` is a group and covers every terminal emulator, because nobody wants
+to configure Ghostty and iTerm separately to say the same thing.
+
+This is deliberately not "tone". The products that sell tone matching send
+your sentence to a cloud model and have it rewrite you to sound casual or
+formal. Underneath the marketing that feature is mostly two booleans, which
+capital letters and which punctuation, and those are worth having without a
+model anywhere near them.
 
 ---
 
@@ -163,6 +231,15 @@ raw, confidence = d.hear("recording.wav")   # just the model
 text = d.polish(raw)                        # your words, then punctuation
 d.learn("Whisper Flow")                     # teach it a word
 d.paste(text)                               # into the frontmost app
+```
+
+`polish` takes the application too, and applies whatever formatting rules were
+set for it. Snippets are part of `polish` and `Dictator(expand=False)` turns
+them off, which is what a caller transcribing somebody else's audio wants:
+this user's shorthand has no business firing inside it.
+
+```python
+text = d.polish(raw, app="Ghostty")
 ```
 
 The recap is there too, for anything that wants to say your day back to you:
