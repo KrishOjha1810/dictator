@@ -290,7 +290,7 @@ def _server_matches() -> bool:
     try:
         pid = int((core.STATE_DIR / "stt.pid").read_text().strip())
         cmd = subprocess.run(["ps", "-o", "command=", "-p", str(pid)],
-                             capture_output=True, text=True, timeout=10).stdout
+                             capture_output=True, text=True, errors="replace", timeout=10).stdout
     except Exception:
         return False
     return want_model.name in cmd and f"-l {want_lang}" in cmd
@@ -445,7 +445,7 @@ def detect_language(wav: str) -> "tuple[str, float]":
         return "", 0.0
     try:
         r = subprocess.run([wb, "-m", str(m), "-f", wav, "-dl", "-nt"],
-                           capture_output=True, text=True, timeout=30)
+                           capture_output=True, text=True, errors="replace", timeout=30)
         out = r.stdout + r.stderr
         hit = re.search(r"detected language:\s*([a-z]{2,3})\s*\(p\s*=\s*([0-9.]+)", out)
         if not hit:
@@ -798,7 +798,7 @@ def _parakeet(wav: str) -> str:
         return ""
     try:
         r = subprocess.run([exe, "-m", str(_PARAKEET), "-f", wav, "-np"],
-                           capture_output=True, text=True, timeout=120)
+                           capture_output=True, text=True, errors="replace", timeout=120)
         return " ".join((r.stdout or "").split())
     except Exception as e:
         core.log(f"parakeet failed: {e}")
@@ -1023,7 +1023,13 @@ def _transcribe_ex(wav: str) -> "tuple[str, float]":
     if ac:
         cmd += ["-ac", str(ac)]
     try:
-        out = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
+        # errors="replace" rather than strict, on every engine call in this
+        # file. whisper.cpp writes the model's own bytes, and a hold that ended
+        # mid-character produced `'utf-8' codec can't decode bytes in position
+        # 37-38`, which raised here and was logged as "nothing was said". The
+        # user said something; we threw it away because one byte was ugly.
+        out = subprocess.run(cmd, capture_output=True, text=True,
+                             errors="replace", timeout=120)
     except Exception as e:
         core.log(f"transcribe failed: {e}")
         return "", 0.0
@@ -1037,7 +1043,7 @@ def _transcribe_ex(wav: str) -> "tuple[str, float]":
         try:
             again = subprocess.run([a for a in cmd if a != "-ac"
                                     and a != str(ac)],
-                                   capture_output=True, text=True, timeout=120)
+                                   capture_output=True, text=True, errors="replace", timeout=120)
             retried = (again.stdout or "").strip()
             # Only if it actually helped. A loop on both passes means the audio
             # is the problem, and the first answer is no worse than the second.

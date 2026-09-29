@@ -28,6 +28,30 @@ def _cli() -> str:
     return str(REPO / "bin" / "dictator")
 
 
+def _bundle_points_here() -> bool:
+    """Does the installed bundle run THIS checkout's code.
+
+    The mtime check below asks whether the app is older than its own source. It
+    never asked whether the app still points at us, and it does not have to be
+    stale to be wrong: a bundle built once with the wrong DictatorCLI stays
+    wrong forever, because every later `dictator on` sees a fresh enough binary
+    and returns early without looking inside.
+
+    That is not hypothetical. On this machine the installed bundle carried a
+    path into a DIFFERENT user account's checkout, eleven hours behind, so
+    every fix landed in this one and none of them ever ran. The symptom is the
+    worst kind: dictation works, so nothing looks broken, and it is quietly the
+    wrong program. The comment in build_app already warned that "a guess that
+    is wrong runs somebody else's dictation"; this is the check that makes the
+    warning true."""
+    try:
+        info = plistlib.loads((APP / "Contents" / "Info.plist").read_bytes())
+    except Exception:
+        return False
+    return (info.get("DictatorCLI") == _cli()
+            and info.get("DictatorLog") == str(core.STATE_DIR / "dictate.log"))
+
+
 def build_app() -> str:
     """Build the .app that OWNS the permissions.
 
@@ -51,7 +75,7 @@ def build_app() -> str:
     # first few minutes losing a permission it had just been given.
     macos = APP / "Contents" / "MacOS"
     exe = macos / "Dictator"
-    if exe.exists():
+    if exe.exists() and _bundle_points_here():
         newest = max((f.stat().st_mtime for f in
                       (src / "main.swift", src / "Info.plist") if f.exists()),
                      default=0)

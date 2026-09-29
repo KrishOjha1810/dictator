@@ -947,7 +947,15 @@ def doctor() -> int:
     if app_built:
         req = signing.requirement(always.APP)
         stable = "certificate leaf" in req
-        ok("app identity survives a rebuild", stable,
+        # The quietest failure in this program: dictation keeps working and it is
+    # the wrong copy of it. Checked here because nothing else looks.
+    here = always._bundle_points_here()
+    ok("the app runs this copy of dictator", here,
+       "" if here else
+       "it is set up to run a different checkout, so nothing you change here "
+       "takes effect. Run: dictator build")
+
+    ok("app identity survives a rebuild", stable,
            "" if stable else "ad-hoc signed: macOS will forget its permissions")
 
     # The one that cost days. A ticked checkbox in System Settings and an

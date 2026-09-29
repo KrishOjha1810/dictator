@@ -108,3 +108,42 @@ def test_the_retry_replaces_a_loop_and_keeps_a_good_answer(monkeypatch,
     assert len(calls) == 2, "it has to actually run a second time"
     assert "-ac" in calls[0] and "-ac" not in calls[1], \
         "the second pass is the one without the shrunk encoder"
+
+
+def test_a_byte_the_model_emitted_does_not_throw_the_hold_away(monkeypatch,
+                                                                tmp_path):
+    """Live failure, taken from the log: `'utf-8' codec can't decode bytes in
+    position 37-38: invalid continuation byte`, which raised inside
+    `subprocess.run(text=True)`, was caught by the broad handler and logged as
+    "nothing was said". The person had spoken. It was thrown away because one
+    byte was ugly."""
+    from dictator import stt
+
+    seen = {}
+
+    def fake_run(cmd, **kw):
+        seen.update(kw)
+        # What a strict decoder would have raised on.
+        broken = b"the vault is fine \xe0\xa4 and that is all".decode(
+            "utf-8", errors=kw.get("errors", "strict"))
+
+        class Done:
+            stdout, stderr, returncode = broken, "", 0
+        return Done()
+
+    wav = tmp_path / "a.wav"
+    wav.write_bytes(b"")
+    monkeypatch.setattr(stt.subprocess, "run", fake_run)
+    monkeypatch.setattr(stt, "_transcribe_server", lambda w: None)
+    monkeypatch.setattr(stt, "parakeet_ready", lambda: False)
+    monkeypatch.setattr(stt, "whisper_bin", lambda: "/bin/true")
+    monkeypatch.setattr(stt, "audio_seconds", lambda w: 6.0)
+    monkeypatch.setattr(stt, "pinned_language", lambda w, l: "en")
+    monkeypatch.setattr(stt, "stt_lang_mode", lambda: (wav, "en"))
+    monkeypatch.setattr(stt, "_romanise", lambda t: t)
+
+    text, _ = stt._transcribe_ex(str(wav))
+    assert seen.get("errors") == "replace", \
+        "the engine's stdout is still decoded strictly"
+    assert "the vault is fine" in text
+    assert "that is all" in text, "everything after the bad byte was lost"

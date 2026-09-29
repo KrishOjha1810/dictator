@@ -231,3 +231,66 @@ def test_permissions_clears_a_grant_made_to_an_older_identity():
     assert "tcc.state(" in src, "permissions no longer asks what macOS remembers"
     assert tcc.verdict({"state": tcc.STALE})[0] == "bad", \
         "a stale grant is reported as fine"
+
+
+def test_a_bundle_pointing_at_another_checkout_is_rebuilt(tmp_path,
+                                                          monkeypatch):
+    """The mtime check asks whether the app is older than its source. It never
+    asked whether the app still points at us, and a bundle does not have to be
+    stale to be wrong: built once with the wrong DictatorCLI it stays wrong
+    forever, because every later `dictator on` sees a fresh enough binary and
+    returns early without looking inside.
+
+    Found live: the installed bundle carried a path into a different user
+    account's checkout, eleven hours behind, so every fix landed in one place
+    and none of them ever ran. Dictation kept working, which is what made it
+    invisible."""
+    import plistlib
+
+    from dictator import always
+
+    app = tmp_path / "Dictator.app"
+    (app / "Contents" / "MacOS").mkdir(parents=True)
+    (app / "Contents" / "MacOS" / "Dictator").write_bytes(b"binary")
+    monkeypatch.setattr(always, "APP", app)
+
+    (app / "Contents" / "Info.plist").write_bytes(plistlib.dumps({
+        "DictatorCLI": "/Users/somebody-else/dictator/bin/dictator",
+        "DictatorLog": str(always.core.STATE_DIR / "dictate.log"),
+    }))
+    assert always._bundle_points_here() is False
+
+    (app / "Contents" / "Info.plist").write_bytes(plistlib.dumps({
+        "DictatorCLI": always._cli(),
+        "DictatorLog": str(always.core.STATE_DIR / "dictate.log"),
+    }))
+    assert always._bundle_points_here() is True
+
+
+def test_a_bundle_logging_somewhere_else_counts_as_wrong_too(tmp_path,
+                                                             monkeypatch):
+    """The log path comes from the same place as the CLI path. A bundle
+    writing its log into another account's state directory is the same bug,
+    and it is how the mismatch shows up first: the log you are reading is not
+    the log it is writing."""
+    import plistlib
+
+    from dictator import always
+
+    app = tmp_path / "Dictator.app"
+    (app / "Contents" / "MacOS").mkdir(parents=True)
+    monkeypatch.setattr(always, "APP", app)
+    (app / "Contents" / "Info.plist").write_bytes(plistlib.dumps({
+        "DictatorCLI": always._cli(),
+        "DictatorLog": "/Users/somebody-else/.dictator/dictate.log",
+    }))
+    assert always._bundle_points_here() is False
+
+
+def test_a_bundle_with_no_plist_is_not_assumed_to_be_ours(tmp_path,
+                                                          monkeypatch):
+    from dictator import always
+    app = tmp_path / "Dictator.app"
+    (app / "Contents").mkdir(parents=True)
+    monkeypatch.setattr(always, "APP", app)
+    assert always._bundle_points_here() is False
