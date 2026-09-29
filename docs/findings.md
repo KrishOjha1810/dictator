@@ -1194,8 +1194,9 @@ counted, and both are words this person says several times a day.
 21 occurrences in 5664 words. Every remaining one is a genuine failure:
 `accura`, `acur` and `collater` (truncations), `ndernderndernder` and
 `ondernder` (repetition loops), `lrdr`, `rjmn`, `bnvay`, `sval`, `klo`,
-`manmichar`, `checkmone`, `landborough`, `amandi`, `amandwep`, `kaite`,
-`manit`, `dismatched`.
+`checkmone`, `landborough`, `kaite`, `dismatched`, and five mangled attempts
+at real people's names, which are not written out here for the same reason
+this file contains no transcripts of anyone else: they are other people's.
 
 **So the shipped pipeline is already at 0.37% on real Hinglish, and the noise
 floor of the instrument had been six times the signal it was measuring.**
@@ -1236,8 +1237,10 @@ the same cure.
 
 ### Proper nouns and acronyms, 8 of 21
 
-`Manit`, `Manmichar`, `Landborough`, `Amandi`, `AMANDWEP`, `LRDR`, `Ellis'`,
-`Checkmone`. Names of people, places and acronyms.
+Five are mangled attempts at people's names and are not reproduced here,
+because they are recognisable and they belong to somebody else. The other
+three are `Landborough`, `LRDR` and `Checkmone`: a place, an acronym, and two
+ordinary words run together.
 
 **No speech model fixes these.** They are not in any model's vocabulary and
 they never will be. The cure is `dictator learn`, which already exists, and

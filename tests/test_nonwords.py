@@ -44,9 +44,12 @@ def test_ordinary_english_is_not_reported_as_invented(word):
 @pytest.mark.parametrize("word", [
     # Real failures taken from real recordings in the corpus. Every one of
     # these is the model mangling something, and the tool exists to count them.
+    # The corpus also contains mangled attempts at real people's names, which
+    # are the same shape and are deliberately not copied into a public test
+    # file; "zhrkvan" stands in for one of them.
     "rekvest", "progrem", "darived", "deploi", "collater", "accura", "acur",
     "ndernderndernder", "semesnirkkorpray", "lrdr", "bnvay", "checkmone",
-    "manmichar",
+    "zhrkvan",
 ])
 def test_mangled_speech_is_still_caught(word):
     assert not nonwords._known(word), f"{word} is not a word and must count"
