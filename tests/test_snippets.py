@@ -119,6 +119,29 @@ def test_it_survives_a_reload(monkeypatch, tmp_path):
     assert snippets.Snippets().expand("my work email")[0] == "krish@example.com"
 
 
+def test_one_added_from_a_terminal_works_on_the_very_next_hold(box, tmp_path):
+    """The listener is one process that runs for days and `dictator snippet`
+    is another that writes this file. A store that only reads it once means a
+    new snippet does nothing until a restart, and restarting costs the user a
+    macOS permission, so "restart it" is not an answer."""
+    other = snippets.Snippets()          # the terminal, same file
+    other.add("my work email", "krish@example.com", force=True)
+    assert box.expand("send my work email")[0] == "send krish@example.com"
+
+
+def test_a_hold_never_deletes_a_snippet_added_while_it_was_running(box):
+    """The quiet half of the same bug. Firing a snippet writes the use count
+    back, so a store holding a stale copy of the file would save over whatever
+    the terminal had just added, and the user would find it gone with no
+    error anywhere."""
+    box.add("the vault path", "/srv/vault")
+    snippets.Snippets().add("my work email", "krish@example.com", force=True)
+    box.expand("use the vault path")     # writes the use count back
+    assert sorted(snippets.Snippets().items) == ["my work email",
+                                                 "the vault path"]
+    assert snippets.Snippets().items["the vault path"]["count"] == 1
+
+
 def test_use_is_counted(box):
     box.add("my work email", "krish@example.com")
     box.expand("my work email")

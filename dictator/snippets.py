@@ -102,11 +102,21 @@ class Snippets:
 
     def __init__(self):
         self.items = {}          # normalised trigger -> record
+        self._stamp = None       # what the file looked like when we read it
         self.load()
 
     # ---- storage ------------------------------------------------------
 
+    def _on_disk(self):
+        """A cheap fingerprint of the stored file, or None if there is none."""
+        try:
+            s = STORE.stat()
+            return (s.st_mtime_ns, s.st_size)
+        except OSError:
+            return None
+
     def load(self) -> None:
+        self._stamp = self._on_disk()
         try:
             raw = json.loads(STORE.read_text())
         except Exception:
@@ -115,12 +125,28 @@ class Snippets:
         self.items = {k: v for k, v in raw.items()
                       if isinstance(v, dict) and isinstance(v.get("text"), str)}
 
+    def fresh(self) -> None:
+        """Re-read the file if somebody else has written it since we did.
+
+        The listener is one process that runs for days, and `dictator snippet`
+        is a second process that writes this file from a terminal. Without
+        this, a snippet added while the listener is up never fires, and the
+        next hold that fires any OTHER snippet writes the listener's stale
+        copy back over the file and deletes the new one. Both halves of that
+        are silent: the user adds a snippet, dictates, and finds it gone.
+
+        One stat() per hold. Expansion was measured at 0.12ms against a 4.8
+        second dictation, so there is nothing here worth caching over."""
+        if self._on_disk() != self._stamp:
+            self.load()
+
     def save(self) -> None:
         try:
             core.STATE_DIR.mkdir(parents=True, exist_ok=True)
             tmp = str(STORE) + ".tmp"
             Path(tmp).write_text(json.dumps(self.items, indent=1))
             Path(tmp).replace(STORE)
+            self._stamp = self._on_disk()
         except Exception as e:
             core.log(f"snippets: {e}")
 
@@ -174,6 +200,9 @@ class Snippets:
                                 f"things you meant to say. Pick a phrase you "
                                 f"would not otherwise use, or add it anyway")}
         with _lock:
+            # Another process may have added one since we read the file, and
+            # writing our copy back would delete theirs.
+            self.fresh()
             rec = self.items.get(key) or {"count": 0}
             rec.update({"trigger": key, "text": text, "at": time.time(),
                         "count": rec.get("count", 0)})
@@ -184,6 +213,7 @@ class Snippets:
     def remove(self, trigger: str) -> bool:
         key = _norm(trigger)
         with _lock:
+            self.fresh()
             if key in self.items:
                 del self.items[key]
                 self.save()
@@ -198,7 +228,13 @@ class Snippets:
         One left to right pass, longest trigger first, and what a replacement
         put in is never looked at again: a snippet whose text happens to
         contain another trigger expands once, not forever."""
-        if not text or not self.items:
+        if not text:
+            return text, []
+        # A snippet added from a terminal while the listener is up has to work
+        # on the very next hold, not after a restart. Restarting costs a macOS
+        # permission, so "restart it" is not an answer here.
+        self.fresh()
+        if not self.items:
             return text, []
         order = sorted(self.items, key=lambda k: (-len(k.split()), -len(k)))
         # Each piece is (text, frozen). Frozen pieces came out of a
@@ -233,6 +269,7 @@ class Snippets:
     def _used(self, keys: list) -> None:
         try:
             with _lock:
+                self.fresh()
                 for k in keys:
                     if k in self.items:
                         self.items[k]["count"] = self.items[k].get("count", 0) + 1
