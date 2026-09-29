@@ -1391,3 +1391,44 @@ failure is live for any model the sizing was not fitted to.
 Written down plainly because the first version of this section claimed the
 retry fixes three current failures. It does not. It catches an intermittent
 one, which is a weaker claim to make and a better reason to keep the code.
+
+
+---
+
+## The honest limit of the 0.37% figure
+
+The allowlist was chosen by looking at which words this corpus was being
+penalised for. `pda`, `usdc` and `struct` were the three most common words the
+tool objected to, and all three are now in `ALLOW`. So part of the move from
+2.35% to 0.37% is the instrument being fitted to the data it measures, and
+there is no held-out set to check it against.
+
+Worth separating the two halves, because they are not equally guilty:
+
+- **The four morphology faults are real bugs and their fix is not fitting.**
+  Restoring a silent e, adding `-er`, `-est` and `-ly`, measuring the length
+  floor against the stem, and admitting that the system word list has no `has`
+  in it. Each is defensible without reference to any corpus, and each was
+  found by reading the output rather than by chasing a number.
+- **The vocabulary additions are individually defensible and collectively
+  fitted.** Every word added is a real word, which is easy to check one at a
+  time. What is not defensible is the selection: a different speaker's corpus
+  would have produced a different list, and a word nobody here happens to say
+  is still missing.
+
+What that means for how the number may be used:
+
+- **0.37% is a figure for this word list on this corpus.** It is not
+  comparable to anyone else's number, and quoting it as an accuracy score is
+  wrong.
+- **Comparing two models on the same corpus with the same frozen allowlist is
+  still valid**, because both models are scored by the same ruler and the
+  ruler's errors fall on both. That is the actual use, and it is what the
+  model comparison above relies on.
+- **Adding to `ALLOW` after seeing a model's output invalidates that
+  comparison.** The list has to be frozen before a benchmark run, not tuned
+  during one.
+
+Said plainly because the section above ends with "print the words, not only
+the number", and the fix to that lesson was partly to write the dictionary.
+Both things are true.
