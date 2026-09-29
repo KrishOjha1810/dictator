@@ -1239,7 +1239,7 @@ the same cure.
 
 Five are mangled attempts at people's names and are not reproduced here,
 because they are recognisable and they belong to somebody else. The other
-three are `Landborough`, `LRDR` and `Checkmone`: a place, an acronym, and two
+three are `Glentworthy`, `LRDR` and `Checkmone`: a place, an acronym, and two
 ordinary words run together.
 
 **No speech model fixes these.** They are not in any model's vocabulary and

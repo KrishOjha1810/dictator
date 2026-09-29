@@ -38,6 +38,7 @@ USAGE = """dictator: hold a key and talk, anywhere on your Mac.
 Teaching it your words:
   dictator learn WORD    fix this word when it mishears it
   dictator words         what it has learned
+  dictator review        it asks you about the words it got wrong
   dictator unlearn WORD  stop fixing it
   dictator history [n]   what you have said
   dictator find WORDS    search everything you have ever dictated
@@ -175,6 +176,46 @@ def main(argv) -> int:
             print(f'learned "{term}". I will fix things that sound like it.')
         else:
             print(f'learned "{term}", but {rec.get("why","")}.')
+        return 0
+
+    if cmd == "review":
+        from dictator import review as _review
+        n = int(rest[0]) if rest and rest[0].isdigit() else 300
+        rows = _review.words(n)
+        if not rows:
+            print("nothing to ask about. Every word it heard was a word.")
+            return 0
+        print(f"{len(rows)} words it is not sure it got right, the ones you")
+        print("say most often first. Type what you actually said, press Return")
+        print("to skip, or q to stop.\n")
+        asked = taught = 0
+        for r in rows:
+            asked += 1
+            times = f", {r['count']} times" if r["count"] > 1 else ""
+            where = f" in {r['app']}" if r["app"] else ""
+            print(f'  it heard "{r["word"]}"{where}{times}')
+            print(f"    {_review.show(r['text'], r['word'])}")
+            try:
+                said = input("    what did you say? ").strip()
+            except (EOFError, KeyboardInterrupt):
+                print()
+                said = "q"
+            if said.lower() == "q":
+                break
+            if not said:
+                print()
+                continue
+            rec = _review.teach(said, heard=r["word"])
+            if rec.get("ok") is False:
+                print(f"    not learned: {rec.get('why', '')}\n")
+            elif rec.get("mode") == "fuzzy":
+                taught += 1
+                print(f'    learned "{said}". Things that sound like it will '
+                      f"come out right.\n")
+            else:
+                taught += 1
+                print(f'    learned "{said}", but {rec.get("why", "")}.\n')
+        print(f"\n  asked about {asked} of {len(rows)}, learned {taught}.")
         return 0
 
     if cmd == "words":

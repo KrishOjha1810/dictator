@@ -820,7 +820,7 @@ def _too_little(text: str, wav: str) -> bool:
     not catch it doing something worse and less obvious: inventing fluent
     English that has nothing to do with what was said. A real hold of
     "jiske liye mujhe tumhari ek Hinglish line chahiye..." came back as
-    "This is the English line. Bobi Bhikkhullah or Mare is English accuracy."
+    "This is the English line. Torvi Skallandrup or Vayne is English accuracy."
     Every word of that is ordinary English, so nothing about its shape is
     suspicious. What gives it away is that twelve seconds of speech produced
     twelve words."""

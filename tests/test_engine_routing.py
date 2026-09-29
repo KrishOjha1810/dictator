@@ -8,7 +8,7 @@ English with no relation to what was said. A real hold of
 
 came back as
 
-    "This is the English line. Bobi Bhikkhullah or Mare is English accuracy."
+    "This is the English line. Torvi Skallandrup or Vayne is English accuracy."
 
 Every word of that is ordinary English, so nothing about its shape is
 suspicious. What gives it away is that twelve seconds of speech produced
@@ -33,7 +33,7 @@ def _wav(path, secs, rate=16000):
 
 def test_the_real_failure_is_caught(tmp_path):
     wav = _wav(tmp_path / "a.wav", 12.4)
-    bad = "This is the English line. Bobi Bhikkhullah or Mare is English accuracy."
+    bad = "This is the English line. Torvi Skallandrup or Vayne is English accuracy."
     assert stt._too_little(bad, wav)
 
 
@@ -105,7 +105,7 @@ def test_an_answer_in_another_script_is_caught(said):
 
 
 @pytest.mark.parametrize("said", [
-    "This is the English line. Bobi Bhikkhullah or Mare is English accuracy.",
+    "This is the English line. Torvi Skallandrup or Vayne is English accuracy.",
     "User token account would be the one like his public key, something like that.",
     "Is everything done? Uh like have you made it a repo in itself",
     "He said “hello” and left…",
