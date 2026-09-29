@@ -917,6 +917,19 @@ This is the same move `vocab.admit` makes with `spoken()`, and for the same
 reason. A guard the user meets while making the mistake can explain itself; a
 guard that fires silently three weeks later cannot. `--anyway` overrides it.
 
+Both new stages sit on the hold path, so their cost was measured rather than
+assumed. With 30 snippets stored, against a 19 word Hinglish line:
+
+| | |
+|---|---|
+| expansion, nothing matched | 0.12 ms median of 200 |
+| expansion, one match (includes writing the use count back) | 0.38 ms median of 200 |
+| `shaping_flags(app)` with a per application rule set | 0.03 ms median of 500 |
+
+Dictation itself is 4.8 seconds on this machine (see "Latency: where the 4.8
+seconds goes"), so all three are four orders of magnitude below the thing they
+sit next to. No caching, no lazy loading, nothing to tune.
+
 The other rule is a two word minimum. One spoken word is something a person
 says by accident a hundred times a day, and every text expander horror story
 is a one word trigger.
