@@ -22,8 +22,10 @@ in this repo: doctor once had an off-by-one that passed the exact condition it
 existed to report, which sent the user away from the only place the answer
 was. A check that passes the broken case is worse than no check.
 """
+import os
 import sqlite3
 import subprocess
+import time
 from pathlib import Path
 from unittest import mock
 
@@ -337,3 +339,68 @@ def test_nothing_is_cleared_behind_somebody_back():
     cli = _cli()
     with mock.patch.object(cli.sys.stdin, "isatty", return_value=False):
         assert cli._asked_to_clear() is False
+
+
+# ---- what the listener saw, and for how long it stays true -------------------
+#
+# The app writes what it can see of its own trust into permission.json, and
+# that file is the only signal left on a machine whose TCC databases cannot be
+# read. Neither `waiting()` nor `stuck()` had a test, which is uncomfortable
+# for the pair of functions whose entire job is answering "is somebody stuck
+# right now".
+
+
+def _wrote(**payload):
+    import json
+    tcc.WAITING_FILE.parent.mkdir(parents=True, exist_ok=True)
+    tcc.WAITING_FILE.write_text(json.dumps(payload))
+
+
+def test_no_record_at_all_is_not_a_problem():
+    assert tcc.waiting() == {}
+    assert tcc.stuck() is False
+
+
+def test_a_live_listener_waiting_for_a_permission_is_reported():
+    _wrote(trusted=False, at=time.time(), pid=os.getpid())
+    assert tcc.stuck() is True
+
+
+def test_a_listener_that_was_stopped_while_waiting_is_not_still_waiting():
+    """The claim is about right now. Stopping the listener mid wait used to
+    leave doctor reporting a permission problem forever, and `dictator on`
+    printing the whole TCC diagnosis at somebody with nothing wrong."""
+    _wrote(trusted=False, at=time.time(), pid=_a_dead_pid())
+    assert tcc.waiting() == {}
+    assert tcc.stuck() is False
+
+
+def test_trusted_never_expires():
+    """It is written once, on the way past the permission, and never again. An
+    age check would throw away the only good news in the file."""
+    _wrote(trusted=True, at=time.time() - 30 * 86400, pid=_a_dead_pid())
+    assert tcc.waiting().get("trusted") is True
+    assert tcc.stuck() is False
+
+
+def test_an_older_record_without_a_pid_falls_back_to_its_age():
+    _wrote(trusted=False, at=time.time())
+    assert tcc.stuck() is True
+    _wrote(trusted=False, at=time.time() - tcc.STALE_AFTER - 60)
+    assert tcc.stuck() is False
+
+
+def test_a_damaged_record_is_not_read_as_either_answer():
+    tcc.WAITING_FILE.parent.mkdir(parents=True, exist_ok=True)
+    tcc.WAITING_FILE.write_text("{not json")
+    assert tcc.waiting() == {}
+    tcc.WAITING_FILE.write_text('["not a dict"]')
+    assert tcc.waiting() == {}
+    assert tcc.stuck() is False
+
+
+def _a_dead_pid() -> int:
+    """A pid that has certainly exited: one we started and reaped ourselves."""
+    p = subprocess.Popen(["/usr/bin/true"])
+    p.wait()
+    return p.pid

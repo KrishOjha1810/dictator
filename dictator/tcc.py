@@ -361,20 +361,73 @@ def report(service: str = "accessibility", app=None) -> str:
 
 WAITING_FILE = core.STATE_DIR / "permission.json"
 
+# Only used for a record that has no pid in it, which means an app bundle from
+# before the pid was written down. The app republishes "still waiting" every
+# two minutes, so five missed republishes is comfortably past any doubt.
+STALE_AFTER = 600.0
+
+
+def _alive(pid) -> bool:
+    """Is that process still there?
+
+    Anything we cannot answer counts as alive, because the cost of the two
+    mistakes is not the same: calling a live listener dead hides the one
+    problem this file exists to report."""
+    try:
+        pid = int(pid)
+    except (TypeError, ValueError):
+        return True
+    if pid <= 0:
+        return True
+    try:
+        os.kill(pid, 0)
+        return True
+    except ProcessLookupError:
+        return False
+    except Exception:
+        # PermissionError means it exists and is not ours, which is alive.
+        return True
+
 
 def waiting() -> dict:
-    """The app's own last word on whether it is trusted.
+    """The app's own last word on whether it is trusted, while it still holds.
 
     `AXIsProcessTrusted()` can only be asked by the process itself, and the
     process that matters here is the app bundle, not python. So the app writes
     its answer down and this reads it back. That makes the whole diagnosis
     work on a machine where the TCC databases are unreadable, which is most of
-    them."""
+    them.
+
+    The two answers do not age the same way and this is the whole reason the
+    function is not one line. "Trusted" is a fact that was true when it was
+    written and stays true until something changes it, and the app writes it
+    once and never again, so nothing may expire it. "Not trusted" is a claim
+    about RIGHT NOW: somebody is sitting in front of a dialog. Stop the
+    listener while it is in that state and the claim outlives the process
+    making it, so `doctor` goes on reporting a permission problem for a
+    machine that is simply not running anything, and `dictator on` prints the
+    whole TCC diagnosis at somebody who has nothing wrong.
+
+    So an untrusted record is believed only while the process that wrote it is
+    alive. The pid is exact where an age would be a guess, which is the same
+    argument `recorder.level` makes one file over about a level published by a
+    microphone that has since closed."""
     import json
+    import time
     try:
-        return json.loads(WAITING_FILE.read_text())
+        w = json.loads(WAITING_FILE.read_text())
     except Exception:
         return {}
+    if not isinstance(w, dict):
+        return {}
+    if w.get("trusted") is not False:
+        return w
+    if "pid" in w:
+        return w if _alive(w.get("pid")) else {}
+    try:
+        return w if time.time() - float(w.get("at") or 0) < STALE_AFTER else {}
+    except Exception:
+        return w
 
 
 def stuck() -> bool:
