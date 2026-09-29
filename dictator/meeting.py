@@ -205,13 +205,28 @@ def status(mid: str) -> dict:
 
 
 def _alive(pid: int) -> bool:
+    """Is this process still doing anything.
+
+    A signalled process that has exited but not been reaped is a zombie, and
+    `os.kill(pid, 0)` succeeds for one. That is not a live recorder, it is a
+    dead one whose parent has not noticed, and calling it alive is how `stop`
+    would report a recorder it had just killed as refusing to die. Checking the
+    state costs one `ps`, and only in the case where the cheap answer is yes."""
     if not pid:
         return False
     try:
         os.kill(pid, 0)
-        return True
     except Exception:
         return False
+    try:
+        r = subprocess.run(["ps", "-o", "state=", "-p", str(pid)],
+                           capture_output=True, text=True, timeout=5)
+        st = (r.stdout or "").strip()
+        if st:
+            return not st.startswith("Z")
+    except Exception:
+        pass
+    return True
 
 
 def running() -> dict:
@@ -364,6 +379,28 @@ def stop(wait: float = 15.0) -> dict:
     t0 = time.time()
     while time.time() - t0 < wait and _alive(pid):
         time.sleep(0.2)
+    # SIGTERM is the polite ask, not the whole story. The reason to prefer it
+    # is that the WAV headers are written when the files close, and that reason
+    # justifies WAITING for it, not giving up on it. This used to unlink
+    # CURRENT whichever way the wait ended, so a recorder that survived was
+    # left running with no record of it: `running()` answered nothing, `stop`
+    # answered "No meeting is being recorded", `start` would happily launch a
+    # second one alongside it, and macOS kept the screen recording indicator
+    # lit for the remaining four hours.
+    if pid and _alive(pid):
+        core.log(f"meeting: the recorder ({pid}) ignored SIGTERM after "
+                 f"{wait:.0f}s, killing it")
+        try:
+            os.kill(pid, 9)
+        except Exception:
+            pass
+        t1 = time.time()
+        while time.time() - t1 < 3 and _alive(pid):
+            time.sleep(0.1)
+        if _alive(pid):
+            return {"problem": "stuck", "id": mid,
+                    "say": f"The recorder ({pid}) will not stop. The meeting "
+                           f"is still being recorded. Try: kill -9 {pid}"}
     try:
         CURRENT.unlink()
     except Exception:
@@ -397,6 +434,17 @@ def forget(mid: str) -> bool:
     d = _dir(mid)
     if not d.is_dir():
         return False
+    # Deleting the directory out from under a running recorder does not stop
+    # it. Its files stay open on unlinked inodes, its status writes fail into
+    # nothing, and because CURRENT goes too there is no longer any way to find
+    # it: the same unstoppable orphan `stop` used to leave.
+    live = running()
+    if live.get("id") == mid:
+        got = stop()
+        if got.get("problem"):
+            core.log(f"meeting: refusing to forget {mid}, it is still "
+                     f"recording ({got.get('problem')})")
+            return False
     ok = True
     for p in sorted(d.rglob("*"), reverse=True):
         if p.is_file():

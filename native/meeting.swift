@@ -418,8 +418,20 @@ final class Sink: NSObject, SCStreamOutput, SCStreamDelegate {
 let sink = Sink()
 var stream: SCStream?
 var stopping = false
+// finish() is reached from three different queues: the signal sources on
+// .main, the heartbeat on the main run loop, and the stream delegate on
+// SCStream's own queue. An unguarded `if !stopping` let the second caller fall
+// straight through to exit() while the first was still inside the five second
+// stopCapture wait, tearing the process down before them?.close() had run. The
+// result is exactly the failure the comment below says this code exists to
+// prevent, reached by a different road.
+//
+// The lock is taken before the check and is never released: whoever loses
+// blocks here until the winner exits, rather than racing it to exit().
+let stopLock = NSLock()
 
 func finish(_ code: Int32) -> Never {
+    stopLock.lock()
     if !stopping {
         stopping = true
         let waiting = DispatchSemaphore(value: 0)

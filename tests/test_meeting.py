@@ -18,6 +18,7 @@ The rest is the seams, because chunking an hour of audio is where words get
 lost or said twice, and neither is visible from reading the code.
 """
 import json
+import sys
 import math
 import struct
 import time
@@ -472,3 +473,73 @@ def test_a_recorder_that_died_does_not_burn_the_whole_wait(monkeypatch):
     got = meeting.start(wait=30.0)
     assert got["problem"] == "died", got
     assert time.time() - t0 < 5, "it sat out the whole wait for a dead process"
+
+
+def test_a_recorder_that_ignores_sigterm_is_killed_rather_than_abandoned(
+        monkeypatch, tmp_path):
+    """SIGTERM is preferred because the WAV headers are written when the files
+    close. That justifies waiting for it, not giving up on it. This used to
+    unlink CURRENT whichever way the wait ended, leaving a recorder running
+    with no record of it: `running()` said nothing, `stop` said no meeting was
+    being recorded, `start` would launch a second one beside it, and macOS kept
+    the screen recording indicator lit for the remaining four hours."""
+    import subprocess
+    # Ignores SIGTERM, dies on SIGKILL. Exactly the case.
+    #
+    # It has to say when its handler is installed. Signalling a Python that is
+    # still starting up kills it in the ordinary way, so without this the test
+    # passed against a `stop` with no escalation in it at all: the process it
+    # was meant to find still running had already died.
+    ready = tmp_path / "ready"
+    proc = subprocess.Popen(
+        [sys.executable, "-c",
+         "import signal,sys,time\n"
+         "signal.signal(signal.SIGTERM, signal.SIG_IGN)\n"
+         "open(sys.argv[1], 'w').write('y')\n"
+         "time.sleep(30)", str(ready)])
+    for _ in range(100):
+        if ready.exists():
+            break
+        time.sleep(0.05)
+    assert ready.exists(), "the stubborn process never started"
+    mid = "20260101-090000"
+    meeting.save(mid, {"id": mid, "started": time.time()})
+    (meeting._dir(mid) / "status.json").write_text(json.dumps(
+        {"state": "recording", "pid": proc.pid, "started": time.time()}))
+    meeting.CURRENT.parent.mkdir(parents=True, exist_ok=True)
+    meeting.CURRENT.write_text(mid)
+    try:
+        got = meeting.stop(wait=1.0)
+        assert "problem" not in got, got
+        assert not meeting._alive(proc.pid), "it was left running"
+        assert not meeting.CURRENT.exists()
+    finally:
+        try:
+            proc.kill()
+        except Exception:
+            pass
+        proc.wait(timeout=5)
+
+
+def test_forgetting_the_meeting_being_recorded_stops_it_first(monkeypatch):
+    """Removing the directory does not stop the recorder. Its files stay open
+    on unlinked inodes and CURRENT goes with them, so nothing can find it
+    again."""
+    import subprocess
+    proc = subprocess.Popen(["sleep", "30"])
+    mid = "20260101-090000"
+    meeting.save(mid, {"id": mid, "started": time.time()})
+    (meeting._dir(mid) / "status.json").write_text(json.dumps(
+        {"state": "recording", "pid": proc.pid, "started": time.time()}))
+    meeting.CURRENT.parent.mkdir(parents=True, exist_ok=True)
+    meeting.CURRENT.write_text(mid)
+    try:
+        assert meeting.forget(mid) is True
+        assert not meeting._alive(proc.pid), "forget left an orphan recorder"
+        assert not meeting._dir(mid).exists()
+    finally:
+        try:
+            proc.kill()
+        except Exception:
+            pass
+        proc.wait(timeout=5)
