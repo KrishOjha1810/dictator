@@ -74,6 +74,29 @@ NO_APP = "no app"            # the bundle is not built yet
 PANE = ("System Settings, Privacy & Security, Accessibility\n     "
         "(headed \"Allow the applications below to control your computer.\")")
 
+# The other two panes. Sending somebody to Accessibility to switch on the
+# microphone is a wrong instruction that reads like a right one: they go to
+# the named pane, do not find the switch, and conclude the tool is confused.
+_PANES = {
+    "accessibility": PANE,
+    "input monitoring": "System Settings, Privacy & Security, Input Monitoring",
+    "microphone": "System Settings, Privacy & Security, Microphone",
+}
+
+_TITLES = {
+    "accessibility": "Accessibility",
+    "input monitoring": "Input Monitoring",
+    "microphone": "Microphone",
+}
+
+
+def pane(service: str) -> str:
+    return _PANES.get(service, PANE)
+
+
+def title(service: str) -> str:
+    return _TITLES.get(service, "Accessibility")
+
 
 def _rows(service: str, client: str = BUNDLE_ID):
     """Every TCC row for this service and client, or None if we cannot look.
@@ -228,6 +251,13 @@ def advice(info: dict) -> str:
     to control your computer." and the two buttons under it are "Add" (the
     plus) and "Remove" (the minus)."""
     s = info["state"]
+    # Which pane, taken from the service rather than assumed. Accessibility,
+    # Input Monitoring and Microphone are three different lists in System
+    # Settings, and naming the wrong one reads as a right instruction: the
+    # user goes where they were sent, finds no switch, and stops trusting the
+    # rest of the diagnosis.
+    PANE = pane(info.get("service") or "accessibility")
+    WHAT = title(info.get("service") or "accessibility")
     if s == GRANTED:
         return ""
     if s == STALE:
@@ -252,7 +282,7 @@ has to be removed so the app can ask again:
 
 Or have all of that done for you:  dictator permissions --reset"""
     if s == DENIED:
-        return f"""Accessibility is switched off for Dictator.
+        return f"""{WHAT} is switched off for Dictator.
 
   1. Open {PANE}
   2. Switch Dictator on
@@ -260,7 +290,7 @@ Or have all of that done for you:  dictator permissions --reset"""
 It starts listening on its own within a couple of seconds. Nothing to
 restart."""
     if s == MISSING:
-        return f"""Dictator has never been granted Accessibility.
+        return f"""Dictator has never been granted {WHAT}.
 
   1. Open {PANE}
   2. Switch Dictator on. If it is not in the list at all, click the plus
@@ -320,7 +350,7 @@ def verdict(info: dict, saw: dict = None) -> tuple:
 def report(service: str = "accessibility", app=None) -> str:
     """The whole diagnosis as one block of text, for a log or a terminal."""
     info = state(service, app)
-    head = f"Accessibility: {summary(info)}"
+    head = f"{title(service)}: {summary(info)}"
     rest = advice(info)
     return f"{head}\n\n{rest}" if rest else head
 
