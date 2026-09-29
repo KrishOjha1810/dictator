@@ -1511,8 +1511,8 @@ counted, and both are words this person says several times a day.
 21 occurrences in 5664 words. Every remaining one is a genuine failure:
 `accura`, `acur` and `collater` (truncations), `ndernderndernder` and
 `ondernder` (repetition loops), `lrdr`, `rjmn`, `bnvay`, `sval`, `klo`,
-`checkmone`, `landborough`, `kaite`, `dismatched`, and five mangled attempts
-at real people's names, which are not written out here for the same reason
+`checkmone`, `kaite`, `dismatched`, a mangled place name, and five mangled
+attempts at real people's names, which are not written out here for the same reason
 this file contains no transcripts of anyone else: they are other people's.
 
 **So the shipped pipeline is already at 0.37% on real Hinglish, and the noise
@@ -1874,3 +1874,87 @@ read both lists and ask whether anything on Apex's is really a word.
 instrument, and the instrument has a structural bias towards turbo of unknown
 size.** The gap is 0.13 points and the whole error rate is 0.17, so a bias of
 that size is not implausible.
+
+
+---
+
+## Reading the words changed the model answer, and then changed the instrument
+
+The comparison above was recorded with the caveat that the allowlist had been
+built by reading turbo's output, so the instrument might be flattering turbo by
+an unknown amount. `tools/compare.py` now prints the words each model was
+marked down for, and reading those two lists settled it, and then broke
+something bigger open.
+
+### The bias was real, and it was two words
+
+Turbo's list was one mangled first name (three times), one run-together
+English word, and three tokens that appear on both lists. Apex's was ten:
+three shared with turbo, and then a mangled surname, two run-together English
+words (`nextin`, `toprepare`), a mangled English word (`hellucinate`), one
+mangled technical term, and **two romanised Hindi spellings**, `pao` and
+`uski`.
+
+So the fitted-to-turbo surface was two words out of ten, not the whole list.
+Excusing both entirely, Apex still has more errors, and one of them is worse
+in kind than anything on turbo's list:
+
+> turbo: `Vault PDA`
+> Apex:  `voltpedia`
+
+That is the "pool rekvest" failure, on the exact vocabulary this product
+exists for. **The decision stands, and now for a stated reason rather than a
+margin.**
+
+### And then the hold that inverted the whole measurement
+
+On one recording the two models answered:
+
+> turbo: "Pirated Copy content, if you can play it, then copy it, PDF, add it,
+>  day by day."
+> Apex: "Pirated copy se content agar aap le pao to usse copy se content lekar
+>  PDF mein add kar do na"
+
+Apex is right. Turbo did not mishear a word, it **replaced a Hindi sentence
+with an English one**, and every word it chose is a real English word.
+
+Scored:
+
+| | gibberish | what it flagged |
+|---|---|---|
+| turbo, completely wrong | **0%** | nothing |
+| Apex, correct | **10%** | `pao`, `uski` |
+
+The instrument is not merely blind here, it is **inverted**: it gave a perfect
+score to the wrong answer and penalised the right one. And the two words it
+penalised are precisely the two that made up the suspected bias, so the bias
+and the blind spot turned out to be the same fault seen from two sides.
+
+### What that fault actually was
+
+`pao` and `uski` are ordinary Hindi words. Checking the rest of the commonest
+romanised Hindi against the lexicon found **19 missing, including `mera` and
+`kab`**.
+
+Which means the instrument was **marking a model down for writing romanised
+Hindi**, which is the single thing a Hinglish-specific model exists to do.
+Every one of these models was being measured with a ruler that punished its
+purpose. Fixed, and pinned in `tests/test_nonwords.py` so it cannot come back.
+
+### The blind spot that remains, and why it cannot be fixed here
+
+Turbo scoring 0% on that hold is not a bug in the word list. **A wrong English
+word is still an English word**, and no dictionary can see the difference.
+That failure needs a reference transcript, which is the one part of this
+benchmark that cannot be delegated.
+
+What can be done without one is to show where it might have happened.
+`compare.py` now reports, per hold, how much of each model's output is
+romanised Hindi, and prints the holds where two models disagree by more than
+15 points. It cannot say which is right. It puts the handful of holds where
+one of them turned Hindi into English in front of a person, which is the same
+"print the words" move one level up.
+
+**The honest summary of the whole exercise: the benchmark did not pick a
+model. It found four bugs in itself, and the fourth one was the instrument
+punishing the thing it was built to measure.**
