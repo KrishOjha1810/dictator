@@ -49,6 +49,27 @@ from . import core
 # See core.bundle_id.
 BUNDLE_ID = core.bundle_id()
 
+# What every install used before the identifier became per account. Any row
+# still under it belongs to no app that exists now, and it shows in System
+# Settings as a second entry called "Dictator" next to the real one, which is
+# a good way to switch on the wrong thing and conclude the fix did not work.
+LEGACY_IDS = ("com.dictator.dictation", "com.dictator.meeting")
+
+
+def orphans() -> list:
+    """Rows left behind by the shared identifier, or [] if there are none and
+    None if the databases cannot be read."""
+    found, looked = [], False
+    for old in LEGACY_IDS:
+        for service in ("accessibility", "input monitoring", "microphone"):
+            rows = _rows(service, old)
+            if rows is None:
+                continue
+            looked = True
+            if rows:
+                found.append((service, old))
+    return found if looked else None
+
 # Accessibility and Input Monitoring live in the machine-wide database.
 # Microphone lives in the per-user one. Getting this the wrong way round
 # reports "never granted" for a permission that has been granted for months.

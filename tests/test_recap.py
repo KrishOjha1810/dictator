@@ -55,13 +55,31 @@ def _no_model_and_no_network(monkeypatch):
     yield calls
 
 
-def _say(text, ago=60.0, app="Terminal", secs=4.0):
+def _sometime_today() -> float:
+    """A moment that is inside today and already past, at any hour.
+
+    Every "today" test measures backwards from now, so a suite run just after
+    midnight put its own fixtures into YESTERDAY and failed: `ago=300` at 00:03
+    is 23:58 the day before. Anchoring to noon fails the other way, because at
+    00:03 noon has not happened yet and a recap ends at now.
+
+    So: shortly after midnight, pulled back to just before now when now is
+    itself shortly after midnight."""
+    import datetime
+    now = time.time()
+    start = datetime.datetime.fromtimestamp(now).replace(
+        hour=0, minute=0, second=0, microsecond=0).timestamp()
+    return min(start + 600, now - 10)
+
+
+def _say(text, ago=60.0, app="Terminal", secs=4.0, at=None):
     """A row in the history, at a time of our choosing. Written straight into
     the database because `at` is otherwise always now."""
+    when = at if at is not None else time.time() - ago
     con = history._db()
     con.execute("INSERT INTO said (at, heard, shown, kept, app, lang, engine, "
                 "secs, conf) VALUES (?,?,?,?,?,?,?,?,?)",
-                (time.time() - ago, text, text, "", app, "en", "turbo", secs, 0.9))
+                (when, text, text, "", app, "en", "turbo", secs, 0.9))
     con.commit()
     con.close()
 
@@ -87,9 +105,10 @@ def test_a_handful_of_utterances_is_not_padded_into_a_report(
         _no_model_and_no_network):
     """Three sentences are three sentences. A heading, a theme and a
     conclusion drawn from them is writing, not reporting."""
-    _say("check the migration", ago=300)
-    _say("rerun the suite", ago=240)
-    _say("push it to the branch", ago=180)
+    base = _sometime_today()
+    _say("check the migration", at=base)
+    _say("rerun the suite", at=base + 1)
+    _say("push it to the branch", at=base + 2)
 
     r = recap.report("today")
     assert r.utterances == 3

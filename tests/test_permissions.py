@@ -545,3 +545,35 @@ def test_the_meeting_app_gets_its_own_identifier_too():
     """Screen Recording is system-wide as well, so the same collision."""
     from dictator import core
     assert core.bundle_id("com.dictator.meeting") != core.bundle_id()
+
+
+def test_rows_from_the_shared_identifier_are_found(monkeypatch):
+    """After the identifier became per account, a row under the old shared one
+    belongs to no app that exists, and it still shows in System Settings under
+    the SAME NAME as the real entry. Switching on the Dictator you can see then
+    switches on nothing, which reads exactly like the fix having failed."""
+    from dictator import tcc
+
+    def rows(service, client=tcc.BUNDLE_ID):
+        return [("row",)] if client == "com.dictator.dictation" else []
+
+    monkeypatch.setattr(tcc, "_rows", rows)
+    got = tcc.orphans()
+    assert got, "the leftover row was not found"
+    assert all(old == "com.dictator.dictation" for _, old in got)
+    assert all(old != tcc.BUNDLE_ID for _, old in got)
+
+
+def test_nothing_left_over_is_an_empty_list_not_a_failure(monkeypatch):
+    from dictator import tcc
+    monkeypatch.setattr(tcc, "_rows", lambda service, client=None: [])
+    assert tcc.orphans() == []
+
+
+def test_databases_it_cannot_read_answer_none_rather_than_nothing(monkeypatch):
+    """"I looked and there is nothing" and "I could not look" are different
+    answers, and reporting the second as the first is how this module's own
+    docstring says a doctor comes to pass the state it exists to report."""
+    from dictator import tcc
+    monkeypatch.setattr(tcc, "_rows", lambda service, client=None: None)
+    assert tcc.orphans() is None

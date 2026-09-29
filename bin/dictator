@@ -28,6 +28,7 @@ USAGE = """dictator: hold a key and talk, anywhere on your Mac.
   dictator permissions  say why macOS is not trusting it, and walk you out
   dictator permissions --explain   say it and stop, without changing anything
   dictator permissions --reset     remove the stale entry and ask again
+  dictator permissions --tidy      remove entries left by older versions
   dictator delivery [type|clipboard]   how the words get in
   dictator capture on|off        keep recordings, to compare speech models
   dictator log        the last thing it did
@@ -99,6 +100,49 @@ def _watching(limit: int = 200) -> None:
     if not counts.get("edited"):
         print("    it has not caught a correction yet, so it has learned "
               "nothing from your edits.")
+
+
+def tidy() -> int:
+    """Remove the rows left behind by the shared identifier.
+
+    Until the identifier became per account, every install on a machine owned
+    one row called "Dictator". After the change those rows belong to no app
+    that exists, and they still show in System Settings under the same name as
+    the real one, so the obvious thing to do (switch on the Dictator you can
+    see) switches on nothing and reads as the fix having failed."""
+    from dictator import tcc
+    left = tcc.orphans()
+    if left is None:
+        print("Cannot read what macOS remembers, so cannot tell whether there")
+        print("is anything to tidy. That needs Full Disk Access for this")
+        print("terminal, in System Settings, Privacy & Security.")
+        return 1
+    if not left:
+        print("Nothing left over. The only entries are the real ones.")
+        return 0
+    print("These entries belong to no app any more:\n")
+    for service, old in sorted(set(left)):
+        print(f"  {tcc.title(service)}  ({old})")
+    print("\nRemoving them. Your own entries are not touched.\n")
+    gone = []
+    for old in sorted({o for _, o in left}):
+        for flag in ("Accessibility", "ListenEvent", "Microphone"):
+            r = subprocess.run(["tccutil", "reset", flag, old],
+                               capture_output=True, text=True)
+            if r.returncode == 0:
+                gone.append(f"{flag} ({old})")
+    if not gone:
+        print("  macOS would not remove them. Do it by hand: System Settings,")
+        print("  Privacy & Security, Accessibility, select the extra Dictator")
+        print("  row and click the minus button.")
+        return 1
+    print(f"  Removed {len(gone)}.")
+    still = tcc.orphans()
+    if still:
+        print("  Some are still there; remove those with the minus button.")
+        return 1
+    print("  System Settings now shows only the real one.")
+    return 0
 
 
 def main(argv) -> int:
@@ -407,6 +451,8 @@ def main(argv) -> int:
         return 0
 
     if cmd in ("permissions", "permission", "perms"):
+        if "--tidy" in rest:
+            return tidy()
         return permissions("--reset" in rest, "--explain" in rest)
 
     if cmd in ("delivery", "paste"):
@@ -947,16 +993,28 @@ def doctor() -> int:
     if app_built:
         req = signing.requirement(always.APP)
         stable = "certificate leaf" in req
-        # The quietest failure in this program: dictation keeps working and it is
-    # the wrong copy of it. Checked here because nothing else looks.
-    here = always._bundle_points_here()
-    ok("the app runs this copy of dictator", here,
-       "" if here else
-       "it is set up to run a different checkout, so nothing you change here "
-       "takes effect. Run: dictator build")
 
-    ok("app identity survives a rebuild", stable,
+        # The quietest failure in this program: dictation keeps working and it
+        # is the wrong copy of it. Checked here because nothing else looks.
+        here = always._bundle_points_here()
+        ok("the app runs this copy of dictator", here,
+           "" if here else
+           "it is set up to run a different checkout, so nothing you change "
+           "here takes effect. Run: dictator build")
+
+        ok("app identity survives a rebuild", stable,
            "" if stable else "ad-hoc signed: macOS will forget its permissions")
+
+        # A second row under the same name is how somebody switches on the
+        # wrong Dictator and concludes the fix did not work.
+        left = tcc.orphans()
+        if left:
+            services = ", ".join(sorted({s for s, _ in left}))
+            ok("no leftover entry from an older version", False,
+               f"an older shared entry is still in System Settings for "
+               f"{services}. It belongs to no app now and sits next to the "
+               f"real one under the same name. Run: "
+               f"dictator permissions --tidy")
 
     # The one that cost days. A ticked checkbox in System Settings and an
     # untrusted app are the same picture, so "is Accessibility on" is not a
