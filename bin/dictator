@@ -630,11 +630,15 @@ def doctor() -> int:
     from dictator import always, signing, stt, tcc
     bad = 0
 
-    def ok(label, good, detail=""):
+    def ok(label, good, detail="", note=""):
+        """`note` says something true about a check that passed. Used where a
+        bare "ok" would be read as more than it means."""
         nonlocal bad
         if not good:
             bad += 1
-        print(f"  {'ok ' if good else 'BAD'}  {label}" + (f"  {detail}" if detail else ""))
+        print(f"  {'ok ' if good else 'BAD'}  {label}"
+              + (f"  {detail}" if detail else "")
+              + (f"  ({note})" if good and note else ""))
 
     def unknown(label, detail=""):
         """Not every question has an answer on every machine, and reporting
@@ -752,8 +756,16 @@ def doctor() -> int:
     ok("set to start at login", always.installed(),
        "" if always.installed() else "run: dictator on")
     if always.installed():
-        ok("running now", always.running(),
-           "" if always.running() else "check: dictator log")
+        # "running now" read as "dictation works", and sat directly under a
+        # line saying no listener was running. Both were true: the app process
+        # is up and it is waiting for a permission it has not got. Saying
+        # which, here, is cheaper than making someone hold the two lines
+        # together and work out that they do not contradict each other.
+        up = always.running()
+        ok("the app is running", up,
+           "" if up else "check: dictator log",
+           note=("it is up, but waiting rather than listening"
+                 if up and n == 0 else ""))
 
     # A second hold-to-talk listener pastes everything twice, and the symptom
     # looks like a stutter rather than like two programs.
