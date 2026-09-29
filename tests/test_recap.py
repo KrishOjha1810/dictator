@@ -224,8 +224,46 @@ def test_asking_for_no_prose_consults_nothing(monkeypatch):
     monkeypatch.setattr(recap, "available",
                         lambda: pytest.fail("availability was checked anyway"))
     r = recap.report("7", prose=False)
-    assert r.utterances == 8 and r.source in ("no-model", "too-short")
+    assert r.utterances == 8
+    # Exactly one answer, not whichever of two happened to come out. The old
+    # form was `in ("no-model", "too-short")`, and only "no-model" was
+    # reachable with this fixture, so it was written exactly wide enough to
+    # accept the wrong one.
+    assert r.source == "not-asked", r.source
     assert recap.calls == []
+
+
+def test_it_does_not_claim_there_is_no_model_on_a_machine_that_has_one(
+        monkeypatch):
+    """"--plain" skips the model. It does not mean the model is absent, and
+    telling somebody with 2.5GB of it on disk that there is none is a plain
+    untruth in the one line that explains itself."""
+    _work(8, ago=7200)
+    monkeypatch.setattr(recap, "available", lambda: True)
+    r = recap.report("7", prose=False)
+    assert r.source == "not-asked"
+    flat = " ".join(r.text.split())          # the report is wrapped
+    assert "no local model on this machine" not in flat
+    assert "you asked for it without the model" in flat
+
+
+def test_a_model_that_will_not_start_is_not_reported_as_a_dishonest_answer(
+        monkeypatch):
+    """"rejected" means the model answered and the answer was not supported.
+    A server that never came up said the same thing, which blames the guard
+    for a failure to launch and sends the reader looking in the wrong place."""
+    import contextlib
+    _work(8, ago=7200)
+    monkeypatch.setattr(recap, "available", lambda: True)
+
+    @contextlib.contextmanager
+    def never_starts():
+        yield False
+
+    monkeypatch.setattr(recap, "model_up", never_starts)
+    r = recap.report("7", prose=True)
+    assert r.source == "no-server", r.source
+    assert "would not start" in " ".join(r.text.split())
 
 
 def test_the_recap_only_ever_reads(monkeypatch):

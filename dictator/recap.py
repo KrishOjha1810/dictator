@@ -578,10 +578,18 @@ class Recap:
     terms: list = field(default_factory=list)
     # Where the prose came from, and when there is none, why there is none:
     #   model      a model on this machine wrote it
+    #   not-asked  the caller asked for no prose
     #   no-model   there is no local model, so nothing could write it
+    #   no-server  there is a model and it would not start
     #   rejected   the model answered and the answer was not supported
     #   too-short  nothing here was long enough to be worth compressing
-    source: str = "no-model"
+    #
+    # These used to be two labels doing the work of five. The default was
+    # "no-model", and `--plain` short-circuits before anything corrects it, so
+    # somebody with the 2.5GB model sitting in their models directory was told
+    # it was not there. A server that failed to come up inside START_WAIT left
+    # "rejected", which blames the model's honesty for a failure to launch.
+    source: str = "not-asked"
 
     def __bool__(self) -> bool:
         return self.utterances > 0
@@ -642,9 +650,15 @@ def report(when: "str | int" = "today", prose: bool = True) -> Recap:
     worth_prose = [s for s in r.sessions if len(s["lines"]) >= PROSE_MIN]
     if not worth_prose:
         r.source = "too-short"
+    elif not prose:
+        r.source = "not-asked"
+    elif not available():
+        r.source = "no-model"
     if prose and worth_prose and available():
         r.source = "rejected"       # until something usable comes back
         with model_up() as answering:
+            if not answering:
+                r.source = "no-server"
             if answering:
                 # Longest first: if the ceiling bites, it should bite on the
                 # sessions with least in them.
@@ -710,7 +724,10 @@ def render(r: Recap) -> str:
         out.append("\n  The prose above was written by a model on this "
                    "machine. Nothing left it.\n")
     else:
-        why = {"no-model": "there is no local model on this machine",
+        why = {"not-asked": "you asked for it without the model",
+               "no-model": "there is no local model on this machine",
+               "no-server": "the local model is here but would not start; "
+                            "see ~/.dictator/log",
                "rejected": "the local model did not return anything that "
                            "matched what you said",
                "too-short": "nothing here was long enough to be worth "
