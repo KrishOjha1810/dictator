@@ -43,7 +43,20 @@ def build_app() -> str:
     import shutil
     if not shutil.which("swiftc"):
         return ""
+    # Do not rebuild what has not changed. Every rebuild produces a different
+    # binary, and macOS drops the Accessibility grant when the binary changes
+    # even though the designated requirement is unchanged, so an unconditional
+    # rebuild cost the user their permission on EVERY `dictator on`. The
+    # installer ends with `dictator on`, which is why a fresh install spent its
+    # first few minutes losing a permission it had just been given.
     macos = APP / "Contents" / "MacOS"
+    exe = macos / "Dictator"
+    if exe.exists():
+        newest = max((f.stat().st_mtime for f in
+                      (src / "main.swift", src / "Info.plist") if f.exists()),
+                     default=0)
+        if exe.stat().st_mtime >= newest:
+            return str(APP)
     macos.mkdir(parents=True, exist_ok=True)
     try:
         subprocess.run(["swiftc", "-O", str(src / "main.swift"),

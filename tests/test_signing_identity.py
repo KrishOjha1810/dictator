@@ -166,3 +166,27 @@ def test_libressl_is_not_given_a_flag_it_rejects():
                            return_value=mock.Mock(stdout="LibreSSL 3.3.6", stderr="")):
         exe, flags = signing._openssl()
     assert flags == [], flags
+
+
+def test_the_app_is_not_rebuilt_when_nothing_changed():
+    """Every rebuild produces a different binary, and macOS drops the
+    Accessibility grant when the binary changes even though the designated
+    requirement is unchanged. build_app had no staleness check, so every
+    `dictator on` cost the user their permission, and the installer ends with
+    `dictator on`. That is why a fresh install spent its first few minutes
+    losing a permission it had just been given."""
+    import inspect
+    from dictator import always
+    src = inspect.getsource(always.build_app)
+    assert "st_mtime" in src, "build_app rebuilds unconditionally again"
+
+
+def test_a_rebuild_leaves_the_binary_alone(tmp_path, monkeypatch):
+    from dictator import always
+    exe = always.APP / "Contents" / "MacOS" / "Dictator"
+    if not exe.exists():
+        return
+    always.build_app()
+    first = exe.stat().st_mtime
+    always.build_app()
+    assert exe.stat().st_mtime == first, "it rebuilt when nothing had changed"
