@@ -944,12 +944,21 @@ def doctor() -> int:
     n = len([x for x in (r.stdout or "").split() if x.strip()])
     # Exactly one. Zero means the key does nothing, which is the complaint
     # this check exists to answer, and `n <= 1` quietly passed it.
-    ok("exactly one key listener", n == 1,
-       "" if n == 1 else
-       ("none is running, so the key does nothing. Run: dictator permissions"
-        if n == 0 else
-        f"{n} are running, so everything is pasted {n} times. "
-        "Run: dictator off && dictator on"))
+    # Which advice depends on whether this machine has ever been set up. On a
+    # fresh one the answer is "turn it on", and sending somebody to the
+    # permissions pane before they have installed anything is the same wrong
+    # instruction that reads like a right one that `permissions` itself was
+    # just fixed for.
+    if n == 1:
+        why = ""
+    elif n > 1:
+        why = (f"{n} are running, so everything is pasted {n} times. "
+               "Run: dictator off && dictator on")
+    elif not always.installed():
+        why = "it has not been turned on yet. Run: dictator on"
+    else:
+        why = "none is running, so the key does nothing. Run: dictator permissions"
+    ok("exactly one key listener", n == 1, why)
 
     ok("set to start at login", always.installed(),
        "" if always.installed() else "run: dictator on")
