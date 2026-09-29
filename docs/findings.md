@@ -1299,3 +1299,69 @@ decoder on silence (the loops).
 That is not a reason to skip the comparison, which is still worth finishing
 because a model that is equally accurate and meaningfully faster would still
 be worth having. It is a reason not to expect much from it.
+
+
+---
+
+## Catching the decoder talking to itself, and why it is not a loudness check
+
+Three of the errors in the corpus are the decoder repeating itself rather than
+transcribing, in two shapes:
+
+    Oof, ndernderndernder
+    and then, it's a little bit. It's a little bit. It's a little bit.
+
+All three came from `cli:ggml-large-v3-turbo.bin`, confirmed in `history.db`,
+so this is the whisper CLI path and not Parakeet. The cause is recorded above:
+undershooting `audio_ctx` makes the decoder loop, and the same audio through
+the full encoder produces words. **The setting is ours, so a loop is a reason
+to run it again, not a reason to paste it.**
+
+### The obvious fix does not work, and it was measured rather than assumed
+
+The instinct is to reject quiet audio before transcribing it, and `loudness()`
+was already sitting in `stt.py` with **no callers at all**. Measuring the
+corpus kills the idea outright:
+
+| recording | RMS | what it is |
+|---|---|---|
+| `ndernderndernder` | 0.0323 | a loop |
+| `Ondernder` | 0.0176 | a loop |
+| "I don't know" | 0.0079 | real speech |
+| "Yeah, we're going to." | 0.0089 | real speech |
+| "Who is trying?" | 0.0115 | real speech |
+| a 26 second Hinglish hold, 71 words | 0.0139 | real speech |
+
+**The loops are louder than a dozen recordings of real speech.** A loudness
+gate set anywhere that caught them would have thrown away every short answer
+the user gives, which is the failure this product is least able to afford. The
+idea was killed in four minutes by printing the numbers.
+
+### What does separate them is the shape of the output
+
+`dictator/loops.py` reads the text rather than the audio, in two ways: one
+short unit repeated inside a single token (`nder` four times), and the same
+clause repeated three times in a row. Both thresholds were set against real
+text rather than chosen:
+
+- **Three repeats, not two.** Twice is a stutter or a real repetition. "murmur"
+  is "mur" twice and "couscous" is "cous" twice.
+- **Eight characters minimum** inside a token, so "hahaha" is left alone.
+- **Six characters minimum** for a repeated clause, so "okay, okay, okay" and
+  "right, right, right", which people genuinely say, are left alone. Four was
+  the first value and it caught both.
+- Clause splitting is on commas as well as full stops, because the loop turbo
+  actually produced was "I think, I think, I think, I think", which a
+  full-stop split reads as one sentence and lets through.
+
+Run over all 130 real recordings it flags **2**, both genuine, and nothing
+else. The false positive half is the half that matters: saying "this is a
+loop" costs the user a working dictation, so `tests/test_loops.py` spends more
+assertions on ordinary speech than on loops.
+
+### The retry
+
+On a loop, `_transcribe_ex` runs the same command again with `-ac` removed,
+and keeps the second answer **only if it is not also a loop**. A loop on both
+passes means the audio is the problem, and the first answer is then no worse
+than the second. The cost is one extra pass on roughly 2% of holds.
