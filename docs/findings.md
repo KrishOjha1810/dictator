@@ -1746,3 +1746,67 @@ Searching `heard` as well as `shown` matters more here than in an ordinary
 search: the reason to delete a line is often that it holds something that
 should not have been written down, and the copy holding it may be the one the
 recogniser produced rather than the one that landed.
+
+
+---
+
+## The model decision: turbo stays, and the benchmark says so clearly
+
+Full corpus, 111 holds over three minimum seconds, 5200 words. Full encoder on
+every model so the sizing fitted to turbo is not doing the comparing.
+Vocabulary prompt on, language auto, `tools/nonwords.py` after the four
+morphology fixes.
+
+| model | words | gibberish | secs | Devanagari |
+|---|---|---|---|---|
+| **ggml-large-v3-turbo** (shipped) | 5214 | **0.17%** | 7.5 | 4% |
+| Whisper-Hindi2Hinglish-Apex fp16 | 5300 | 0.30% | 7.8 | 0% |
+| Whisper-Hindi2Hinglish-Apex q8_0 | 5196 | 0.29% | 7.4 | 0% |
+
+**Turbo wins at roughly half the error rate, at the same speed.** The decision
+rule written before any of this ran (improve and not regress, cost no more
+than one extra second) is not met, and it is not close. **Nothing is being
+switched.**
+
+Apex is not winning by saying more or less: it produces 5300 words against
+turbo's 5214, within 2%, so neither is scoring well by dropping speech.
+
+### What Apex actually buys, and why it is not enough
+
+**0% Devanagari against turbo's 4%.** That is the whole reason Apex exists: it
+writes Hindi in Latin script and never makes `roman.py` load bearing. On four
+holds in a hundred, turbo emits Devanagari and `roman.py` converts it.
+
+That conversion evidently works, because turbo still wins on the final number
+with the conversion included. **The pipeline beats the model that would have
+made the pipeline unnecessary.** Which is the more useful result: it says the
+romanisation layer, not the weights, is what this product is getting its
+Hinglish accuracy from.
+
+### Quantisation, corrected
+
+fp16 0.30% at 7.8s, q8_0 0.29% at 7.4s. On 111 holds these are the same model:
+**quantisation costs nothing measurable in accuracy and is not slower here**,
+which contradicts the earlier note in this document that quantisation makes
+the encoder slower on Metal (f16 1219ms, q8_0 1271ms). That earlier
+measurement was a single encoder timing; this is 111 end to end holds. Both
+can be true, and the end to end number is the one that matters.
+
+That also means the very first Apex run, on q8_0, was not handicapped by the
+quantisation. It was handicapped entirely by the encoder sizing.
+
+### How much of turbo's win is the instrument being fitted to turbo
+
+Worth asking, because the allowlist was built by reading the corpus, and the
+corpus transcripts were produced by turbo. A word turbo gets wrong often
+enough was likely to end up excused; a word only Apex produces was not. The
+size of that advantage is unknown and it is not zero.
+
+`tools/compare.py` now prints the words each model was marked down for, which
+is the same lesson as above applied to the comparison itself. The check is to
+read both lists and ask whether anything on Apex's is really a word.
+
+**Until that has been read, the honest statement is: turbo wins on this
+instrument, and the instrument has a structural bias towards turbo of unknown
+size.** The gap is 0.13 points and the whole error rate is 0.17, so a bias of
+that size is not implausible.
