@@ -922,9 +922,13 @@ def doctor() -> int:
         print(f"       macOS remembers:  {info['held_by']}")
         print(f"       this build is:    {info['wanted']}")
 
-    # What the app itself last saw. This is the only signal that survives on a
-    # machine where the databases cannot be read, and it is the exact state
-    # issue #2 is about: a listener sitting in a loop, silent, forever.
+    # How long it has been sitting there, which is the part the line above
+    # cannot say. `verdict` already weighs this answer against the databases
+    # and will have failed the line above too; what this adds is the duration,
+    # because a listener waiting two minutes and one waiting since yesterday
+    # are the same picture and not the same problem. It is also the only
+    # signal at all on a machine whose TCC databases cannot be read, which is
+    # the state issue #2 is about: a listener in a loop, silent, forever.
     if saw.get("trusted") is False:
         import time as _time
         mins = max(0, int((_time.time() - float(saw.get("at") or 0)) / 60))

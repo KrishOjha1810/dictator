@@ -804,6 +804,46 @@ Related: **an error handler that itself crashes**. `mac.py` called `core.log`
 in its error paths without importing `core`, so any failing osascript raised
 `NameError` out of the handler.
 
+Also in this family, and the reason to keep reading it as one: **a parameter
+that is accepted and then not consulted.** `tcc.verdict(info, saw)` took the
+listener's own answer about itself and read it in exactly one branch, the one
+where the databases could not be read. So on the better instrumented machine,
+where they could, the only direct measurement in the file was discarded and a
+listener saying it was not trusted was reported as "ok". The signature of this
+one is that it looks wired: the argument is there, the caller passes it, and a
+test that checks the branch it IS used in passes.
+
+---
+
+## The second family: a signal that is present in both states
+
+Four times now, in a different shape from the one above: **something was read
+as evidence when it occurs in the good case and the bad case alike.** The cure
+was never a better threshold, it was finding a second thing that actually
+differs.
+
+1. **A missing paste receipt was read as a failed paste.** A busy application
+   simply takes longer than the timeout, so absence covered both. The fallback
+   then restored the clipboard over the text it was rescuing.
+2. **`doctor` checked `n <= 1` key listeners.** One is correct and zero is the
+   complaint the check exists to answer, and the predicate passed both.
+3. **`AVAudioRecorder`'s finish callback fires for our own `stop()`**, for
+   reaching max-seconds, and for an input device that went away. Wiring the
+   cut-short warning to the callback alone would have warned on every hold,
+   which is worse than the silence it replaced. What separates them is a flag
+   set before we call `stop()` plus the recorder's own clock.
+4. **`AXIsProcessTrusted()` returning true** is produced both by a genuinely
+   trusted app and by a process launched from a terminal that has the grant.
+   That is why the stale state cannot be reproduced from a shell. So the
+   listener's YES is not evidence, while its NO is, and `tcc.verdict` is
+   deliberately asymmetric about which one may override the databases.
+
+The tell is the same every time and it is worth learning to hear: somebody
+says "it reports X when it is broken", and nobody has asked what it reports
+when it is fine. **The question to ask of any signal is not what it does in
+the failing case, it is whether it does something different in the working
+one.**
+
 ---
 
 ## Things we assumed and were wrong about

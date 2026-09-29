@@ -404,3 +404,54 @@ def _a_dead_pid() -> int:
     p = subprocess.Popen(["/usr/bin/true"])
     p.wait()
     return p.pid
+
+
+# ---- which answer wins when two of them disagree ------------------------------
+#
+# `verdict` has two sources: what macOS remembers about an app bundle on disk,
+# and what the running listener says about itself. They can disagree, and the
+# rule is not symmetric.
+
+
+def _state(s):
+    return {"service": "accessibility", "app": "/x", "state": s,
+            "ticked": None, "held_by": "", "wanted": "", "readable": True}
+
+
+def test_a_running_listener_saying_no_beats_a_database_saying_yes():
+    """The bug this function's own docstring is about, in a new shape. A grant
+    can match the build on disk while the process actually holding the key is
+    an older copy that macOS does not trust, and reporting that as fine sends
+    the user away from the only place the answer was."""
+    how, detail = tcc.verdict(_state(tcc.GRANTED), {"trusted": False})
+    assert how == "bad", "the one direct measurement was ignored"
+    assert "not this build" in detail
+
+
+def test_a_listener_saying_yes_never_excuses_a_stale_tick():
+    """Not symmetric, and this is the half that must not be 'fixed'. A process
+    launched from a terminal that has the grant reports itself trusted even
+    when its own entry is stale, which is why the broken state could never be
+    reproduced from a shell."""
+    assert tcc.verdict(_state(tcc.STALE), {"trusted": True})[0] == "bad"
+    assert tcc.verdict(_state(tcc.DENIED), {"trusted": True})[0] == "bad"
+    assert tcc.verdict(_state(tcc.UNREADABLE), {"trusted": True})[0] == "unknown"
+
+
+def test_a_dead_listener_cannot_make_a_working_grant_look_broken():
+    """The two halves together. A listener stopped while it was waiting leaves
+    a record saying NOT trusted, and without `waiting()` dropping it, every
+    `doctor` after that would report a permission problem on a machine whose
+    permission is fine."""
+    _wrote(trusted=False, at=time.time(), pid=_a_dead_pid())
+    assert tcc.verdict(_state(tcc.GRANTED), tcc.waiting())[0] == "ok"
+    _wrote(trusted=False, at=time.time(), pid=os.getpid())
+    assert tcc.verdict(_state(tcc.GRANTED), tcc.waiting())[0] == "bad"
+
+
+def test_no_listener_record_at_all_changes_nothing():
+    for state, expected in ((tcc.GRANTED, "ok"), (tcc.NO_APP, "unknown"),
+                            (tcc.UNREADABLE, "unknown"), (tcc.STALE, "bad"),
+                            (tcc.DENIED, "bad"), (tcc.MISSING, "bad")):
+        assert tcc.verdict(_state(state))[0] == expected, state
+        assert tcc.verdict(_state(state), {})[0] == expected, state

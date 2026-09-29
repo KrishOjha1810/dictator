@@ -329,19 +329,46 @@ def verdict(info: dict, saw: dict = None) -> tuple:
     the one place the answer was.
 
     Three outcomes, not two. "I could not read the database" is not "fine",
-    and collapsing it into one would rebuild that bug in a new shape."""
+    and collapsing it into one would rebuild that bug in a new shape.
+
+    `saw` is `waiting()`, what the listener last said about ITSELF, and it is
+    consulted before the databases rather than only when they cannot be read.
+    That ordering is the point. Everything else here is us reading a record
+    macOS keeps about an app bundle on disk; `AXIsProcessTrusted()` can only
+    be asked by the process asking it, so a running listener saying NO is the
+    one direct measurement in this file and the only one about the process
+    that actually holds the key.
+
+    It is deliberately not symmetric, and the reason is written down elsewhere
+    in docs/findings.md: a process launched from a terminal that has the grant
+    reports `AXIsProcessTrusted() == true` even when its own entry is stale,
+    which is exactly why the broken state could not be reproduced from a shell
+    and kept being reported as working. So a listener saying YES is not
+    evidence of anything and never overrides the databases. Only NO counts."""
     saw = saw or {}
     s = info.get("state")
+    if saw.get("trusted") is False:
+        # A dead listener's last words are not a claim about now; `waiting()`
+        # drops those, so reaching here means something is running and saying
+        # it cannot see the permission.
+        if s == GRANTED:
+            # The confusing one, and the reason this branch is not simply
+            # folded in with the others. macOS remembers a grant that matches
+            # this BUILD and the process actually running still cannot see it,
+            # which means the thing holding the key is not the build the grant
+            # was written for: an older copy still resident from before a
+            # rebuild. No pane will show this and nothing in it needs changing.
+            return "bad", ("macOS has a grant for this build and the listener "
+                           "that is running still cannot see it, so the "
+                           "process holding the key is not this build. "
+                           "Run: dictator permissions")
+        return "bad", ("the listener says it is NOT trusted. "
+                       "Run: dictator permissions")
     if s == GRANTED:
         return "ok", "the grant matches the signature it is running under"
     if s == NO_APP:
         return "unknown", "the app is not built yet"
     if s == UNREADABLE:
-        # The databases are closed to us, but the app writes down what it can
-        # see of its own trust, and that answer is not a guess.
-        if saw.get("trusted") is False:
-            return "bad", ("the listener says it is NOT trusted. "
-                           "Run: dictator permissions")
         return "unknown", ("cannot read what macOS remembers (needs Full Disk "
                            "Access). Run: dictator permissions")
     return "bad", summary(info) + ". Run: dictator permissions"
