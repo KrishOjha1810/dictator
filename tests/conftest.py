@@ -33,6 +33,12 @@ def _own_state_dir(tmp_path, monkeypatch):
             # broken state must not be able to tell the real listener it is
             # fine, or overwrite the one file that says it is not.
             ("tcc", "WAITING_FILE", tmp_path / "permission.json"),
+            # Not under ~/.dictator, and the same problem. A test that reached
+            # always.on() or always.off() would unload the user's real login
+            # item and stop their dictation; a test that reached build_app()
+            # rebuilt the real ~/Applications/Dictator.app and wrote a pytest
+            # temporary directory into it as the log path, which has happened.
+            ("always", "PLIST", tmp_path / "com.dictator.dictate.plist"),
     ):
         try:
             m = __import__(f"dictator.{mod}", fromlist=[mod])

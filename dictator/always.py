@@ -200,11 +200,39 @@ def on(key: str = "fn") -> str:
            "time, by name.\n" if app else
            "No app bundle (needs Xcode tools), so the permission prompt will "
            "name python3.\n")
-    return (f"Dictation is on, and stays on after a restart.\n"
+    head = (f"Dictation is on, and stays on after a restart.\n"
             f"  Hold {key} anywhere and talk.\n"
             f"  {how}"
             f"  Off:  dictator off\n"
             f"  Log:  {log}")
+    return head + _permission_warning()
+
+
+def _permission_warning() -> str:
+    """Say it in the terminal that just ran `dictator on`, not only in a log.
+
+    The state this exists for is a listener that starts, finds it is not
+    trusted, and waits forever. All the evidence for that used to be one line
+    in a file nobody had been told to open, so from the outside `dictator on`
+    printed a cheerful paragraph and dictation was dead. Whatever else is
+    true, the terminal the user is looking at is where this belongs.
+
+    Given a second to settle, because the app writes its answer the moment it
+    finds out and that is quick."""
+    import time
+    try:
+        from . import tcc
+        time.sleep(2.0)
+        info = tcc.state("accessibility")
+        if info["state"] == tcc.GRANTED:
+            return ""
+        if info["state"] == tcc.UNREADABLE and not tcc.stuck():
+            return ""          # nothing to report and no evidence of trouble
+        return ("\n\n" + "-" * 68 + "\n"
+                + tcc.report() + "\n" + "-" * 68)
+    except Exception as e:
+        core.log(f"could not check the Accessibility grant: {e}")
+        return ""
 
 
 def off(quiet: bool = False) -> str:

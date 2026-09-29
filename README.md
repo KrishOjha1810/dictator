@@ -67,6 +67,25 @@ dictator doctor
 
 It checks the things that actually break and names the one that is wrong.
 
+### If the key does nothing and the checkbox is already on
+
+That is a real macOS state and not a mistake anyone made. The list in System
+Settings is drawn from an entry; whether an app is trusted is decided by a code
+signature stored next to that entry. When the signature changes, the entry
+survives with the old one, so the switch stays on, the app stays untrusted, and
+macOS never asks again because it already has an answer on file.
+
+Switching that toggle off and on cannot fix it. The entry has to be removed:
+
+```bash
+dictator permissions
+```
+
+It says which of the two problems this is, prints the steps for that one, and
+`--reset` does them for you. By hand it is: System Settings, Privacy &
+Security, Accessibility, click **Dictator**, click the **minus** button under
+the list, then `dictator off && dictator on` and say yes.
+
 ---
 
 ## Using it
@@ -77,6 +96,7 @@ It checks the things that actually break and names the one that is wrong.
 | `dictator off` | stop, and do not start again |
 | `dictator status` | is it set up, is it running |
 | `dictator doctor` | check everything, say what is wrong |
+| `dictator permissions` | why macOS is not trusting it, and how to get out |
 | `dictator recap [today\|week\|N]` | what you dictated, summarised here |
 | `dictator find WORDS` | search everything you have ever dictated |
 | `dictator snippet "PHRASE" "TEXT"` | say the phrase, get the text |
@@ -309,6 +329,13 @@ designated => identifier "com.dictator.dictation" and certificate leaf = H"cfb50
 
 Rebuilding does not touch that. `dictator doctor` checks it and says so if it
 ever regresses.
+
+It also checks the other half, which is the one that actually trapped somebody
+for days: macOS stores that requirement next to the permission, and an entry
+written for an older certificate keeps its tick while trusting nothing.
+`doctor` reads the requirement the grant was written for, compares it with the
+one this build satisfies, and prints both when they differ, because the
+difference is invisible everywhere else.
 
 ---
 

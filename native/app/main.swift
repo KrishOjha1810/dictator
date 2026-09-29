@@ -76,6 +76,118 @@ func runDictation() {
     exit(p.terminationStatus)
 }
 
+// Waiting for a permission used to be one line in a log file: "dictator:
+// waiting for Accessibility", repeated forever, next to a ticked checkbox that
+// did not count. Nobody reads a log they have not been told to open, so as far
+// as the user was concerned dictation had simply died. Everything below exists
+// to make that state impossible to sit in without being told.
+
+func statePath() -> String {
+    let info = Bundle.main.infoDictionary ?? [:]
+    let log = (info["DictatorLog"] as? String)
+        ?? home.appendingPathComponent(".dictator/dictate.log").path
+    return (log as NSString).deletingLastPathComponent + "/permission.json"
+}
+
+/// Write down what THIS process can see, because AXIsProcessTrusted() can only
+/// be asked by the process itself and the process that matters is this bundle,
+/// not the python that `dictator doctor` runs in. Without this file, a machine
+/// whose TCC databases cannot be read has no way at all to tell "waiting for a
+/// permission" from "not running".
+func publish(trusted: Bool) {
+    let payload: [String: Any] = [
+        "trusted": trusted,
+        "at": Date().timeIntervalSince1970,
+        "pid": ProcessInfo.processInfo.processIdentifier,
+        "app": Bundle.main.bundlePath,
+    ]
+    guard let data = try? JSONSerialization.data(withJSONObject: payload) else { return }
+    let path = statePath()
+    try? FileManager.default.createDirectory(
+        atPath: (path as NSString).deletingLastPathComponent,
+        withIntermediateDirectories: true)
+    let tmp = path + ".tmp"
+    try? data.write(to: URL(fileURLWithPath: tmp))
+    _ = try? FileManager.default.replaceItemAt(URL(fileURLWithPath: path),
+                                               withItemAt: URL(fileURLWithPath: tmp))
+}
+
+/// Say it where somebody will see it. A notification is the only surface this
+/// app has: it is an accessory with no window and no menu bar item, and the
+/// terminal that started it has usually been closed by now.
+func notify(_ body: String) {
+    let p = Process()
+    p.executableURL = URL(fileURLWithPath: "/usr/bin/osascript")
+    p.arguments = ["-e", "display notification \(quoted(body)) "
+                   + "with title \"Dictator is not working\" "
+                   + "subtitle \"Run: dictator permissions\""]
+    let err = Pipe()
+    p.standardError = err
+    do { try p.run() } catch {
+        NSLog("dictator: could not post a notification: \(error)")
+        return
+    }
+    // Read before waiting, or a full pipe deadlocks the wait. And say so when
+    // it fails: a notification that is silently dropped because Notification
+    // Centre has never been allowed to speak for a script is exactly the kind
+    // of silence this whole change exists to remove.
+    let why = String(data: err.fileHandleForReading.readDataToEndOfFile(),
+                     encoding: .utf8) ?? ""
+    p.waitUntilExit()
+    if p.terminationStatus != 0 {
+        NSLog("dictator: the notification did not go out: \(why)")
+    }
+}
+
+func quoted(_ s: String) -> String {
+    return "\"" + s.replacingOccurrences(of: "\\", with: "\\\\")
+                   .replacingOccurrences(of: "\"", with: "\\\"") + "\""
+}
+
+/// Ask the CLI to work out WHICH way this is broken, and print its answer.
+///
+/// "Never granted" and "granted to a signature that is no longer ours" look
+/// identical from in here and need opposite instructions: one is a switch to
+/// flip, the other is an entry that has to be removed with the minus button
+/// because its tick is already on. The logic for telling them apart reads the
+/// TCC databases and compares code requirements, which belongs in one place,
+/// so this shells out to it rather than growing a second copy.
+func diagnose() {
+    let info = Bundle.main.infoDictionary ?? [:]
+    guard let cli = info["DictatorCLI"] as? String,
+          FileManager.default.isExecutableFile(atPath: cli) else {
+        NSLog("dictator: waiting for Accessibility, and cannot find the "
+              + "dictator command to explain why")
+        return
+    }
+    let p = Process()
+    p.executableURL = URL(fileURLWithPath: "/usr/bin/env")
+    p.arguments = ["python3", cli, "permissions", "--explain"]
+    var env = ProcessInfo.processInfo.environment
+    env["PATH"] = "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin"
+    p.environment = env
+    let pipe = Pipe()
+    p.standardOutput = pipe
+    p.standardError = pipe
+    do { try p.run() } catch {
+        NSLog("dictator: waiting for Accessibility (could not explain: \(error))")
+        return
+    }
+    let out = String(data: pipe.fileHandleForReading.readDataToEndOfFile(),
+                     encoding: .utf8) ?? ""
+    p.waitUntilExit()
+    // straight to the log launchd is already capturing, unprefixed, because
+    // NSLog would stamp every one of twenty lines with a pid and a timestamp
+    // and make the one readable thing in this file unreadable.
+    FileHandle.standardError.write(
+        ("\n" + String(repeating: "=", count: 68) + "\n"
+         + "DICTATION IS NOT RUNNING. It is waiting for Accessibility.\n"
+         + String(repeating: "=", count: 68) + "\n"
+         + out + "\n").data(using: .utf8)!)
+    notify(out.split(separator: "\n").first.map(String.init)
+           ?? "Waiting for Accessibility.")
+}
+
 let app = NSApplication.shared
 app.setActivationPolicy(.accessory)
 
@@ -83,14 +195,40 @@ askForMicrophone { _ in
     if !askForAccessibility() {
         // First run: the dialog is on screen now. Wait for the answer rather
         // than failing, because the user is in the middle of granting it.
+        //
+        // But a dialog only appears when macOS has no row for this app at all.
+        // If a row exists for an older signature, no dialog ever appears, the
+        // checkbox is already ticked, and waiting here is waiting for
+        // something that cannot happen. Give it a few seconds for the honest
+        // first-run case, then say what is wrong.
+        publish(trusted: false)
         NSLog("dictator: waiting for Accessibility")
+        var ticks = 0
         Timer.scheduledTimer(withTimeInterval: 2.0, repeats: true) { t in
             if AXIsProcessTrusted() {
+                // Recovering here rather than asking for a restart is the
+                // point: the child is spawned fresh, so it is a NEW process,
+                // which is the only kind macOS honours a new grant for.
                 t.invalidate()
+                publish(trusted: true)
+                FileHandle.standardError.write(
+                    "dictator: Accessibility granted, starting dictation.\n"
+                        .data(using: .utf8)!)
+                notify("Accessibility granted. Hold fn and talk.")
                 DispatchQueue.global().async { runDictation() }
+                return
+            }
+            ticks += 1
+            // Once at five seconds, then every two minutes. Loud enough that
+            // it cannot be sat in, quiet enough that a log left overnight is
+            // still readable.
+            if ticks == 3 || ticks % 60 == 0 {
+                publish(trusted: false)
+                DispatchQueue.global().async { diagnose() }
             }
         }
     } else {
+        publish(trusted: true)
         DispatchQueue.global().async { runDictation() }
     }
 }

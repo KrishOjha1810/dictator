@@ -242,6 +242,9 @@ def main(argv) -> int:
         print(f"erased {n} recorded utterance(s).")
         return 0
 
+    if cmd in ("meeting", "meetings"):
+        return meeting(rest)
+
     if cmd == "format":
         if rest and rest[0] == "in":
             return format_in(rest[1:])
@@ -617,23 +620,13 @@ def doctor() -> int:
     # "fine" is the bug this file already had once: a doctor that passes the
     # state it exists to report is worse than no doctor.
     info = tcc.state("accessibility")
-    if info["state"] == tcc.GRANTED:
-        ok("macOS trusts this build for Accessibility", True,
-           "the grant matches the signature it is running under")
-    elif info["state"] == tcc.UNREADABLE:
-        w = tcc.waiting()
-        if w and w.get("trusted") is False:
-            ok("macOS trusts this build for Accessibility", False,
-               "the listener says it is NOT trusted. Run: dictator permissions")
-        else:
-            unknown("macOS trusts this build for Accessibility",
-                    "cannot read what macOS remembers (needs Full Disk "
-                    "Access). Run: dictator permissions")
-    elif info["state"] == tcc.NO_APP:
-        pass                          # already reported as a missing bundle
+    saw = tcc.waiting()
+    how, detail = tcc.verdict(info, saw)
+    label = "macOS trusts this build for Accessibility"
+    if how == "unknown":
+        unknown(label, detail)
     else:
-        ok("macOS trusts this build for Accessibility", False,
-           tcc.summary(info) + ". Run: dictator permissions")
+        ok(label, how == "ok", detail)
     if info["state"] == tcc.STALE:
         # Name the signature on both sides. This is the difference the user
         # cannot see and the only evidence that the tick is the wrong tick.
@@ -643,10 +636,9 @@ def doctor() -> int:
     # What the app itself last saw. This is the only signal that survives on a
     # machine where the databases cannot be read, and it is the exact state
     # issue #2 is about: a listener sitting in a loop, silent, forever.
-    w = tcc.waiting()
-    if w.get("trusted") is False:
+    if saw.get("trusted") is False:
         import time as _time
-        mins = max(0, int((_time.time() - float(w.get("at") or 0)) / 60))
+        mins = max(0, int((_time.time() - float(saw.get("at") or 0)) / 60))
         ok("the listener is past the permission and running", False,
            f"it has been waiting for Accessibility for {mins} min. "
            "Run: dictator permissions")

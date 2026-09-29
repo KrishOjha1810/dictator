@@ -16,6 +16,18 @@ of one real word for another (Hinglish heard as English) is invisible here,
 and a rare proper noun counts as a miss when it is not one. Read it as "how
 much of this output is gibberish", compared between models on the same audio,
 never as an accuracy score on its own.
+
+Read `unknown()` before you believe `score()`. This tool first reported 2.35%
+on the real corpus, of which 2.0 points were words it did not know rather than
+words the model got wrong: ordinary past tenses, superlatives, "has", and the
+terms this person says every day. The true figure was 0.37%. The list of
+offending words took a minute to read and moved the answer by a factor of six;
+the number alone had been believed for a day. A summary statistic over a
+dictionary you did not write will measure the dictionary.
+
+The opposite failure is worse and quieter: a dictionary loose enough to accept
+anything scores every model as perfect. Both directions are asserted in
+tests/test_nonwords.py, and any change here belongs in that file first.
 """
 import re
 import sys

@@ -182,11 +182,22 @@ def test_the_app_is_not_rebuilt_when_nothing_changed():
 
 
 def test_a_rebuild_leaves_the_binary_alone(tmp_path, monkeypatch):
+    """Into a bundle of its own, never the real one.
+
+    This test used to call build_app() against ~/Applications/Dictator.app.
+    Any change to native/app/main.swift made that first call a real rebuild of
+    the user's own app, which rewrote its Info.plist with the pytest temporary
+    directory as the dictation log path and left the installed app writing its
+    log somewhere that is deleted. It happened, and the suite that caught it
+    was the one three checks further down. Same shape as the STATE_DIR
+    leakage the conftest exists for: a test reaching a real path."""
+    import shutil
     from dictator import always
-    exe = always.APP / "Contents" / "MacOS" / "Dictator"
-    if not exe.exists():
-        return
-    always.build_app()
+    if not shutil.which("swiftc"):
+        pytest.skip("no swiftc here")
+    monkeypatch.setattr(always, "APP", tmp_path / "Dictator.app")
+    exe = tmp_path / "Dictator.app" / "Contents" / "MacOS" / "Dictator"
+    assert always.build_app(), "could not build a bundle to test with"
     first = exe.stat().st_mtime
     always.build_app()
     assert exe.stat().st_mtime == first, "it rebuilt when nothing had changed"
