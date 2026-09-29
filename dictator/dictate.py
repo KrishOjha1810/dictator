@@ -29,7 +29,7 @@ import subprocess
 import threading
 import time
 
-from . import core, hotkey, mac, orbnative, paste, stt
+from . import core, hotkey, mac, orbnative, paste, stt, warmup
 from .api import Dictator
 
 # Anything shorter is a mis-press, not speech. Kept low because a short real
@@ -72,6 +72,11 @@ class Dictation:
         # start speaking as you press) and end the take at your first pause.
         self.proc = stt.record_hold(self.wav, max_secs=MAX_SECS)
         self.started = time.time()
+        # After the recorder, never before: the microphone opening is the one
+        # thing here that must not wait for anything. From this point the model
+        # is read from disk WHILE you talk, so that when you let go the only
+        # thing left is the work that needs the audio. See warmup.py.
+        warmup.models()
         core.set_hud("hearing", 0.0)
         # An indicator that does not move tells you the mic is open and nothing
         # else. Moving with your voice is what tells you it is hearing YOU, and
@@ -341,6 +346,12 @@ def run(key: str = "fn", send: bool = False, debug: bool = True) -> int:
             print("  (no orb: see `dictator log`)", flush=True)
     except Exception as e:
         print(f"  (no orb: {e})", flush=True)
+
+    # The very first hold is the one somebody judges this on, and it is the
+    # only one with no head start: the model has never been read and the
+    # helpers have never been executed. Both are paid here, while nobody is
+    # waiting, and cost nothing on a machine that has already paid them.
+    warmup.at_startup()
 
     print(f"Hold {key} anywhere and talk. The words land where your cursor is.")
     print("Ctrl-C to stop.\n")
