@@ -628,6 +628,12 @@ def speech(env: list, gap: float = GAP, step: float = STEP) -> list:
 _PIECES: dict = {}
 
 
+# whisper.cpp will not look at audio shorter than a second. A little over,
+# because the slice is cut on frame boundaries and landing exactly on the floor
+# is not worth the risk of losing a word to a rounding error.
+MIN_PIECE = 1.2
+
+
 def pieces(wav, chunk: float = CHUNK, overlap: float = OVERLAP,
            seek: float = SEEK, gap: float = GAP) -> list:
     """The chunks a track is transcribed in, and nothing else.
@@ -673,6 +679,27 @@ def pieces(wav, chunk: float = CHUNK, overlap: float = OVERLAP,
                     "end": min(total, b + PAD),
                     "keep_from": a if forced else start})
         ended = b
+
+    # whisper.cpp refuses anything under a second ("input is too short,
+    # <1000 ms") and returns no segments, so a short answer, which is exactly
+    # what "yes" and "no" and a name are, came back as silence. A single 0.1s
+    # burst makes a 0.9s piece after padding, which is under the floor by a
+    # tenth of a second. Widen those symmetrically rather than lose them.
+    for piece in out:
+        short = MIN_PIECE - (piece["end"] - piece["start"])
+        if short > 0:
+            piece["start"] = max(0.0, piece["start"] - short / 2)
+            piece["end"] = min(total, piece["end"] + short / 2)
+            # At the very start or end of a track there is only one direction
+            # to grow in, so take the rest from whichever side has room.
+            still = MIN_PIECE - (piece["end"] - piece["start"])
+            if still > 0:
+                if piece["start"] > 0:
+                    piece["start"] = max(0.0, piece["start"] - still)
+                else:
+                    piece["end"] = min(total, piece["end"] + still)
+            piece["keep_from"] = min(piece["keep_from"], piece["end"])
+
     _PIECES[key] = out
     return out
 
@@ -767,29 +794,39 @@ def _whisper(paths, lang: str, progress=None) -> dict:
            "--prompt", stt.whisper_prompt(), "-oj"]
     for p in paths:
         cmd += ["-f", str(p)]
+    # A context manager, so a whisper that wedges or a Ctrl-C leaves neither a
+    # running child nor an open pipe behind. Without it a TimeoutExpired from
+    # the wait below returned {} with the process still transcribing.
     try:
         # Streamed rather than collected, so the percentage whisper prints can
         # drive a progress line. An hour of meeting is minutes of waiting, and
         # a command that sits there silently reads as a command that has hung.
-        proc = subprocess.Popen(cmd, stdout=subprocess.DEVNULL,
-                                stderr=subprocess.PIPE, text=True)
-        # Reading a pipe has no timeout of its own, so a whisper that wedged
-        # would hold the command open forever with nothing to look at.
-        heard = [time.time()]
-        _watchdog(proc, heard)
-        seen, last = 0, 101
-        for line in proc.stderr:
-            heard[0] = time.time()
-            hit = re.search(r"progress\s*=\s*(\d+)%", line)
-            if not hit:
-                continue
-            pct = int(hit.group(1))
-            if pct < last:
-                seen += 1           # the percentage restarted: a new file
-            last = pct
-            if progress:
-                progress(min(seen, len(paths)), len(paths), pct)
-        proc.wait(timeout=60)
+        with subprocess.Popen(cmd, stdout=subprocess.DEVNULL,
+                              stderr=subprocess.PIPE, text=True) as proc:
+            try:
+                # Reading a pipe has no timeout of its own, so a whisper that
+                # wedged would hold the command open forever with nothing to
+                # look at.
+                heard = [time.time()]
+                _watchdog(proc, heard)
+                seen, last = 0, 101
+                for line in proc.stderr:
+                    heard[0] = time.time()
+                    hit = re.search(r"progress\s*=\s*(\d+)%", line)
+                    if not hit:
+                        continue
+                    pct = int(hit.group(1))
+                    if pct < last:
+                        seen += 1       # the percentage restarted: a new file
+                    last = pct
+                    if progress:
+                        progress(min(seen, len(paths)), len(paths), pct)
+                proc.wait(timeout=60)
+            except BaseException:
+                # Including KeyboardInterrupt, which is the likeliest way out
+                # of a command that takes minutes.
+                proc.kill()
+                raise
     except Exception as e:
         core.log(f"meeting: whisper failed on a batch: {e}")
         return {}

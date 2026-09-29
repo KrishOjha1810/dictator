@@ -674,6 +674,17 @@ def test_one_bad_chunk_does_not_take_the_rest_of_the_batch_with_it(monkeypatch,
 
             def wait(self, timeout=None):
                 return 0
+
+            def kill(self):
+                pass
+
+            # _whisper runs the process inside a `with`, so that a wedged
+            # whisper or a Ctrl-C does not leave a child transcribing.
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *a):
+                return False
         return Done()
 
     monkeypatch.setattr(meeting.stt, "whisper_bin", lambda: "/bin/true")
@@ -690,3 +701,27 @@ def test_one_bad_chunk_does_not_take_the_rest_of_the_batch_with_it(monkeypatch,
     assert got[str(paths[1])], "the chunk after the bad one was lost"
     assert got[str(paths[2])], "the chunk after the bad one was lost"
     assert len(runs) > 1, "it never retried them on their own"
+
+
+def test_a_short_answer_is_not_dropped_for_being_short(tmp_path):
+    """whisper.cpp refuses anything under a second ("input is too short,
+    <1000 ms") and returns no segments, so the piece came back as silence.
+    A short answer is exactly what "yes", "no" and a name are, and they are
+    the ones worth hearing."""
+    wav = tmp_path / "short.wav"
+    # A tenth of a second of speech between two stretches of quiet.
+    tone(wav, [(5, 0.0), (0.1, 0.5), (5, 0.0)])
+    got = meeting.pieces(wav)
+    assert got, "the burst was not found at all"
+    for piece in got:
+        assert piece["end"] - piece["start"] >= 1.0, piece
+
+
+def test_widening_a_short_piece_stays_inside_the_track(tmp_path):
+    """A burst at the very start has only one direction to grow in."""
+    wav = tmp_path / "edge.wav"
+    tone(wav, [(0.1, 0.5), (3, 0.0)])
+    for piece in meeting.pieces(wav):
+        assert piece["start"] >= 0.0, piece
+        assert piece["end"] <= meeting._seconds(wav) + 0.001, piece
+        assert piece["keep_from"] <= piece["end"], piece
