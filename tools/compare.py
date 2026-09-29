@@ -59,6 +59,29 @@ def transcribe(wav: Path, model: Path, lang: str,
     return (r.stdout or "").strip(), time.time() - t0
 
 
+def hindi_share(text: str) -> float:
+    """How much of this output is romanised Hindi.
+
+    The gibberish score cannot see the worst failure either model makes. On one
+    real hold turbo answered "Pirated Copy content, if you can play it, then
+    copy it, PDF, add it, day by day" where the speaker said "pirated copy se
+    content agar aap le pao to usse copy se content lekar PDF mein add kar do".
+    Every word turbo chose is a real English word, so it scored 0% and was
+    completely wrong, while the model that got it right scored 10% for two
+    romanised Hindi spellings.
+
+    A large gap in this number between two models on the same audio is where
+    one of them turned Hindi into fluent English. It cannot say which is right,
+    so it prints the holds for a person to read rather than scoring them."""
+    words = [w.lower() for w in nonwords._WORD.findall(text or "")]
+    if not words:
+        return 0.0
+    hindi = sum(1 for w in words
+                if (w in nonwords.HINDI or nonwords.hindi.key(w) in nonwords.HINDI_KEYS)
+                and w not in nonwords.ENGLISH)
+    return hindi / len(words)
+
+
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--corpus", required=True, type=Path)
@@ -139,6 +162,26 @@ def main() -> int:
         shown = ", ".join(f"{w} x{c}" if c > 1 else w
                           for w, c in counts.most_common(40))
         print(f"  [{name[:26]}]\n    {shown or 'nothing'}\n")
+
+    # Where one model heard Hindi and the other heard English. The gibberish
+    # score is blind here by construction: a wrong English word is still an
+    # English word. These have to be read.
+    if len(said) == 2:
+        names2 = list(said)
+        a_all, b_all = said[names2[0]], said[names2[1]]
+        gaps = []
+        for ra, rb in zip(a_all, b_all):
+            ha, hb = hindi_share(ra["text"]), hindi_share(rb["text"])
+            if abs(ha - hb) >= 0.15:
+                gaps.append((abs(ha - hb), ha, hb, ra["text"], rb["text"]))
+        gaps.sort(reverse=True)
+        print("=" * 74)
+        print(f"{len(gaps)} holds where one heard Hindi and the other heard")
+        print("English. The gibberish score cannot judge these, because a wrong")
+        print("English word is still an English word. Read them.\n")
+        for _, ha, hb, ta, tb in gaps[:8]:
+            print(f"  [{names2[0][:20]} {ha:.0%} Hindi] {ta[:96]}")
+            print(f"  [{names2[1][:20]} {hb:.0%} Hindi] {tb[:96]}\n")
 
     names = list(said)
     if len(names) == 2:

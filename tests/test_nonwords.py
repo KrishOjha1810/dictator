@@ -90,3 +90,27 @@ def test_a_repetition_loop_is_counted_rather_than_shrugged_off():
     """The failure that made a model look bad in the first benchmark. It has
     to be visible, because the audio_ctx setting that causes it is ours."""
     assert nonwords.score("iririririr plplplplar")["unknown"] == 2
+
+
+@pytest.mark.parametrize("word", [
+    # Romanised Hindi the shipped lexicon does not have. This block is not
+    # cosmetic: a model that writes Hindi in Latin script is marked down for
+    # every one of these, so their absence penalised exactly the models this
+    # benchmark exists to evaluate.
+    "pao", "uski", "mera", "kab", "karna", "likho", "chahiye", "aapko",
+    "banvao", "samjhao", "parso", "humara",
+])
+def test_romanised_hindi_is_not_reported_as_invented(word):
+    assert nonwords._known(word), f"{word} is a Hindi word written in Latin"
+
+
+def test_the_score_cannot_see_hindi_turned_into_fluent_english():
+    """The instrument's own blind spot, pinned so nobody quotes a percentage
+    from it without knowing. On a real hold one model answered "Pirated Copy
+    content, if you can play it, then copy it, PDF, add it, day by day" where
+    the speaker said something else entirely in Hindi. Every word it chose is
+    a real English word, so it scores perfectly while being wrong about all of
+    them."""
+    wrong_but_english = ("Pirated Copy content, if you can play it, then copy "
+                         "it, PDF, add it, day by day.")
+    assert nonwords.score(wrong_but_english)["unknown"] == 0

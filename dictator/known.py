@@ -100,8 +100,30 @@ ALLOW |= {"has", "held", "paid", "became", "repaid", "hang", "goodbye",
 
 # Romanised Hindi the list is missing. Added one at a time, from words that
 # appeared in real recordings and were transcribed correctly.
-ALLOW |= {"aao", "apno", "apna", "apne", "seedha", "seedhe", "sirf",
-          "matlab", "thoda", "zyada", "bilkul", "wapas", "abhi"}
+# Romanised Hindi the shipped lexicon is missing. This block matters more than
+# it looks: a model that writes Hindi in Latin script is penalised for every
+# one of these, so the instrument was marking a Hinglish model down for doing
+# exactly the thing it was built to do. The comparison in docs/findings.md
+# found it the hard way, on a hold where the model that got the sentence RIGHT
+# scored 10% and the model that turned it into fluent English nonsense scored
+# zero, because every wrong word it chose was a real English word.
+ALLOW |= {
+    "aao", "apno", "apna", "apni", "apne", "aap", "aapko", "aapka", "aapki",
+    "seedha", "seedhe", "sirf", "matlab", "thoda", "zyada", "jyada",
+    "bilkul", "wapas", "abhi", "parso",
+    # possessives and pronouns
+    "mera", "meri", "mere", "tera", "teri", "tere", "uska", "uski", "unka",
+    "unki", "iska", "iski", "inka", "hamara", "humara", "hamari", "mujhe",
+    "tujhe", "usse", "isse", "jisse", "kisse",
+    # the commonest verbs, in the spellings people actually type
+    "pao", "paao", "karna", "karo", "kardo", "kardena", "karke", "hona",
+    "hoga", "hogi", "rahe", "raha", "rahi", "lekar", "lena", "dena",
+    "banao", "banvao", "banvaana", "likhna", "likho", "padhna", "padho",
+    "samjhao", "samjha", "gayi", "gaye", "gaya", "sakta", "sakte", "sakti",
+    "chahiye", "chahie", "bolna", "bolo", "suno", "sunna", "dekho", "dekhna",
+    # question words and connectives
+    "kab", "kya", "kyun", "kaise", "kahan", "kaun", "lekin", "agar",
+}
 
 
 # A dictionary from 1934 has the singular and not the plural, the verb and not

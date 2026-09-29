@@ -36,8 +36,9 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+from dictator import hindi                    # noqa: E402,F401
 from dictator.known import (ALLOW, ENGLISH, HINDI, HINDI_KEYS,  # noqa: E402,F401
-                            _known, score, unknown)
+                            _WORD, _known, score, unknown)
 
 if __name__ == "__main__":
     for line in sys.stdin:
