@@ -103,3 +103,31 @@ def test_an_unreadable_field_is_recorded_rather_than_swallowed(monkeypatch):
     d._last = (rid, "deploy the thing", "Terminal")
     assert d.check_corrections("Terminal") == []
     assert history.recent(1)[0]["saw"] == "unreadable"
+
+
+def _cli():
+    import importlib.machinery, importlib.util
+    loader = importlib.machinery.SourceFileLoader("dcli", "bin/dictator")
+    spec = importlib.util.spec_from_loader("dcli", loader)
+    m = importlib.util.module_from_spec(spec)
+    loader.exec_module(m)
+    return m
+
+
+def test_a_loop_that_has_caught_nothing_says_so(monkeypatch, capsys):
+    """Silence here reads as "working". The point of the line is that a
+    vocabulary which never grows has a visible reason."""
+    monkeypatch.setattr(history, "watching",
+                        lambda limit=200: {"same": 60, "unreadable": 2})
+    _cli()._watching()
+    out = capsys.readouterr().out
+    assert "learned nothing from your edits" in out
+    assert "60 of your last 62" in out
+
+
+def test_rows_from_before_it_was_measured_are_left_out_of_the_total(
+        monkeypatch, capsys):
+    monkeypatch.setattr(history, "watching",
+                        lambda limit=200: {"same": 2, "unrecorded": 900})
+    _cli()._watching()
+    assert "of your last 2 " in capsys.readouterr().out
