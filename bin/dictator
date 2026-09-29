@@ -743,6 +743,13 @@ def permissions(reset: bool = False, explain: bool = False) -> int:
     print(tcc.report(app=app))
     print()
 
+    if info["state"] == tcc.GRANTED and _has_listener():
+        # Nothing to fix. Opening System Settings at somebody whose dictation
+        # already works is noise, and noise here teaches people to ignore the
+        # one time it matters.
+        print("Nothing to do. Hold fn anywhere and talk.")
+        return 0
+
     if info["state"] == tcc.GRANTED and not _has_listener():
         # The grant is genuinely ours and the key still does nothing, which
         # means the listener, not the permission. Restarting is cheap and is
