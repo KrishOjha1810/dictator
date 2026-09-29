@@ -207,7 +207,7 @@ def how() -> str:
         return "clipboard"
 
 
-def _paste_once(text: str) -> bool:
+def _paste_once(text: str, keep: bool = False) -> bool:
     """One paste, and an honest answer about whether it landed.
 
     The helper publishes the text as a promise and prints `read` only once
@@ -222,12 +222,17 @@ def _paste_once(text: str) -> bool:
             typing = how() == "type"
             if typing:
                 args.append("--type")
+            # Not the last piece: leave the clipboard alone until the whole
+            # delivery is done. Restoring between pieces is what left only the
+            # final chunk behind when one went wrong.
+            if keep:
+                args.append("--keep")
             r = subprocess.run(args, capture_output=True, text=True,
                                timeout=90 if typing else 15)
             out = (r.stdout or "").split()
             # Typing has no receipt to wait for: the characters either went in
             # or the helper failed, and it says which.
-            if "typed" in out or "read" in out:
+            if "pasted" in out or "typed" in out:
                 return True
             # The helper posted Cmd-V. A missing receipt means the target had
             # not read the pasteboard before the helper stopped waiting, which
@@ -236,15 +241,8 @@ def _paste_once(text: str) -> bool:
             # doing nothing: it rewrites the clipboard and posts Cmd-V again,
             # so a paste that worked got duplicated and one that did not got
             # the user's clipboard replaced for nothing.
-            # No receipt means Cmd-V may not have reached anything. The
-            # helper leaves the text on the clipboard in that case rather
-            # than restoring over it, so the sentence still exists.
-            core.log("paste: no read receipt; the text is on the clipboard")
-            core.surface_error(
-                "paste", "That may not have pasted.",
-                hint="The words are on your clipboard, so Command-V will "
-                     "put them in.")
-            return True
+            core.log(f"paste: the helper said {(r.stdout or '').strip()!r}")
+            return False
         except Exception as e:
             core.log(f"paste: helper failed: {e}")
     else:
@@ -298,7 +296,25 @@ def deliver(text: str, app_name: str) -> bool:
                 core.log(f"paste: focus moved {app_name!r} to {now!r} after "
                          f"{i} of {len(pieces)} pieces, stopping there")
                 return False
-        if not _paste_once(piece):
+        if not _paste_once(piece, keep=(i < len(pieces) - 1)):
             core.log(f"paste: piece {i + 1} of {len(pieces)} did not land")
+            _leave_on_clipboard(text)
             return False
     return True
+
+
+def _leave_on_clipboard(text: str) -> None:
+    """Last resort, and it has to be the WHOLE text.
+
+    When a multi piece delivery failed, each piece used to leave its own
+    fragment on the clipboard, so the only thing rescued was the last chunk
+    and the rest of the sentence was gone. If we cannot paste it, the least we
+    owe the person is every word of it, in one place."""
+    try:
+        mac._pbcopy(text)
+        core.surface_error(
+            "paste", "That did not paste.",
+            hint="The whole thing is on your clipboard, so Command-V will "
+                 "put it in.")
+    except Exception as e:
+        core.log(f"paste: could not even reach the clipboard: {e}")

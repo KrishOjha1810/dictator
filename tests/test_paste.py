@@ -112,7 +112,7 @@ def test_nothing_to_say_is_not_a_success(monkeypatch):
 def test_every_piece_is_pasted_in_order(monkeypatch):
     _quiet(monkeypatch)
     sent = []
-    monkeypatch.setattr(paste, "_paste_once", lambda t: sent.append(t) or True)
+    monkeypatch.setattr(paste, "_paste_once", lambda t, keep=False: sent.append(t) or True)
     monkeypatch.setattr(paste.mac, "frontmost_app", lambda: "Terminal")
     monkeypatch.setattr(paste.time, "sleep", lambda s: None)
     text = "word " * 400
@@ -124,7 +124,7 @@ def test_moving_away_mid_paste_stops_it(monkeypatch):
     """Half a sentence into the window you switched to is worse than none."""
     _quiet(monkeypatch)
     sent = []
-    monkeypatch.setattr(paste, "_paste_once", lambda t: sent.append(t) or True)
+    monkeypatch.setattr(paste, "_paste_once", lambda t, keep=False: sent.append(t) or True)
     monkeypatch.setattr(paste.mac, "frontmost_app", lambda: "Slack")
     monkeypatch.setattr(paste.time, "sleep", lambda s: None)
     assert paste.deliver("word " * 400, "Terminal") is False
@@ -135,7 +135,7 @@ def test_a_piece_that_did_not_land_is_reported_honestly(monkeypatch):
     _quiet(monkeypatch)
     calls = []
 
-    def flaky(t):
+    def flaky(t, keep=False):
         calls.append(t)
         return len(calls) < 2
 
@@ -150,7 +150,7 @@ def test_one_piece_never_asks_where_the_focus_is(monkeypatch):
     already checked the focus for it."""
     _quiet(monkeypatch)
     asked = []
-    monkeypatch.setattr(paste, "_paste_once", lambda t: True)
+    monkeypatch.setattr(paste, "_paste_once", lambda t, keep=False: True)
     monkeypatch.setattr(paste.mac, "frontmost_app",
                         lambda: asked.append(1) or "Terminal")
     assert paste.deliver("deploy the thing", "Terminal") is True
@@ -178,3 +178,37 @@ def test_there_is_no_silent_path_that_cannot_work():
     src = inspect.getsource(paste._paste_once)
     assert "surface_error" in src, \
         "a missing helper no longer says so and fails silently again"
+
+
+def test_a_failed_multi_piece_delivery_leaves_the_WHOLE_text(monkeypatch):
+    """Each piece used to leave its own fragment on the clipboard, so when a
+    long delivery went wrong the only thing rescued was the last chunk and the
+    rest of the sentence was gone. That is how a whole dictation was lost."""
+    text = "word " * 400
+    clipboard = []
+    monkeypatch.setattr(paste.mac, "_pbcopy", lambda t: clipboard.append(t))
+    monkeypatch.setattr(paste.core, "surface_error", lambda *a, **k: None)
+    monkeypatch.setattr(paste, "_paste_once", lambda t, keep=False: False)
+    assert paste.deliver(text, "Terminal") is False
+    assert clipboard == [text], "the clipboard does not hold the whole thing"
+
+
+def test_only_the_last_piece_restores_the_clipboard(monkeypatch):
+    """Restoring between pieces is what destroyed the earlier ones."""
+    seen = []
+    monkeypatch.setattr(paste, "_paste_once",
+                        lambda t, keep=False: seen.append(keep) or True)
+    paste.deliver("word " * 400, "Terminal")
+    assert len(seen) > 1, "this text should have been split"
+    assert seen[:-1] == [True] * (len(seen) - 1), seen
+    assert seen[-1] is False, "the last piece must restore"
+
+
+def test_the_helper_no_longer_reports_a_receipt_it_cannot_give():
+    """The promise could say whether the text had actually been collected, and
+    on real holds it said "unread" every time while the same helper run from a
+    shell said "read". A receipt that lies about which is worse than none."""
+    src = (ROOT_SWIFT := __import__("pathlib").Path(__file__).resolve().parent.parent
+           / "native" / "paste.swift").read_text()
+    assert "provider.read" not in src, "back on the promise receipt"
+    assert "setString(text, forType: .string)" in src

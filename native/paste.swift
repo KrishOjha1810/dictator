@@ -55,10 +55,23 @@ let saved: [[NSPasteboard.PasteboardType: Data]] = (pb.pasteboardItems ?? []).ma
 }
 let savedCount = pb.changeCount
 
-let provider = Provider(text)
+// PLAIN DATA, not a promise. The promise was the clever version: it could
+// report when something had actually collected the text, so the clipboard was
+// only restored once the paste had provably happened.
+//
+// It does not work reliably here. On real holds the receipt came back "unread"
+// every time while the same helper run from a shell reported "read", and the
+// cost was not one slow paste. A long transcript is delivered in several
+// pieces, so it was four seconds of waiting PER PIECE, and each piece left its
+// own text on the clipboard as the fallback, so the safety net held only the
+// last piece and the rest of the sentence was gone. That is how a whole
+// dictation was lost.
+//
+// Plain data with a short settle is what every other tool does, and it is
+// right for the same reason: the paste either lands or it does not, and a
+// receipt that lies about which is worse than no receipt at all.
 pb.clearContents()
-pb.writeObjects([provider])
-pb.setString("", forType: NSPasteboard.PasteboardType("org.nspasteboard.ConcealedType"))
+pb.setString(text, forType: .string)
 let afterWrite = pb.changeCount
 
 func tap(_ key: CGKeyCode, flags: CGEventFlags) {
@@ -103,15 +116,10 @@ if typeIt {
 tap(9, flags: .maskCommand)                     // Cmd+V
 if send { usleep(120_000); tap(36, flags: []) } // Return
 
-// Wait for the receipt. 1.5s was NOT generous: a busy terminal can take
-// longer than that to read the pasteboard, so the receipt came back "unread"
-// for pastes that had in fact landed, and the caller then tried a second
-// delivery that overwrote the clipboard. Four seconds, and the caller treats
-// a missing receipt as unknown rather than as failure.
-let deadline = Date().addingTimeInterval(4.0)
-while !provider.read && Date() < deadline {
-    RunLoop.current.run(mode: .default, before: Date().addingTimeInterval(0.01))
-}
+// Long enough for the target to read the pasteboard, short enough that a
+// three piece delivery is not a wait. Nothing is being detected here: this is
+// simply time for the paste to happen before the clipboard changes under it.
+usleep(250_000)
 
 // A short quiet period so the reader is finished with it, then restore, but
 // only if nobody else has changed the clipboard in the meantime.
@@ -123,8 +131,11 @@ while !provider.read && Date() < deadline {
 // clipboard entry; restoring costs them the sentence. Print which happened,
 // so the caller can tell them the words are on the clipboard rather than
 // leaving them to wonder where the words went.
-usleep(200_000)
-if provider.read && pb.changeCount == afterWrite {
+// Restore only if nobody else has touched the clipboard since. `--keep` says
+// this is not the last piece of a longer delivery, so the text stays put and
+// the caller restores once at the end; restoring between pieces is what left
+// only the final chunk behind when a delivery went wrong.
+if !args.contains("--keep") && pb.changeCount == afterWrite {
     pb.clearContents()
     for d in saved {
         let item = NSPasteboardItem()
@@ -132,4 +143,4 @@ if provider.read && pb.changeCount == afterWrite {
         pb.writeObjects([item])
     }
 }
-print(provider.read ? "read" : "unread")
+print("pasted")
