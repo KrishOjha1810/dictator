@@ -348,6 +348,32 @@ day.source                  # "model", or why nobody wrote prose
 `d.recap(when, prose=False)` skips the local model, which is what a caller that
 is going to do its own wording wants.
 
+The other half of learning is there too. The loop that watches for corrections
+reads the text field back after a paste, and a terminal hands back its whole
+scrollback rather than the line being edited, so the words it gets wrong most
+often are the ones it is never told about. `review` goes the other way and
+hands you the words it is least sure of, most often said first, for you to ask
+about however suits your interface:
+
+```python
+for w in d.review():
+    w["word"]   # what it heard
+    w["count"]  # how many times
+    w["text"]   # an utterance to show it in
+d.learn("Whisper Flow", heard="whisper floor")
+```
+
+And erasing, because anything holding a record of everything somebody said
+needs to offer them a way out of it:
+
+```python
+d.forget(containing="the deploy key")   # just those, and it returns how many
+d.forget(everything=True)               # has to be asked for by name
+```
+
+An empty `containing` erases nothing rather than everything, so a caller
+passing a variable that happened to be empty does not lose the history.
+
 `Dictator`, `Transcript`, `transcribe` and `VERSION` are the public surface.
 Everything else inside the package is internal and will move.
 

@@ -263,6 +263,33 @@ class Dictator:
     def unlearn(self, term: str) -> bool:
         return vocab.shared().remove(term)
 
+    def review(self, limit: int = 300) -> list:
+        """The words it is least sure it got right, most often said first.
+
+        Each is {"word", "count", "text", "app"}. Teaching one is `learn(said,
+        heard=word)`. This exists on the library surface because the loop that
+        catches corrections cannot read a terminal's text field, so a caller
+        that has its own way of asking the user is better placed than we are.
+        """
+        from . import review as _review
+        return _review.words(limit)
+
+    # ---- forgetting ---------------------------------------------------
+
+    def forget(self, containing: str = "", everything: bool = False) -> int:
+        """Erase what was said. Returns how many rows went.
+
+        `containing` erases only the utterances holding that text, which is
+        the usual case: one thing somebody wishes they had not said out loud.
+        `everything` is the whole history and has to be asked for by name,
+        because a caller passing an empty search must never erase the lot.
+        """
+        if everything:
+            return history.forget(before=9e18)
+        if not (containing or "").strip():
+            return 0
+        return history.forget(containing=containing)
+
     @property
     def words(self) -> dict:
         return dict(vocab.shared().terms)

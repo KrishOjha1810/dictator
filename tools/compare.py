@@ -123,6 +123,23 @@ def main() -> int:
     print("\nLower gibberish is better. Watch the word count: a model that")
     print("drops speech scores well by saying less, which is not better.")
 
+    # The words, not only the number. A dictionary built by reading one
+    # model's output flatters that model, and reading what each was actually
+    # marked down for is the only way to see whether it did.
+    import collections
+    print("\n" + "=" * 74)
+    print("What each was marked down for. Read these before believing the")
+    print("percentages: a word here that is really a word is the instrument")
+    print("failing, not the model.\n")
+    for name, rows in said.items():
+        counts = collections.Counter()
+        for r in rows:
+            for w in nonwords.unknown(r["text"]):
+                counts[w.lower()] += 1
+        shown = ", ".join(f"{w} x{c}" if c > 1 else w
+                          for w, c in counts.most_common(40))
+        print(f"  [{name[:26]}]\n    {shown or 'nothing'}\n")
+
     names = list(said)
     if len(names) == 2:
         a_rows, b_rows = said[names[0]], said[names[1]]
