@@ -35,7 +35,8 @@ import nonwords                              # noqa: E402
 from dictator import roman, stt              # noqa: E402
 
 
-def transcribe(wav: Path, model: Path, lang: str) -> "tuple[str, float]":
+def transcribe(wav: Path, model: Path, lang: str,
+               trim: bool = True, prompt: bool = True) -> "tuple[str, float]":
     wb = stt.whisper_bin()
     if not wb:
         raise SystemExit("whisper-cli not found")
@@ -44,9 +45,13 @@ def transcribe(wav: Path, model: Path, lang: str) -> "tuple[str, float]":
             secs = w.getnframes() / float(w.getframerate() or 1)
     except Exception:
         secs = 0.0
-    cmd = [wb, "-m", str(model), "-f", str(wav), "-nt", "-np", "-l", lang,
-           "--prompt", stt.whisper_prompt()]
-    ac = stt.audio_ctx_for(secs)
+    cmd = [wb, "-m", str(model), "-f", str(wav), "-nt", "-np", "-l", lang]
+    if prompt:
+        cmd += ["--prompt", stt.whisper_prompt()]
+    # Trimming the encoder is a speed trick tuned against one model. A different
+    # model can loop on the same setting, so the comparison has to be runnable
+    # without it, otherwise we blame the model for our own sizing.
+    ac = stt.audio_ctx_for(secs) if trim else 0
     if ac:
         cmd += ["-ac", str(ac)]
     t0 = time.time()
@@ -61,6 +66,10 @@ def main() -> int:
     ap.add_argument("--lang", default="auto")
     ap.add_argument("--limit", type=int, default=0)
     ap.add_argument("--min-seconds", type=float, default=3.0)
+    ap.add_argument("--full-ctx", action="store_true",
+                    help="do not shrink the encoder, which is tuned per model")
+    ap.add_argument("--no-prompt", action="store_true",
+                    help="drop the vocabulary prompt, which is tuned per model")
     a = ap.parse_args()
 
     wavs = []
@@ -87,7 +96,8 @@ def main() -> int:
         rows, secs_total = [], 0.0
         print(f"=== {model.name} ===")
         for i, (wav, dur) in enumerate(wavs, 1):
-            text, took = transcribe(wav, model, a.lang)
+            text, took = transcribe(wav, model, a.lang,
+                                    trim=not a.full_ctx, prompt=not a.no_prompt)
             secs_total += took
             rows.append({"file": wav.name, "text": text, "took": took,
                          "dur": dur, **nonwords.score(text),
