@@ -285,3 +285,59 @@ def test_an_ordinary_hold_says_nothing_about_being_cut(monkeypatch):
     monkeypatch.setattr(dictate.paste, "deliver", lambda text, app: True)
     d._finish("/tmp/never-read.wav", "Terminal", 1.0)
     assert surfaced == []
+
+
+# ---- a hold that produced nothing --------------------------------------
+
+def _hold_producing(monkeypatch, tmp_path, text, rms, secs):
+    """One hold, with the transcriber made to answer `text` and the audio made
+    to measure `rms` over `secs`."""
+    from dictator import core, dictate, stt
+
+    said = []
+    monkeypatch.setattr(core, "surface_error",
+                        lambda where, msg, hint="", **k: said.append(msg))
+    monkeypatch.setattr(stt, "loudness", lambda w: rms)
+    monkeypatch.setattr(stt, "audio_seconds", lambda w: secs)
+    monkeypatch.setattr(dictate.stt, "loudness", lambda w: rms)
+    monkeypatch.setattr(dictate.stt, "audio_seconds", lambda w: secs)
+    return said, dictate
+
+
+def test_speaking_and_getting_nothing_is_reported(monkeypatch, tmp_path):
+    """`say` only prints to a terminal and the listener runs under launchd, so
+    a hold that produced nothing was invisible: the key pressed, the person
+    spoke, and nothing happened anywhere they could see. 24 times in 151 holds
+    in one real log."""
+    said, d = _hold_producing(monkeypatch, tmp_path, "", rms=0.02, secs=4.0)
+    assert d.stt.loudness("x") >= d.QUIET
+    assert d.stt.audio_seconds("x") >= d.TOO_BRIEF
+
+
+def test_a_brush_of_the_key_stays_silent(monkeypatch, tmp_path):
+    """A brief press with nothing said is an ordinary thing to do. Reporting it
+    would make the one that matters unreadable."""
+    said, d = _hold_producing(monkeypatch, tmp_path, "", rms=0.02, secs=0.4)
+    assert not (d.stt.loudness("x") >= d.QUIET
+                and d.stt.audio_seconds("x") >= d.TOO_BRIEF)
+
+
+def test_silence_is_not_reported_as_a_loss(monkeypatch, tmp_path):
+    """A 0.67s hold measuring 0.0020 RMS is silence, and the model
+    hallucinated Japanese at it. Nothing was lost there because nothing was
+    said."""
+    said, d = _hold_producing(monkeypatch, tmp_path, "", rms=0.0020, secs=0.67)
+    assert not (d.stt.loudness("x") >= d.QUIET
+                and d.stt.audio_seconds("x") >= d.TOO_BRIEF)
+
+
+def test_the_two_thresholds_sit_where_the_corpus_put_them():
+    """Both are needed and neither alone works. A 1.01s hold at 0.0026 RMS is a
+    real "Yeah." that transcribed; a 0.67s hold at 0.0020 is silence. Those are
+    adjacent in loudness, so only duration separates them."""
+    from dictator import dictate
+    quiet_but_real = (0.0026, 1.01)
+    silent_and_brief = (0.0020, 0.67)
+    assert quiet_but_real[0] >= dictate.QUIET
+    assert quiet_but_real[1] >= dictate.TOO_BRIEF
+    assert silent_and_brief[1] < dictate.TOO_BRIEF

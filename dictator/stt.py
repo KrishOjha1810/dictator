@@ -14,7 +14,7 @@ import subprocess
 import time
 from pathlib import Path
 
-from . import core, loops
+from . import core, loops, script
 
 def _resolve_model_dir() -> Path:
     """Where the whisper models live.
@@ -1076,7 +1076,25 @@ def _transcribe_ex(wav: str) -> "tuple[str, float]":
             os.remove(jpath)
         except OSError:
             pass
-    return _romanise(cleaned.strip()), conf
+    answer = _romanise(cleaned.strip())
+
+    # The guard turbo never had. `_not_english` is applied to Parakeet's answer
+    # and to nothing else, so the multilingual model, which is where every
+    # Hinglish hold lands, could return any alphabet at all and have it pasted.
+    # Real examples from one history, all delivered: a Hindi sentence in Arabic
+    # script, a line of Spanish, and a 0.67s hold that came back as Hiragana,
+    # Han and Polish at once.
+    #
+    # Devanagari is deliberately NOT refused: it is a correct intermediate
+    # answer that `_romanise` has just converted, and refusing it would throw
+    # away a good hold one step before it is made readable.
+    answer = script.repair(answer)
+    if answer and not script.usable(answer):
+        bad = "".join(dict.fromkeys(script.foreign(answer)))[:12]
+        core.log(f"transcribe: answered in an alphabet this does not handle "
+                 f"({bad!r}), so it was not transcribing. Dropping it.")
+        return "", 0.0
+    return answer, conf
 
 
 def loudness(wav: str) -> float:

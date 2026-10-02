@@ -32,6 +32,24 @@ import time
 from . import core, hotkey, mac, orbnative, paste, stt, warmup
 from .api import Dictator
 
+# When a hold that produced nothing is worth telling the user about.
+#
+# Loudness alone cannot do it, and the corpus says so plainly. A 0.67s hold
+# measuring 0.0020 RMS is silence, and the model hallucinated Japanese at it. A
+# 1.01s hold measuring 0.0026 is a real "Yeah." that transcribed correctly.
+# Those two are adjacent, so any floor that reports the first stays silent on
+# the second, and the other way round.
+#
+# Duration separates them where loudness cannot: the first is a brush of the
+# key and the second is somebody answering. So both, and neither alone:
+#
+#   under a second          a mis-press, say nothing
+#   quieter than this       there was nothing to hear, say nothing
+#   otherwise, and empty    they spoke and we lost it, say so
+QUIET = 0.002
+TOO_BRIEF = 1.0
+
+
 # Anything shorter is a mis-press, not speech. Kept low because a short real
 # utterance ("yes", "ship it") is common and losing it is worse than
 # transcribing a click into nothing.
@@ -210,6 +228,27 @@ class Dictation:
             say(f'learned "{term}"')
         if not said.text:
             say("nothing was transcribed")
+            # A hold that produced nothing is invisible: `say` only prints to a
+            # terminal and the listener runs under launchd, so the user pressed
+            # the key, spoke, and watched nothing happen with no indication
+            # anywhere. It happened 24 times in 151 holds in one real log.
+            #
+            # Not every empty hold is worth reporting. A brief press with
+            # nothing said is an ordinary thing to do and should stay silent.
+            # The two are told apart by whether there was anything to hear:
+            # `stt.loudness` is one pass over samples we already have, and
+            # until now it had no callers at all.
+            try:
+                level = stt.loudness(wav)
+                held = stt.audio_seconds(wav)
+            except Exception:
+                level, held = -1.0, 0.0
+            if level >= QUIET and held >= TOO_BRIEF:
+                core.surface_error(
+                    "transcribe",
+                    "You spoke, and nothing could be made of it.",
+                    hint="Said again more slowly it usually lands. "
+                         "`dictator log` says which engine answered.")
             return
         if said.heard != said.text:
             say(f'heard: "{said.heard[:60]}"')
