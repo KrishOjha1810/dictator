@@ -256,3 +256,27 @@ def test_an_ordinary_paste_still_reports_success(monkeypatch):
     monkeypatch.setattr(paste.subprocess, "run", lambda *a, **k: Said())
     monkeypatch.setattr(paste, "helper", lambda: "/bin/true")
     assert paste._paste_once("some words") is True
+
+
+def test_the_helper_keeps_the_text_when_it_could_not_paste():
+    """The worst version of the Accessibility failure, and the one that left
+    no way out.
+
+    Without the permission, `CGEventPost` does nothing, so the pasteboard's
+    changeCount is unchanged for the WRONG reason: not "the target has not
+    read it yet" but "there was no paste". The helper then took that as its
+    cue to restore the previous clipboard, deleting the transcript from the
+    one place the user could still have reached it.
+
+    Measured on a real machine: the hold transcribed correctly, the log said
+    "pasting into Terminal", nothing appeared, and the clipboard still held
+    what it had held an hour before. The words existed for 250ms.
+
+    Asserted on the source because the behaviour lives in Swift and the
+    alternative is revoking a real permission to test it."""
+    src = (Path(__file__).resolve().parent.parent
+           / "native" / "paste.swift").read_text()
+    assert "if canPost() && !args.contains(\"--keep\")" in src, \
+        "the restore is not guarded by whether a paste was possible"
+    assert "no-accessibility" in src, \
+        "the helper does not tell the caller it could not post"

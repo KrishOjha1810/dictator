@@ -152,7 +152,14 @@ usleep(250_000)
 // this is not the last piece of a longer delivery, so the text stays put and
 // the caller restores once at the end; restoring between pieces is what left
 // only the final chunk behind when a delivery went wrong.
-if !args.contains("--keep") && pb.changeCount == afterWrite {
+// ...and only if we were able to post the keystroke at all. Without
+// Accessibility the paste never happened, so `changeCount` is unchanged for
+// the wrong reason, and restoring here wipes the text out of the one place
+// the user could still have reached it from. Measured on a real machine: the
+// hold transcribed correctly, the log said "pasting into Terminal", nothing
+// appeared, and the clipboard still held what it held an hour earlier. The
+// words existed for 250 milliseconds and then this line deleted them.
+if canPost() && !args.contains("--keep") && pb.changeCount == afterWrite {
     pb.clearContents()
     for d in saved {
         let item = NSPasteboardItem()
