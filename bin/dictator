@@ -1062,6 +1062,22 @@ def doctor() -> int:
     ok("the dictator command is on your PATH", bool(on_path),
        "" if on_path else "run ./install.sh again, or call it by full path")
 
+    # And that it is THIS one. /opt/homebrew/bin is shared by every account on
+    # the Mac, so whichever installed last owns the name and everybody else's
+    # `dictator` silently runs that account's checkout. The symptom is that
+    # nothing you change has any effect, while every command reports success,
+    # including `git pull` saying "Already up to date" about a checkout the
+    # command is not using.
+    if on_path:
+        mine = str(always.REPO / "bin" / "dictator")
+        real = os.path.realpath(on_path)
+        same = real == os.path.realpath(mine)
+        ok("and it is this checkout", same,
+           "" if same else
+           f"`dictator` on your PATH runs {real}, not {mine}. Nothing you "
+           f"change here takes effect. Call it by full path, or re-run "
+           f"./install.sh to put yours in ~/.local/bin")
+
     # Two listeners on the same key means every hold is handled twice and
     # every sentence is pasted twice, and the symptom reads as a paste bug.
     import getpass

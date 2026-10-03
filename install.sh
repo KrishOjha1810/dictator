@@ -135,11 +135,36 @@ step "5/6  Make the command reachable"
 # repo's bin directory is not on anyone's PATH. Deliberately does NOT ask for
 # an admin password: Ollama does, and being asked to authenticate before a
 # tool has done anything is a bad first impression.
+# /opt/homebrew/bin and /usr/local/bin are shared by every account on the Mac.
+# `ln -sf` there does not add a command, it TAKES one: whichever account
+# installed last owns the name, and every other account's `dictator` silently
+# runs that account's checkout.
+#
+# That is not hypothetical. On this machine it meant a second account spent a
+# day running the first account's code from four days earlier: `git pull` said
+# "Already up to date", `dictator build` reported success, and none of it was
+# the checkout the user was standing in. Nothing anywhere said so.
+#
+# So a shared directory is used only when the name is free or already ours,
+# and the per-account one is the fallback that always works.
 LINKED=""
 for d in /opt/homebrew/bin /usr/local/bin "$HOME/.local/bin"; do
-  if [ -d "$d" ] && [ -w "$d" ]; then
-    ln -sf "$HERE/bin/dictator" "$d/dictator" && LINKED="$d" && break
+  [ -d "$d" ] && [ -w "$d" ] || continue
+  if [ -e "$d/dictator" ] || [ -L "$d/dictator" ]; then
+    OWNER="$(readlink "$d/dictator" 2>/dev/null || echo "$d/dictator")"
+    if [ "$OWNER" != "$HERE/bin/dictator" ]; then
+      case "$d" in
+        "$HOME"/*) : ;;   # our own, safe to replace
+        *)
+          echo "  $d/dictator belongs to another install:"
+          echo "    $OWNER"
+          echo "  Leaving it alone. Yours goes in ~/.local/bin."
+          continue
+          ;;
+      esac
+    fi
   fi
+  ln -sf "$HERE/bin/dictator" "$d/dictator" && LINKED="$d" && break
 done
 if [ -n "$LINKED" ]; then
   echo "  dictator -> $LINKED/dictator"

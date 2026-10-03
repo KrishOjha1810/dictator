@@ -323,3 +323,31 @@ def test_a_bundle_with_no_plist_is_not_assumed_to_be_ours(tmp_path,
     (app / "Contents").mkdir(parents=True)
     monkeypatch.setattr(always, "APP", app)
     assert always._bundle_points_here() is False
+
+
+def test_the_installer_does_not_take_a_name_another_install_owns():
+    """/opt/homebrew/bin and /usr/local/bin are shared by every account on the
+    Mac. `ln -sf` there does not add a command, it takes one: whichever
+    account installed last owns the name and every other account's `dictator`
+    silently runs that account's checkout.
+
+    Measured on a real machine: a second account spent a day running the
+    first's code from four days earlier. `git pull` said "Already up to date",
+    `dictator build` reported success on every helper, and none of it was the
+    checkout the user was standing in."""
+    src = (Path(__file__).resolve().parent.parent / "install.sh").read_text()
+    link = src[src.index("Make the command reachable"):]
+    link = link[:link.index('step "6/6')]
+    assert "readlink" in link, \
+        "it does not look at who owns the name before taking it"
+    assert "belongs to another install" in link, \
+        "it does not say so when it declines"
+    assert "continue" in link, "it does not decline, it just warns"
+
+
+def test_doctor_checks_the_command_on_path_is_this_checkout():
+    """The failure is completely silent: every command reports success and
+    none of them is running your code."""
+    src = (Path(__file__).resolve().parent.parent / "bin" / "dictator").read_text()
+    assert '"and it is this checkout"' in src
+    assert "realpath" in src, "comparing unresolved paths misses a symlink"
