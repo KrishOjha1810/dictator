@@ -217,3 +217,42 @@ def test_the_helper_no_longer_reports_a_receipt_it_cannot_give():
            / "native" / "paste.swift").read_text()
     assert "provider.read" not in src, "back on the promise receipt"
     assert "setString(text, forType: .string)" in src
+
+
+def test_a_helper_with_no_accessibility_is_not_a_successful_paste(monkeypatch):
+    """Posting a keystroke needs Accessibility, and without it CGEventPost
+    does nothing AND reports nothing: the event simply never reaches anybody.
+    So the helper wrote the clipboard, posted Command-V into the void and
+    printed "pasted".
+
+    Seen on a real machine the day the bundle identifier changed: three holds
+    in a row transcribed correctly, logged "pasting into Terminal", and the
+    words never appeared, with nothing anywhere saying why."""
+    told = []
+    monkeypatch.setattr(paste.core, "surface_error",
+                        lambda where, msg, hint="", **k: told.append(
+                            (msg, hint)))
+
+    class Said:
+        stdout, stderr, returncode = "no-accessibility\n", "", 0
+
+    monkeypatch.setattr(paste.subprocess, "run", lambda *a, **k: Said())
+    monkeypatch.setattr(paste, "helper", lambda: "/bin/true")
+    assert paste._paste_once("some words") is False
+    assert told, "the user was told nothing"
+    msg, hint = told[0]
+    assert "macOS has not allowed" in msg
+    # The recovery matters as much as the diagnosis: the text IS on the
+    # clipboard, so this costs one keystroke rather than the whole hold.
+    assert "clipboard" in hint.lower()
+    assert "Command-V" in hint
+    assert "dictator permissions" in hint
+
+
+def test_an_ordinary_paste_still_reports_success(monkeypatch):
+    class Said:
+        stdout, stderr, returncode = "pasted\n", "", 0
+
+    monkeypatch.setattr(paste.subprocess, "run", lambda *a, **k: Said())
+    monkeypatch.setattr(paste, "helper", lambda: "/bin/true")
+    assert paste._paste_once("some words") is True

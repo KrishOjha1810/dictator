@@ -74,6 +74,23 @@ pb.clearContents()
 pb.setString(text, forType: .string)
 let afterWrite = pb.changeCount
 
+// Posting a keystroke needs Accessibility, and without it CGEventPost does
+// nothing AND reports nothing: it is not an error, the event simply never
+// reaches anybody. So this helper happily wrote the clipboard, posted a
+// Command-V into the void, and printed "pasted".
+//
+// Seen on a real machine the day the bundle identifier changed: three holds
+// in a row transcribed correctly, logged "pasting into Terminal", and the
+// words never appeared. Nothing anywhere said why, because from the inside
+// everything had worked.
+//
+// The text is already on the clipboard by the time this is called, so the
+// honest answer is to say so and let the caller tell the user to press
+// Command-V, rather than to claim a paste that did not happen.
+func canPost() -> Bool {
+    return AXIsProcessTrusted()
+}
+
 func tap(_ key: CGKeyCode, flags: CGEventFlags) {
     let src = CGEventSource(stateID: .combinedSessionState)
     let down = CGEvent(keyboardEventSource: src, virtualKey: key, keyDown: true)
@@ -143,4 +160,9 @@ if !args.contains("--keep") && pb.changeCount == afterWrite {
         pb.writeObjects([item])
     }
 }
-print("pasted")
+if canPost() {
+    print("pasted")
+} else {
+    // Not "pasted". The words are on the clipboard and nowhere else.
+    print("no-accessibility")
+}

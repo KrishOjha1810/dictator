@@ -222,6 +222,25 @@ def _paste_once(text: str, keep: bool = False) -> bool:
             # or the helper failed, and it says which.
             if "pasted" in out or "typed" in out:
                 return True
+            # The one answer that is not ambiguous. Posting a keystroke needs
+            # Accessibility, and without it CGEventPost does nothing and
+            # reports nothing, so the helper used to write the clipboard, post
+            # Command-V into the void and print "pasted". Three real holds in
+            # a row transcribed correctly, logged "pasting into Terminal", and
+            # the words never appeared, with nothing anywhere saying why.
+            #
+            # The text IS on the clipboard, so this is recoverable by the user
+            # in one keystroke, which is worth telling them.
+            if "no-accessibility" in out:
+                core.log("paste: no Accessibility, so the keystroke went "
+                         "nowhere. The text is on the clipboard.")
+                core.surface_error(
+                    "paste",
+                    "The words could not be typed in: macOS has not allowed "
+                    "it.",
+                    hint="They are on your clipboard, so Command-V puts them "
+                         "in. To fix it properly: dictator permissions")
+                return False
             # The helper posted Cmd-V. A missing receipt means the target had
             # not read the pasteboard before the helper stopped waiting, which
             # a busy application does often; it does NOT mean the paste failed.
