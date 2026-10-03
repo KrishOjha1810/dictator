@@ -55,6 +55,33 @@ def _bundle_points_here() -> bool:
             and info.get("CFBundleIdentifier") == core.bundle_id())
 
 
+def _register(app: Path) -> None:
+    """Tell LaunchServices the bundle is what it now says it is.
+
+    Changing CFBundleIdentifier in place is invisible to LaunchServices: it
+    has the path cached under the OLD identifier and nothing asks it to look
+    again. The bundle is then in a state where it exists, is correctly signed,
+    and cannot be addressed by the name written inside it.
+
+    What that looks like from the outside, on a real machine:
+    `tccutil reset Accessibility com.dictator.dictation.<id>` answers
+    `No such bundle identifier` with OSStatus -10814, so the permission cannot
+    be cleared; and macOS has no registered app to attach a grant to, so the
+    prompt has nothing to prompt about.
+
+    Nothing to undo if it fails: an unregistered bundle is where we already
+    were, so this logs and moves on."""
+    tool = Path("/System/Library/Frameworks/CoreServices.framework/Frameworks"
+                "/LaunchServices.framework/Support/lsregister")
+    if not tool.exists():
+        return
+    try:
+        subprocess.run([str(tool), "-f", str(app)],
+                       capture_output=True, timeout=60)
+    except Exception as e:
+        core.log(f"could not register the app with LaunchServices: {e}")
+
+
 def build_app() -> str:
     """Build the .app that OWNS the permissions.
 
@@ -100,6 +127,7 @@ def build_app() -> str:
         info["CFBundleIdentifier"] = core.bundle_id()
         (APP / "Contents" / "Info.plist").write_bytes(plistlib.dumps(info))
         _sign(APP)
+        _register(APP)
         return str(APP)
     except Exception as e:
         core.log(f"dictation app build failed: {e}")

@@ -351,3 +351,39 @@ def test_doctor_checks_the_command_on_path_is_this_checkout():
     src = (Path(__file__).resolve().parent.parent / "bin" / "dictator").read_text()
     assert '"and it is this checkout"' in src
     assert "realpath" in src, "comparing unresolved paths misses a symlink"
+
+
+def test_the_bundle_is_registered_after_its_identifier_changes(tmp_path,
+                                                               monkeypatch):
+    """Changing CFBundleIdentifier in place is invisible to LaunchServices: it
+    has the path cached under the OLD identifier and nothing asks it to look
+    again. The bundle then exists, is correctly signed, and cannot be
+    addressed by the name written inside it.
+
+    Measured on a real machine after the identifier went per account:
+    `tccutil reset Accessibility com.dictator.dictation.<id>` answered
+    `No such bundle identifier` with OSStatus -10814, so the permission could
+    not be cleared, and macOS had no registered app to attach a grant to."""
+    from dictator import always
+
+    ran = []
+    monkeypatch.setattr(always.subprocess, "run",
+                        lambda cmd, **k: ran.append(cmd))
+    always._register(tmp_path / "Dictator.app")
+    # Skipped silently where the tool is absent, which is fine; where it is
+    # present it must be asked to look again.
+    tool = ("/System/Library/Frameworks/CoreServices.framework/Frameworks"
+            "/LaunchServices.framework/Support/lsregister")
+    if Path(tool).exists():
+        assert ran, "LaunchServices was never told"
+        assert "-f" in ran[0], "a registration that is not forced is a no-op"
+
+
+def test_registering_is_attempted_as_part_of_building_the_app():
+    src = (Path(__file__).resolve().parent.parent
+           / "dictator" / "always.py").read_text()
+    build = src[src.index("def build_app"):]
+    assert "_register(APP)" in build, \
+        "the bundle is signed and then never registered"
+    assert build.index("_sign(APP)") < build.index("_register(APP)"), \
+        "register after signing, or it registers a bundle about to change"
