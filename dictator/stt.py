@@ -524,13 +524,23 @@ def _transcribe_server(wav: str) -> "tuple[str, float] | None":
                  f"({stt_lang_mode()[0].name}), using the CLI")
         return None
     # A server is started with one audio context and cannot be told otherwise
-    # per request, so it always encodes the full 30 second window. For a short
-    # utterance the CLI wins even after paying process start and model load.
-    # Measured on a 12.4 second hold: 2.90s through the CLI with the window
-    # sized and the language pinned, against 4.25s through this server, and
-    # 3.16s through a server pinned to the same language.
+    # per request, so it always encodes the full 30 second window. Where the
+    # CLI would size that window smaller, it wins even after paying process
+    # start and model load: measured on a 12.4 second hold, 2.90s through the
+    # CLI with the window sized against 4.25s through this server.
+    #
+    # Below WORTH_TRIMMING the CLI does not size the window either, so that
+    # reason stops applying and the comparison inverts. Both encode the full
+    # window; only one of them also reads a 1.6GB model first. Measured on 57
+    # real holds under six seconds, interleaved, against the multilingual
+    # model: 5.57s through the CLI, 3.60s through this server, with the error
+    # rate the same inside noise (2.18% against 2.41%).
+    #
+    # The model load is why. On a warm page cache a 12.1s hold spends 906ms of
+    # its 1523ms loading the model and 138ms encoding, because whisper-cli is
+    # a new process every time. The server pays that once.
     secs = audio_seconds(wav)
-    if 0 < secs < 25:
+    if audio_ctx_for(secs) and secs < 25:
         core.log(f"stt: {secs:.1f}s of audio, the CLI can size the window "
                  f"and this server cannot")
         return None
@@ -972,14 +982,28 @@ def warm(background: bool = True) -> None:
     happened to be running a server on the same port. Measured on a ten
     second hold: 3.89s cold against 2.8s warm.
 
-    NOT called automatically any more, and the measurement is why. A server is
-    started with one audio context and cannot be told otherwise per request,
-    so it always encodes the full 30 second window, while the CLI can size the
+    NOT called automatically, and the measurement is why. A server is started
+    with one audio context and cannot be told otherwise per request, so it
+    always encodes the full 30 second window, while the CLI can size the
     window to the utterance. On a 12.4 second hold the CLI is faster even
-    after paying process start and model load, so the server is declined for
-    anything under 25 seconds, which is very nearly every dictation. Leaving
-    one resident then costs memory and contends for the GPU for no benefit:
-    the same hold measured 3.2s with no server running and 5.8s with one up.
+    after paying process start and model load. Leaving one resident costs
+    memory and contends for the GPU: the same hold measured 3.2s with no
+    server running and 5.8s with one up.
+
+    That contention is why this is still not automatic, and it is the whole of
+    what decides it. A server would help the short holds and hurt the rest,
+    and on this corpus the holds it would help are 39% of the total. Nobody
+    has measured the two populations together, so turning it on would be a
+    guess dressed as an optimisation.
+
+    What DID change: `_transcribe_server` used to decline anything under 25
+    seconds, on the grounds that the CLI could size the window. Below
+    WORTH_TRIMMING the CLI no longer sizes it either, so that reason stopped
+    applying and the comparison inverted. Measured on 57 real holds under six
+    seconds against the multilingual model, interleaved: 5.57s through the
+    CLI, 3.60s through a running server, error the same inside noise. So a
+    server that is already up is now used for those, where before it was
+    ignored. This does not start one.
 
     Kept for long audio and for callers that want it, and available as
     `dictator warm`. Started in the background because warming can take twenty

@@ -201,3 +201,44 @@ def test_the_listener_warms_everything_before_it_says_it_is_listening(monkeypatc
     from dictator import dictate
     src = inspect.getsource(dictate.run)
     assert "warmup.at_startup()" in src
+
+
+# ---- when the warm server is worth using -----------------------------------
+
+def _server_would_be_skipped(secs: float) -> bool:
+    """The gate in `_transcribe_server`, as a function of duration alone."""
+    return bool(stt.audio_ctx_for(secs)) and secs < 25
+
+
+def test_the_server_is_used_where_there_is_no_window_to_size():
+    """The reason the CLI won below 25 seconds was that it could shrink the
+    encoder and a server cannot. Below WORTH_TRIMMING the CLI does not shrink
+    it either, so both encode the full window and only one of them reads a
+    1.6GB model first.
+
+    Measured on 57 real holds under six seconds against the multilingual
+    model, interleaved: 5.57s through the CLI, 3.60s through the server, error
+    the same inside noise."""
+    for secs in (1.0, 2.0, 5.9):
+        assert not _server_would_be_skipped(secs), secs
+
+
+def test_the_cli_still_wins_where_it_can_size_the_window():
+    """Removing this would make every mid-length hold slower, which is the
+    measurement that put the gate there: 2.90s through the CLI with the window
+    sized against 4.25s through the server."""
+    for secs in (6.0, 12.4, 24.0):
+        assert _server_would_be_skipped(secs), secs
+
+
+def test_a_long_hold_goes_to_the_server_as_it_always_did():
+    """Past 25 seconds the window is the full one anyway."""
+    assert not _server_would_be_skipped(30.0)
+
+
+def test_the_two_gates_agree_about_where_trimming_starts():
+    """The server gate is written in terms of `audio_ctx_for` rather than
+    repeating the threshold, so a change to one cannot leave the other behind.
+    This asserts they have not drifted apart."""
+    assert not _server_would_be_skipped(stt.WORTH_TRIMMING - 0.1)
+    assert _server_would_be_skipped(stt.WORTH_TRIMMING)
