@@ -249,6 +249,7 @@ def test_the_user_is_told_before_they_are_handed_the_fragment(monkeypatch):
     class _Said:
         text = "the part I managed to say"
         heard = "the part I managed to say"
+        engine = "parakeet"          # the real Transcript carries this
 
     d = dictate.Dictation()
     monkeypatch.setattr(d.sdk, "transcribe", lambda wav, app="": _Said())
@@ -277,6 +278,7 @@ def test_an_ordinary_hold_says_nothing_about_being_cut(monkeypatch):
     class _Said:
         text = "all of it"
         heard = "all of it"
+        engine = "parakeet"          # the real Transcript carries this
 
     d = dictate.Dictation()
     monkeypatch.setattr(d.sdk, "transcribe", lambda wav, app="": _Said())
@@ -341,3 +343,24 @@ def test_the_two_thresholds_sit_where_the_corpus_put_them():
     assert quiet_but_real[0] >= dictate.QUIET
     assert quiet_but_real[1] >= dictate.TOO_BRIEF
     assert silent_and_brief[1] < dictate.TOO_BRIEF
+
+
+def test_the_engine_is_named_in_words_a_person_can_use():
+    """`cli:ggml-large-v3-turbo.bin` is the filename of a thing, not an answer
+    to "why was that one bad". The two engines are not equally good (0.78%
+    gibberish against 7.27% over 270 real holds) and until now the user could
+    not tell which had answered, so "excellent sometimes, poor sometimes" was
+    as precise as any report could be."""
+    from dictator.dictate import _engine_name
+    assert _engine_name("parakeet") == "the fast English engine"
+    assert _engine_name("cli:ggml-large-v3-turbo.bin") == "the multilingual model"
+    assert _engine_name("server:ggml-large-v3-turbo.bin") == "the multilingual model"
+    assert _engine_name("cli:ggml-small.en.bin") == "the small English model"
+
+
+def test_an_engine_it_does_not_recognise_is_named_rather_than_hidden():
+    """Returning "unknown" for a real engine name would lose the one piece of
+    information the caller had."""
+    from dictator.dictate import _engine_name
+    assert _engine_name("cli:something-new.bin") == "cli:something-new.bin"
+    assert _engine_name("") == "an unknown engine"

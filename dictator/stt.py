@@ -416,6 +416,11 @@ def audio_seconds(wav: str) -> float:
         return 0.0
 
 
+# Shorter than this and shrinking the encoder costs accuracy and time both.
+# See audio_ctx_for for the table.
+WORTH_TRIMMING = 6.0
+
+
 def audio_ctx_for(secs: float) -> int:
     """How much of whisper's 30 second window this utterance actually needs.
 
@@ -427,8 +432,30 @@ def audio_ctx_for(secs: float) -> int:
     just under the audio) the same clip lost a word, and smaller still sends
     the decoder into a repetition loop that takes LONGER than full context. So
     this rounds up and adds margin, and returns the default when it cannot
-    tell how long the audio is."""
+    tell how long the audio is.
+
+    Below `WORTH_TRIMMING` it does not trim at all, because there the trade
+    stops being a trade. Measured over 146 real holds, trimmed against full:
+
+        band        trimmed          full encoder
+        under 3s    7.59%  0.83s     3.95%  0.58s
+        3 to 6s     2.29%  0.75s     2.26%  0.64s
+        6 to 12s    0.30%  0.55s     0.00%  0.72s
+        12 to 30s   0.28%  0.86s     0.28%  1.08s
+
+    Under six seconds trimming is worse AND slower: it halves the accuracy of
+    the shortest holds and costs a quarter of a second doing it, because a
+    decoder given too little context loops, and looping takes longer than the
+    encoding it saved. Above six seconds it buys real time for nothing, which
+    is what it was written for.
+
+    The same measurement killed the other suspect in the same issue: pinning
+    the language on short holds changes the accuracy by nothing at all
+    (4.98% against 4.98%) and costs 0.13s, so `MIN_DETECT_SECS` was never the
+    problem it looked like."""
     if secs <= 0:
+        return 0
+    if secs < WORTH_TRIMMING:
         return 0
     frames = int(secs / 0.02) + 80
     return min(1500, max(200, frames))

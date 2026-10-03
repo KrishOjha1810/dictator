@@ -304,7 +304,13 @@ def main(argv) -> int:
         for r in rows:
             when = _t.strftime("%d %b %H:%M", _t.localtime(r["at"]))
             line = r.get("shown") or r.get("heard") or ""
-            print(f"  {when}  {line[:90]}")
+            # The engine, because the two are not equally good and this is
+            # where somebody looks when they are trying to work out why one
+            # hold was fine and the next was not.
+            from dictator.dictate import _engine_name
+            who = _engine_name(r.get("engine") or "")
+            print(f"  {when}  {line[:76]}")
+            print(f"{'':16}  {who}")
             if r.get("kept") and r["kept"] != r.get("shown"):
                 print(f"{'':16}  you changed it to: {r['kept'][:80]}")
         return 0

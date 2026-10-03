@@ -13,10 +13,20 @@ from dictator import stt
 
 
 @pytest.mark.parametrize("secs,window", [
-    (2, 200), (5, 330), (12.4, 700), (25, 1330), (40, 1500),
+    (12.4, 700), (25, 1330), (40, 1500),
 ])
 def test_the_window_is_sized_to_the_utterance(secs, window):
     assert stt.audio_ctx_for(secs) == window
+
+
+@pytest.mark.parametrize("secs", [0.5, 1, 3, 5.9])
+def test_a_short_hold_is_not_sized_down_at_all(secs):
+    """Zero means "leave the encoder alone", and below six seconds that is
+    what it has to be. Measured over 146 real holds: trimming the shortest
+    ones costs 7.59% gibberish against 3.95%, and costs 0.83s against 0.58s
+    while doing it. A decoder given too little context loops, and looping
+    takes longer than the encoding the trim saved."""
+    assert stt.audio_ctx_for(secs) == 0
 
 
 @pytest.mark.parametrize("secs", [0.5, 1, 3, 7, 12.4, 20, 29])
@@ -24,8 +34,11 @@ def test_the_window_never_undershoots_the_audio(secs):
     """Undershooting is not merely lossy. At 600 frames on a 12.4 second clip
     (12 seconds, just under the audio) a word was lost, and smaller still
     sends the decoder into a repetition loop that takes LONGER than full
-    context. Every window must cover its own audio with room to spare."""
+    context. Every window must cover its own audio with room to spare, and a
+    window of zero is the whole 30 seconds, which covers everything."""
     ctx = stt.audio_ctx_for(secs)
+    if ctx == 0:
+        return                           # not trimmed, so nothing to undershoot
     assert ctx * 0.02 >= secs, f"{secs}s got a {ctx * 0.02}s window"
 
 

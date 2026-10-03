@@ -57,6 +57,23 @@ MIN_MS = 250
 MAX_SECS = 120
 
 
+def _engine_name(engine: str) -> str:
+    """The engine, as something a person can hold in their head.
+
+    `cli:ggml-large-v3-turbo.bin` is the filename of a thing, not an answer to
+    "why was that one bad"."""
+    e = engine or ""
+    if e == "parakeet":
+        return "the fast English engine"
+    if "parakeet" in e:
+        return "the fast English engine"
+    if "small.en" in e:
+        return "the small English model"
+    if "turbo" in e or "large" in e:
+        return "the multilingual model"
+    return e or "an unknown engine"
+
+
 class Dictation:
     """One hold: record while down, transcribe on release, paste where you were."""
 
@@ -250,6 +267,13 @@ class Dictation:
                     hint="Said again more slowly it usually lands. "
                          "`dictator log` says which engine answered.")
             return
+        # Which engine answered. The two behave very differently and the user
+        # cannot currently tell them apart, so "it is excellent sometimes and
+        # poor sometimes" is as precise as any report can be. Measured over
+        # 270 real holds: the English engine 0.78% gibberish, the multilingual
+        # one it falls through to 7.27%. Knowing which answered is the first
+        # thing anybody needs to say something useful about a bad hold.
+        say(f"answered by {_engine_name(said.engine)}")
         if said.heard != said.text:
             say(f'heard: "{said.heard[:60]}"')
             say(f'wrote: "{said.text[:60]}"')

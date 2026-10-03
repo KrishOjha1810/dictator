@@ -98,7 +98,10 @@ def test_the_retry_replaces_a_loop_and_keeps_a_good_answer(monkeypatch,
     # "cli:ggml-large-v3-turbo.bin", which is this branch.
     monkeypatch.setattr(stt, "parakeet_ready", lambda: False)
     monkeypatch.setattr(stt, "whisper_bin", lambda: "/bin/true")
-    monkeypatch.setattr(stt, "audio_seconds", lambda w: 2.7)
+    # Longer than WORTH_TRIMMING, or there is no trim to retry without: a
+    # short hold is no longer trimmed at all, which is the better fix for the
+    # same failure and is tested above.
+    monkeypatch.setattr(stt, "audio_seconds", lambda w: 12.0)
     monkeypatch.setattr(stt, "pinned_language", lambda w, l: "en")
     monkeypatch.setattr(stt, "stt_lang_mode", lambda: (wav, "en"))
     monkeypatch.setattr(stt, "_romanise", lambda t: t)
@@ -147,3 +150,37 @@ def test_a_byte_the_model_emitted_does_not_throw_the_hold_away(monkeypatch,
         "the engine's stdout is still decoded strictly"
     assert "the vault is fine" in text
     assert "that is all" in text, "everything after the bad byte was lost"
+
+
+# ---- the encoder sizing, which was costing the short holds twice -----------
+
+def test_a_short_hold_is_not_trimmed_at_all():
+    """Measured over 146 real holds: under six seconds, trimming the encoder
+    is worse AND slower than leaving it alone (7.59% against 3.95% gibberish
+    for the shortest, and 0.83s against 0.58s). A decoder given too little
+    context loops, and looping takes longer than the encoding it saved."""
+    from dictator import stt
+    for secs in (0.5, 1.0, 2.7, 4.0, 5.9):
+        assert stt.audio_ctx_for(secs) == 0, secs
+
+
+def test_a_long_hold_is_still_trimmed():
+    """Above six seconds it buys real time for nothing, which is what it was
+    written for. Removing it there would make every long dictation slower."""
+    from dictator import stt
+    assert 0 < stt.audio_ctx_for(8.0) < 1500
+    assert 0 < stt.audio_ctx_for(12.0) < 1500
+    assert stt.audio_ctx_for(40.0) == 1500
+
+
+def test_the_boundary_is_where_the_measurement_put_it():
+    from dictator import stt
+    assert stt.audio_ctx_for(stt.WORTH_TRIMMING - 0.1) == 0
+    assert stt.audio_ctx_for(stt.WORTH_TRIMMING) > 0
+
+
+def test_unknown_duration_still_means_do_not_trim():
+    """A wav that could not be read must not be guessed at."""
+    from dictator import stt
+    assert stt.audio_ctx_for(0) == 0
+    assert stt.audio_ctx_for(-1) == 0
