@@ -577,3 +577,21 @@ def test_databases_it_cannot_read_answer_none_rather_than_nothing(monkeypatch):
     from dictator import tcc
     monkeypatch.setattr(tcc, "_rows", lambda service, client=None: None)
     assert tcc.orphans() is None
+
+
+def test_a_running_listener_is_not_proof_that_macos_trusts_it():
+    """An untrusted listener starts, finds it cannot tap the key, and sits
+    there. So a process existing is not the permission working, and the
+    watcher used to declare "Granted. Hold fn anywhere and talk." on exactly
+    that.
+
+    Told that, a user with a DENIED row spent an hour switching on the two
+    OTHER Dictator entries in the list, because the tool had said the
+    permission was fine and the problem must be elsewhere."""
+    src = (Path(__file__).resolve().parent.parent / "bin" / "dictator").read_text()
+    watch = src[src.index("Watching. This updates itself"):]
+    watch = watch[:watch.index("def ") if "def " in watch else len(watch)]
+    assert "if live and trusted:" in watch, \
+        "success is still declared on the listener alone"
+    assert "macOS trusts it" in watch, \
+        "the progress line does not separate running from trusted"

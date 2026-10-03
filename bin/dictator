@@ -1248,10 +1248,20 @@ def permissions(reset: bool = False, explain: bool = False) -> int:
             live = _has_listener()
             now = (running, live)
             if now != was:
+                trusted = tcc.state("accessibility", app)["state"] == tcc.GRANTED
                 print(f"  service running: {'yes' if running else 'no'}"
-                      f"   |   listening for the key: {'yes' if live else 'not yet'}")
+                      f"   |   listening: {'yes' if live else 'not yet'}"
+                      f"   |   macOS trusts it: {'yes' if trusted else 'not yet'}")
                 was = now
-            if live:
+            # A listener process exists whether or not macOS trusts it: an
+            # untrusted one starts, finds it cannot tap the key, and sits
+            # there. So "a listener is running" is not "it works", and saying
+            # "Granted" on it told a user with a DENIED row that he was done.
+            # He then spent an hour switching on the other two Dictator
+            # entries in the list, because this had told him the problem was
+            # somewhere else.
+            trusted = tcc.state("accessibility", app)["state"] == tcc.GRANTED
+            if live and trusted:
                 print("\nGranted. Hold fn anywhere and talk.")
                 return 0
             _t.sleep(1)
