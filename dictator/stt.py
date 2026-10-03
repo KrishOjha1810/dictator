@@ -1020,6 +1020,17 @@ def warm(background: bool = True) -> None:
         go()
 
 
+def _looks_indic(text: str) -> bool:
+    """Is this the right language written in the wrong alphabet.
+
+    Arabic script here means Urdu, which is Hindi by another name and another
+    writing system, so the words are right and only the script is unusable.
+    Anything else foreign (Cyrillic, Han, Greek) is the model having lost the
+    thread, and asking it again in Hindi would not help."""
+    return any("\u0600" <= c <= "\u06ff" or "\u0750" <= c <= "\u077f"
+               for c in (text or ""))
+
+
 def _transcribe_ex(wav: str) -> "tuple[str, float]":
     global LAST_ENGINE, _force_multilingual
     if language() != "hinglish" and parakeet_ready():
@@ -1142,6 +1153,33 @@ def _transcribe_ex(wav: str) -> "tuple[str, float]":
     answer = script.repair(answer)
     if answer and not script.usable(answer):
         bad = "".join(dict.fromkeys(script.foreign(answer)))[:12]
+        # Urdu is the case worth separating, and it is not the model failing.
+        # Hindi and Urdu are the same spoken language, so `-l auto` picks
+        # between them on nothing, and when it picks Urdu the transcription is
+        # CORRECT and in an alphabet that cannot be pasted and that
+        # `_romanise` does not convert. A real hold: the user asked "kya tumhe
+        # sunai de raha hai" and got back 'کیاتمجھےسنپر', which was then
+        # dropped, so he said something and received silence.
+        #
+        # Asking again with the language pinned to Hindi gets the same
+        # sentence in Devanagari, which `_romanise` turns into something he
+        # can read. One extra pass, only on a hold that would otherwise have
+        # produced nothing at all.
+        if lang == "auto" and _looks_indic(answer):
+            core.log(f"transcribe: answered in {bad!r}, which is the right "
+                     f"words in an alphabet nothing here can use. Asking "
+                     f"again in Hindi.")
+            again = [a for a in cmd]
+            again[again.index("-l") + 1] = "hi"
+            try:
+                r2 = subprocess.run(again, capture_output=True, text=True,
+                                    errors="replace", timeout=120)
+                second = script.repair(_romanise(
+                    _clean_text((r2.stdout or "").strip())))
+                if second and script.usable(second):
+                    return second, conf
+            except Exception as e:
+                core.log(f"transcribe: the Hindi pass failed: {e}")
         core.log(f"transcribe: answered in an alphabet this does not handle "
                  f"({bad!r}), so it was not transcribing. Dropping it.")
         return "", 0.0

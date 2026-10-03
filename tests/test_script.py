@@ -152,3 +152,72 @@ def test_a_broken_byte_is_cleaned_out_of_the_answer(monkeypatch, tmp_path):
 def test_an_ordinary_answer_passes_through_untouched(monkeypatch, tmp_path):
     text = "I understood the borrower struct, but the accuracy interest"
     assert _whisper_answering(monkeypatch, tmp_path, text) == text
+
+
+def test_urdu_is_asked_again_in_hindi_rather_than_dropped(monkeypatch,
+                                                           tmp_path):
+    """Hindi and Urdu are the same spoken language, so `-l auto` picks between
+    them on nothing. When it picks Urdu the transcription is CORRECT and in an
+    alphabet that cannot be pasted and that roman.py does not convert.
+
+    A real hold: the user asked whether he could be heard, got back
+    '\\u06a9\\u06cc\\u0627\\u062a\\u0645\\u062c\\u06be\\u06d2\\u0633\\u0646\\u067e\\u0631', and the guard dropped it, so he
+    said something and received silence."""
+    from dictator import stt
+
+    urdu = "کیاتمجھےسنپر"
+    answers = iter([urdu, "kya tumhe sunai de raha hai"])
+    seen = []
+
+    class Done:
+        def __init__(self, text):
+            self.stdout, self.stderr, self.returncode = text, "", 0
+
+    def fake_run(cmd, **kw):
+        seen.append(list(cmd))
+        return Done(next(answers))
+
+    wav = tmp_path / "a.wav"
+    wav.write_bytes(b"")
+    monkeypatch.setattr(stt.subprocess, "run", fake_run)
+    monkeypatch.setattr(stt, "_transcribe_server", lambda w: None)
+    monkeypatch.setattr(stt, "parakeet_ready", lambda: False)
+    monkeypatch.setattr(stt, "whisper_bin", lambda: "/bin/true")
+    monkeypatch.setattr(stt, "audio_seconds", lambda w: 8.0)
+    monkeypatch.setattr(stt, "pinned_language", lambda w, l: "auto")
+    monkeypatch.setattr(stt, "stt_lang_mode", lambda: (wav, "auto"))
+    monkeypatch.setattr(stt, "_romanise", lambda t: t)
+
+    text, _ = stt._transcribe_ex(str(wav))
+    assert text == "kya tumhe sunai de raha hai", text
+    assert len(seen) == 2, "it did not ask again"
+    assert seen[1][seen[1].index("-l") + 1] == "hi", \
+        "the second pass did not pin Hindi"
+
+
+def test_an_alphabet_that_is_not_indic_is_not_retried(monkeypatch, tmp_path):
+    """Cyrillic or Han is the model having lost the thread, not the right
+    words in the wrong script, and asking again in Hindi would not help."""
+    from dictator import stt
+
+    calls = []
+
+    class Done:
+        stdout = "Конор сомри"
+        stderr, returncode = "", 0
+
+    wav = tmp_path / "a.wav"
+    wav.write_bytes(b"")
+    monkeypatch.setattr(stt.subprocess, "run",
+                        lambda cmd, **k: calls.append(cmd) or Done())
+    monkeypatch.setattr(stt, "_transcribe_server", lambda w: None)
+    monkeypatch.setattr(stt, "parakeet_ready", lambda: False)
+    monkeypatch.setattr(stt, "whisper_bin", lambda: "/bin/true")
+    monkeypatch.setattr(stt, "audio_seconds", lambda w: 8.0)
+    monkeypatch.setattr(stt, "pinned_language", lambda w, l: "auto")
+    monkeypatch.setattr(stt, "stt_lang_mode", lambda: (wav, "auto"))
+    monkeypatch.setattr(stt, "_romanise", lambda t: t)
+
+    text, _ = stt._transcribe_ex(str(wav))
+    assert text == ""
+    assert len(calls) == 1, "it retried an answer a retry cannot fix"
