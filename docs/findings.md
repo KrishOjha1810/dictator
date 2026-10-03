@@ -2164,3 +2164,109 @@ are already safe:
 - the **signing keychain** is under `~/.dictator`, per account, which is
   precisely why the two certificates differ in the first place
 - the **model directory** is per account, so the only cost is 2.3GB twice
+
+
+---
+
+## The optimisation that was costing both the things it was meant to buy
+
+`audio_ctx_for` shrinks whisper's encoder window to the length of the
+utterance, because the encoder was 85% of a hold. It worked, and then it kept
+being applied below the point where it helped.
+
+Measured over 146 real holds, trimmed against full:
+
+| band | trimmed | full encoder |
+|---|---|---|
+| under 3s | 7.59% / 0.83s | **3.95% / 0.58s** |
+| 3 to 6s | 2.29% / 0.75s | **2.26% / 0.64s** |
+| 6 to 12s | 0.30% / 0.55s | 0.00% / 0.72s |
+| 12 to 30s | 0.28% / 0.86s | 0.28% / 1.08s |
+
+**Below six seconds it was worse AND slower**, which is not a trade at all.
+The mechanism is already in this document: a decoder given too little context
+repeats itself, and looping takes longer than the encoding the trim saved.
+
+### The number above is on the wrong model, and here is the right one
+
+The harness asks the product which model to use, through a function that
+answers according to the current language setting. That setting is `english`,
+so every one of those runs went to the small English-only model, which handles
+**2.6% of real holds**.
+
+On the multilingual model, which handles 24.8% and which `audio_ctx` was
+originally fitted to, 30 holds under six seconds, interleaved:
+
+| | words | gibberish | secs/hold |
+|---|---|---|---|
+| trimmed | 195 | **13.85%** | **12.52s** |
+| full encoder | 173 | **4.05%** | **5.60s** |
+
+**Three times the error and more than twice the time.** And read the word
+counts: the trimmed arm produced MORE words from the same audio, which is the
+decoder repeating itself, so the error share understates the damage.
+
+Parakeet, which handles the other 72.6%, takes no audio context at all and is
+unaffected either way.
+
+`WORTH_TRIMMING = 6.0`.
+
+### Two ways this measurement went wrong before it went right
+
+Both are worth more than the result.
+
+1. **Sequential runs read as a result.** The first whole-corpus comparison ran
+   the two configurations one after the other and reported the new one as
+   0.21s slower. Interleaved, so that machine load falls on both arms equally,
+   it is 0.13s faster. Any timing comparison on a machine doing other work has
+   to alternate, not batch.
+2. **The harness silently chose the model.** Asking the product which model to
+   use is the right instinct and it answered honestly; it answered about a
+   path carrying 2.6% of traffic. A benchmark that resolves its own subject
+   from configuration will do this again. Name the model.
+
+### What the detector cannot do, which is the other half of the same issue
+
+The obvious companion fix is to decide the language before transcribing rather
+than after, since the tiny detector answers in 0.16s. Cross-tabulated against
+what Parakeet actually achieves on 146 holds:
+
+| | detector says English | detector says Hindi |
+|---|---|---|
+| Parakeet's answer kept | 108 | **7** |
+| Parakeet's answer lost | 20 | 11 |
+
+Pre-routing on it would save the second pass on 11 holds and **break 7 that
+Parakeet was handling**, while still missing 20. **Hinglish is mostly English
+words**, so an acoustic language detector calls it English, correctly, and
+that is no help at all in choosing a transcriber. Pinning the language on
+short holds also changes accuracy by exactly nothing (4.98% against 4.98%) and
+costs 0.13s, so `MIN_DETECT_SECS` was never the problem it looked like.
+
+### Where the time actually goes now
+
+On a 12.1 second hold with the page cache warm:
+
+```
+load time   =  906 ms      60% of the hold
+encode time =  138 ms       9%
+batchd time =  286 ms
+total       = 1523 ms
+```
+
+**The encoder is no longer the bill; the model load is.** `warmup.py` takes
+the read from 1.68s to 0.30s by warming the page cache, and cannot do better,
+because `whisper-cli` is a new process every hold and loads the model into its
+own memory each time.
+
+A resident server pays that once, and below six seconds it is now the faster
+path for a second reason: there is no window left for the CLI to size. 57
+holds under six seconds, interleaved, multilingual model: **5.57s CLI against
+3.60s server**, error the same inside noise.
+
+It is still not started automatically, and the reason is unchanged: a resident
+server contends for the GPU, and the same hold measures 3.2s with none running
+against 5.8s with one up. It would help 39% of holds and hurt the rest, and
+nobody has measured the two together. The only fix that removes the trade is
+an upstream one: whisper.cpp accepting `audio_ctx` per request, which would
+make a single server correct for every hold.
