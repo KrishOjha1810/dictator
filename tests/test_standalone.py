@@ -419,3 +419,42 @@ def test_the_orb_chooses_its_screen_on_every_hold():
     show = src[src.index("private func show()"):]
     show = show[:show.index("private func hide()")]
     assert "place()" in show, "the window is rebuilt but never re-placed"
+
+
+def test_no_module_keeps_a_path_into_the_real_state_directory():
+    """Four separate features have now written into the user's own data
+    because a module computed its paths from STATE_DIR at import and the test
+    isolation redirected STATE_DIR alone: the history, the vocabulary, the
+    benchmark corpus, and the reference transcripts.
+
+    This asserts the pattern rather than the four names, so the fifth one
+    fails here instead of in somebody's data."""
+    import importlib
+    import pkgutil
+
+    import dictator
+    from dictator import core
+
+    real = str(Path.home() / ".dictator")
+    leaked = []
+    for mod in pkgutil.iter_modules(dictator.__path__):
+        try:
+            m = importlib.import_module(f"dictator.{mod.name}")
+        except Exception:
+            continue
+        for name in dir(m):
+            if name.startswith("__"):
+                continue
+            v = getattr(m, name, None)
+            if not isinstance(v, Path) or not str(v).startswith(real):
+                continue
+            # `~/.dictator/bin` holds compiled helpers, which tests READ and
+            # are supposed to: pointing those at a temporary directory would
+            # test a binary that is not the one shipped. Everything else under
+            # the state directory is the user's own data.
+            if str(v).startswith(real + "/bin/"):
+                continue
+            leaked.append(f"{mod.name}.{name} = {v}")
+    assert not leaked, (
+        "these point at the real state directory and the suite redirects "
+        "STATE_DIR, so they must be in tests/conftest.py: " + ", ".join(leaked))

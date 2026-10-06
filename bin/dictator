@@ -40,6 +40,7 @@ Teaching it your words:
   dictator learn WORD    fix this word when it mishears it
   dictator words         what it has learned
   dictator review        it asks you about the words it got wrong
+  dictator truth [n]     write down what you actually said, to measure by
   dictator unlearn WORD  stop fixing it
   dictator history [n]   what you have said
   dictator find WORDS    search everything you have ever dictated
@@ -221,6 +222,73 @@ def main(argv) -> int:
             print(f'learned "{term}". I will fix things that sound like it.')
         else:
             print(f'learned "{term}", but {rec.get("why","")}.')
+        return 0
+
+    if cmd == "truth":
+        from dictator import truth as _t
+        n = int(rest[0]) if rest and rest[0].isdigit() else 40
+        if "--status" in rest:
+            g = _t.progress(n)
+            print(f"  {g['done']} of {g['total']} written, {g['left']} left.")
+            if g["done"]:
+                print(f"  {g['changed']} of those needed a correction.")
+            return 0
+        picked = [w for w in _t.sample(n) if not _t.done(w)]
+        if not picked:
+            g = _t.progress(n)
+            print(f"All {g['total']} written. {g['changed']} needed a "
+                  f"correction.")
+            print("Score a model against them with: tools/wer.py")
+            return 0
+        print(f"{len(picked)} to go. Each one plays, then you fix what is")
+        print("wrong in the line and press Return. Most need no change.\n")
+        print("  Return   keep it as it is")
+        print("  r        play it again")
+        print("  s        skip this one for now")
+        print("  q        stop, and keep what you have done\n")
+        try:
+            import readline
+        except Exception:
+            readline = None
+        for i, wav in enumerate(picked, 1):
+            heard = _t.guess(wav)
+            print(f"\n  [{i}/{len(picked)}]  {_t.seconds(wav):.1f}s")
+            while True:
+                if not _t.play(wav):
+                    print("  (could not play it; afplay is missing)")
+                if readline:
+                    # Prefill the line with what the model said, so this is
+                    # correcting rather than typing. Without it the whole
+                    # saving of this tool disappears.
+                    def _fill():
+                        readline.insert_text(heard)
+                        readline.redisplay()
+                    readline.set_startup_hook(_fill)
+                try:
+                    said = input("  said: ")
+                finally:
+                    if readline:
+                        readline.set_startup_hook()
+                low = said.strip().lower()
+                if low == "r" and not heard.strip().lower() == "r":
+                    continue
+                if low == "s" and not heard.strip().lower() == "s":
+                    print("  skipped.")
+                    said = None
+                    break
+                if low == "q" and not heard.strip().lower() == "q":
+                    g = _t.progress(n)
+                    print(f"\n  Stopped. {g['done']} of {g['total']} written.")
+                    return 0
+                break
+            if said is None:
+                continue
+            _t.save(wav, said.strip(), heard)
+            print("  kept as it was." if said.strip() == heard.strip()
+                  else "  corrected.")
+        g = _t.progress(n)
+        print(f"\n  {g['done']} of {g['total']} written, "
+              f"{g['changed']} needed a correction.")
         return 0
 
     if cmd == "review":

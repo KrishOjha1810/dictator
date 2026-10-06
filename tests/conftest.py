@@ -24,6 +24,24 @@ def _own_state_dir(tmp_path, monkeypatch):
             # exact shape has bitten: a module constant computed from
             # STATE_DIR at import, so redirecting STATE_DIR alone misses it.
             ("api", "CORPUS", tmp_path / "corpus"),
+            # Fourth time this exact shape has bitten, and the first three are
+            # named in the comment above. `truth` computes both of these from
+            # STATE_DIR at import, so redirecting STATE_DIR alone left its
+            # tests writing fake recordings into the user's real benchmark
+            # corpus and real transcripts beside them. 41 of them, before
+            # anyone noticed.
+            ("truth", "CORPUS", tmp_path / "corpus"),
+            ("truth", "REFS", tmp_path / "references"),
+            # Harmless on its own, but it is the same shape and the test that
+            # looks for this shape should find nothing.
+            ("stt", "_MIC_LOCK", tmp_path / "mic.lock"),
+            # Written, not read: a test that touches signing would make a real
+            # keychain, and one that changes the delivery method would change
+            # the user's own setting.
+            ("signing", "KEYCHAIN", tmp_path / "signing.keychain-db"),
+            ("signing", "PASSFILE", tmp_path / "signing.pass"),
+            ("paste", "HOW_FILE", tmp_path / "delivery"),
+            ("orbnative", "PID", tmp_path / "orb.pid"),
             ("api", "CAPTURE_FLAG", tmp_path / "capturing"),
             ("api", "FORMAT_FILE", tmp_path / "format.json"),
             ("snippets", "STORE", tmp_path / "snippets.json"),
