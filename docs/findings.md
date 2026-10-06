@@ -2397,12 +2397,31 @@ Pinning to English is worse than either (17.8%), which is the shape one would
 expect: this audio is not English, and saying so confidently is worse than
 saying nothing.
 
-The actionable version is narrower than the table. The multilingual model is
-reached in the shipped pipeline only as a fallback, and only when Parakeet has
-already failed, which is itself strong evidence the audio is not English. So
-the question is not whether to pin globally, it is whether to pin `hi` on the
-fallback path, where the thing `auto` is being asked to work out is already
-known.
+The actionable version is narrower than the table, and when it was actually
+tried it turned out not to be actionable at all.
+
+The multilingual model is reached in the shipped pipeline only as a fallback,
+and only after Parakeet has failed, which is itself evidence the audio is not
+English. So the obvious change is to pin `hi` there, where `auto` is being
+asked to work out something already known. Measured on the same 40 references:
+
+| | WER | WER-sound | ENG-exact | secs |
+|---|---|---|---|---|
+| shipped, fallback on auto | **3.6%** | **3.3%** | **98.7%** | **2.25** |
+| shipped, fallback pinned to hi | 4.2% | 3.9% | 98.5% | 2.96 |
+
+**Worse, and slower.** Not shipped.
+
+The two results are consistent once the populations are separated. Turbo
+handling EVERY hold is mostly doing Hindi, and pinning helps. Turbo handling
+only what Parakeet could not is doing the mixed holds, where the English half
+is exactly what pinning `hi` damages, and the English half is the half this
+product cannot afford to lose.
+
+So a row in a table measured over one population is not a recommendation for
+another, and the table above says `hi` beats `auto` by 1.7 points while the
+change it appears to justify costs 0.6. The only reason that was caught is
+that it was tried before it was shipped.
 
 ### The lesson, which is the fifth of its kind here
 
