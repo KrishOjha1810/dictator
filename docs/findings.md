@@ -2339,3 +2339,75 @@ Not dropping, which is at zero, but the **latency of the fallback**. Every one
 of those 75 holds pays a second transcription. `dictator history` and the hold
 log now name the engine, so the pattern is at least visible, and the engine
 gap is #3's subject rather than a bug here.
+
+
+---
+
+## Every setting, re-asked against a number that can see words
+
+40 references written by hand against real recordings, scored by
+`tools/wer.py`. Every setting below was originally chosen against the
+reference free score, which cannot see a model swapping one real word for
+another, so this is the first time any of them has been checked by something
+that can.
+
+| variant | WER | WER-sound | ENG-exact | secs |
+|---|---|---|---|---|
+| **shipped pipeline** | **3.6%** | **3.3%** | **98.7%** | 3.37 |
+| turbo only, as shipped | 12.7% | 12.4% | 96.1% | 7.07 |
+| turbo, encoder trimmed | 56.7% | 55.9% | 92.7% | 8.77 |
+| turbo, no vocabulary prompt | 14.0% | 13.7% | 96.3% | 8.39 |
+| turbo, language pinned to hi | **11.0%** | **10.7%** | 95.8% | 5.66 |
+| turbo, language pinned to en | 17.8% | 17.8% | 96.1% | 5.35 |
+
+### The routing is worth more than everything else combined
+
+**3.6% against 12.7%.** Sending English to the fast engine and only what it
+cannot do to the multilingual one is a three and a half times improvement, and
+it is also twice as fast. Issue #18 spent a day asking whether that routing
+was worth the double transcription it sometimes causes. It is worth more than
+any other decision in this program.
+
+### Trimming the encoder was not a small mistake
+
+**56.7% against 12.7%**, four and a half times worse. Larger than the earlier
+measurement of it (13.85% against 4.05%) because that one was on short holds
+alone. What it does is visible rather than statistical: "Word permission."
+comes back as `p " sem semr-t " " vft "a then " plplplplpl it`, a decoder
+with too little context talking to itself, and WER counts every invented word.
+
+### The vocabulary prompt earns its place
+
+12.7% with, 14.0% without. Measured three times now on three different
+instruments, and it has never once been the wrong call.
+
+### And one result that reverses an earlier conclusion
+
+**Pinning the language to Hindi is better than letting whisper decide: 11.0%
+against 12.7%, and 1.4 seconds faster.**
+
+Issue #17 concluded the opposite, that pinning "changes the accuracy by
+exactly zero", and closed `MIN_DETECT_SECS` as a dead end. That was measured
+on the reference free score, which could not see the difference because what
+pinning fixes is the model choosing a wrong language and producing real words
+in it, and real words in the wrong language score perfectly against a
+dictionary.
+
+Pinning to English is worse than either (17.8%), which is the shape one would
+expect: this audio is not English, and saying so confidently is worse than
+saying nothing.
+
+The actionable version is narrower than the table. The multilingual model is
+reached in the shipped pipeline only as a fallback, and only when Parakeet has
+already failed, which is itself strong evidence the audio is not English. So
+the question is not whether to pin globally, it is whether to pin `hi` on the
+fallback path, where the thing `auto` is being asked to work out is already
+known.
+
+### The lesson, which is the fifth of its kind here
+
+Every number in this section differs from what the reference free score said,
+and two of them reverse its conclusion. The score was not wrong about what it
+measured; it was answering a narrower question than the one being asked of it.
+Forty hand written references, twenty minutes of somebody's time, changed two
+decisions and confirmed three.
