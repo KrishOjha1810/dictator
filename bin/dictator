@@ -146,6 +146,32 @@ def tidy() -> int:
     return 0
 
 
+def _edit(text: str) -> "str|None":
+    """Open the line in the user's editor, prefilled, and read it back.
+
+    The reliable way to correct one word in a long sentence on a Python that
+    cannot prefill an input line. Returns None if the editor could not run or
+    the file came back empty, so the caller can leave the reference unwritten
+    rather than record a blank."""
+    import tempfile
+    editor = os.environ.get("EDITOR") or os.environ.get("VISUAL") or "nano"
+    with tempfile.NamedTemporaryFile("w+", suffix=".txt", delete=False) as f:
+        f.write(text)
+        path = f.name
+    try:
+        subprocess.run([editor, path])
+        got = " ".join(open(path).read().split())
+        return got or None
+    except Exception as e:
+        core.log(f"truth: could not open {editor}: {e}")
+        return None
+    finally:
+        try:
+            os.unlink(path)
+        except OSError:
+            pass
+
+
 def main(argv) -> int:
     cmd = argv[1] if len(argv) > 1 else "status"
     rest = argv[2:]
@@ -240,52 +266,62 @@ def main(argv) -> int:
                   f"correction.")
             print("Score a model against them with: tools/wer.py")
             return 0
-        print(f"{len(picked)} to go. Each one plays, then you fix what is")
-        print("wrong in the line and press Return. Most need no change.\n")
-        print("  Return   keep it as it is")
+        print(f"{len(picked)} to go. Each one plays, and what it heard is")
+        print("printed. Most need no change.\n")
+        print("  Return   it is right, keep it")
+        print("  e        open it in your editor and fix it")
         print("  r        play it again")
-        print("  s        skip this one for now")
-        print("  q        stop, and keep what you have done\n")
-        try:
-            import readline
-        except Exception:
-            readline = None
+        print("  s        skip this one")
+        print("  q        stop, and keep what you have done")
+        print("  anything else becomes the whole line\n")
         for i, wav in enumerate(picked, 1):
             heard = _t.guess(wav)
             print(f"\n  [{i}/{len(picked)}]  {_t.seconds(wav):.1f}s")
-            while True:
-                if not _t.play(wav):
+            said = None
+            while said is None:
+                sound = _t.play(wav)
+                if sound is None:
                     print("  (could not play it; afplay is missing)")
-                if readline:
-                    # Prefill the line with what the model said, so this is
-                    # correcting rather than typing. Without it the whole
-                    # saving of this tool disappears.
-                    def _fill():
-                        readline.insert_text(heard)
-                        readline.redisplay()
-                    readline.set_startup_hook(_fill)
+                # Printed, not offered for editing. macOS ships a Python built
+                # against libedit, where neither readline hook prefills a line,
+                # so the version that tried to put this ON the input line gave
+                # the user an empty one and wrote five empty references.
+                print(f"  heard: {heard}")
                 try:
-                    said = input("  said: ")
+                    typed = input("  said:  ").strip()
+                except (EOFError, KeyboardInterrupt):
+                    print()
+                    typed = "q"
                 finally:
-                    if readline:
-                        readline.set_startup_hook()
-                low = said.strip().lower()
-                if low == "r" and not heard.strip().lower() == "r":
+                    # The moment there is an answer, stop the sound. Otherwise
+                    # the next recording starts over the top of this one.
+                    _t.stop(sound)
+                if typed == "":
+                    said = heard
+                elif typed == "r":
                     continue
-                if low == "s" and not heard.strip().lower() == "s":
+                elif typed == "s":
                     print("  skipped.")
-                    said = None
                     break
-                if low == "q" and not heard.strip().lower() == "q":
+                elif typed == "q":
                     g = _t.progress(n)
                     print(f"\n  Stopped. {g['done']} of {g['total']} written.")
                     return 0
-                break
+                elif typed == "e":
+                    said = _edit(heard)
+                    if said is None:
+                        print("  editor did nothing; leaving this one.")
+                        break
+                else:
+                    said = typed
             if said is None:
                 continue
-            _t.save(wav, said.strip(), heard)
-            print("  kept as it was." if said.strip() == heard.strip()
-                  else "  corrected.")
+            try:
+                _t.save(wav, said, heard)
+            except _t.Refused as why:
+                print(f"  not written: {why}")
+                continue
+            print("  kept." if said.strip() == heard.strip() else "  corrected.")
         g = _t.progress(n)
         print(f"\n  {g['done']} of {g['total']} written, "
               f"{g['changed']} needed a correction.")

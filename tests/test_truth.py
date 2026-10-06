@@ -126,3 +126,67 @@ def test_english_is_scored_exactly_because_it_has_one_spelling():
 def test_an_empty_reference_does_not_divide_by_zero():
     assert scorer.wer("", "anything") >= 0
     assert scorer.eng_exact("", "anything") == (0, 0)
+
+
+def test_an_empty_reference_against_a_real_transcript_is_refused(tmp_path):
+    """Five of these were written for real. macOS ships a Python built against
+    libedit, where neither readline hook prefills an input line, so the line
+    the user was meant to correct came up blank, Return wrote an empty string,
+    and each one was recorded as the model being wrong about every word.
+
+    An empty reference is worse than no reference: it does not say "unknown",
+    it says "nothing was said", and the scorer believes it."""
+    w = _wav(tmp_path, "1790000000010")
+    with pytest.raises(truth.Refused):
+        truth.save(w, "", heard="the model said something")
+    assert not truth.done(w)
+
+
+def test_an_empty_reference_against_an_empty_transcript_is_allowed(tmp_path):
+    """A hold where nothing was said and nothing was heard is a real and
+    useful reference: it is how a model that invents words on silence gets
+    caught."""
+    w = _wav(tmp_path, "1790000000011")
+    truth.save(w, "", heard="")
+    assert truth.done(w)
+
+
+def test_playing_does_not_block(tmp_path, monkeypatch):
+    """Waiting for a 60 second recording to finish before the line can be
+    answered turns forty references into forty waits, and most holds are
+    recognised in the first two seconds."""
+    import subprocess as sp
+    started = []
+    monkeypatch.setattr(truth.subprocess, "Popen",
+                        lambda *a, **k: started.append(a) or _FakeProc())
+    w = _wav(tmp_path, "1790000000012")
+    got = truth.play(w)
+    assert started, "it never started playing"
+    assert got is not None
+    truth.stop(got)
+    assert got.terminated, "the sound keeps going over the next recording"
+    _ = sp
+
+
+class _FakeProc:
+    terminated = False
+
+    def poll(self):
+        return None
+
+    def terminate(self):
+        self.terminated = True
+
+
+def test_stopping_a_sound_that_already_ended_is_not_an_error():
+    """An exception here would lose the reference the user has just typed."""
+    truth.stop(None)
+
+    class Ended:
+        def poll(self):
+            return 0
+
+        def terminate(self):
+            raise AssertionError("it terminated something already finished")
+
+    truth.stop(Ended())

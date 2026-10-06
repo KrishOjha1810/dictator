@@ -86,11 +86,22 @@ def load(wav: Path) -> dict:
         return {}
 
 
+class Refused(ValueError):
+    """A reference that would be worse than none."""
+
+
 def save(wav: Path, said: str, heard: str = "") -> None:
     """Write the reference down. `heard` is what the model produced, kept so
     that a later reader can see what was corrected and what was accepted
     unchanged, which is the difference between a reference and a rubber
     stamp."""
+    # An empty reference against a transcript that said something is not a
+    # correction, it is a lost keystroke recorded as the model being wrong
+    # about every word. Five of them were written before this existed, because
+    # macOS Python uses libedit and the line the user was meant to edit came
+    # up blank. A reference set is only worth the care taken writing it.
+    if not (said or "").strip() and (heard or "").strip():
+        raise Refused("an empty reference against a non-empty transcript")
     REFS.mkdir(parents=True, exist_ok=True)
     path_for(wav).write_text(json.dumps({
         "said": said,
@@ -101,16 +112,31 @@ def save(wav: Path, said: str, heard: str = "") -> None:
     }, ensure_ascii=False, indent=1))
 
 
-def play(wav: Path) -> bool:
-    """Play it once. False if nothing could play it, so the caller can say so
-    rather than wait for a sound that is not coming."""
+def play(wav: Path):
+    """Start it playing and return at once, or None if nothing could.
+
+    Not blocking, and the difference matters more than it sounds. Waiting for
+    a 60 second recording to finish before the line can be answered turns
+    forty references into forty waits, and most holds are recognised in the
+    first two seconds. The caller stops it as soon as there is an answer."""
     try:
-        subprocess.run(["afplay", str(wav)], timeout=180,
-                       capture_output=True)
-        return True
+        return subprocess.Popen(["afplay", str(wav)],
+                                stdout=subprocess.DEVNULL,
+                                stderr=subprocess.DEVNULL)
     except Exception as e:
         core.log(f"truth: could not play {wav.name}: {e}")
-        return False
+        return None
+
+
+def stop(proc) -> None:
+    """Silence whatever is still playing. Never raises: a recording that keeps
+    going is annoying, and an exception here would lose the reference the user
+    has just typed."""
+    try:
+        if proc and proc.poll() is None:
+            proc.terminate()
+    except Exception:
+        pass
 
 
 def guess(wav: Path) -> str:
