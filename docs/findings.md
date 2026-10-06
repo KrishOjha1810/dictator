@@ -2270,3 +2270,72 @@ against 5.8s with one up. It would help 39% of holds and hurt the rest, and
 nobody has measured the two together. The only fix that removes the trade is
 an upstream one: whisper.cpp accepting `audio_ctx` per request, which would
 make a single server correct for every hold.
+
+
+---
+
+## The dropping, and the fix that was already in
+
+Reported as "buffering, loading and dropping on transcript". Two different
+complaints wearing one word, and they have different answers.
+
+**Dropping, measured on the current code: 165 holds, 0% empty.**
+
+| hold | holds | produced nothing | contained an odd word |
+|---|---|---|---|
+| 0 to 2s | 13 | 0% | 7% |
+| 2 to 4s | 41 | 0% | 17% |
+| 4 to 8s | 27 | 0% | 18% |
+| over 8s | 84 | 0% | 14% |
+
+The account where this was being felt is **running code from before the
+encoder change**, where the same short holds dropped at 13% (9 of 67, and
+every one of them under two seconds). The fix was `WORTH_TRIMMING`, and it has
+not reached that machine. Nothing new is needed; a `git pull` is.
+
+The 15% carrying an odd word is the same 0.37% of words seen elsewhere,
+counted per hold instead of per word. It is the accuracy tail, not dropping.
+
+### The thing I was about to fix, which was not broken
+
+`_too_little` rejects a Parakeet answer whose word rate is below 1.5 per
+second, and it accounts for 75 of 117 rejections in one log, far more than the
+other two checks together. The obvious reading is that it is too strict: a
+short sentence said slowly, or a hold with the key pressed early and released
+late, has a low rate while being perfectly transcribed. "Are you able to listen
+to me?" was rejected, and it is a correct transcription.
+
+That reading is wrong, and one measurement killed it. Running the voice
+activity detector from `meeting.py` over every rejected hold:
+
+```
+hold    voiced   w/s hold  w/s voiced
+ 8.3s    8.4s      1.44      1.43
+10.6s   10.7s      1.03      1.03
+21.5s   21.5s      1.02      1.02
+14.2s   14.2s      1.20      1.20
+```
+
+**Voiced time is the whole hold**, within a tenth of a second. There is no
+silence being counted against the word rate, so dividing by speech instead of
+by duration changes nothing.
+
+Reading what was actually rejected finishes it:
+
+    "So Valtpd is different this time"            Vault PDA, mangled
+    "Pirated copies of content copies of cont"    repeating itself
+    "Why wasn't this pasted onto the clot or"     truncated
+
+These are bad answers. The check is doing its job, and the 75 rejections are
+75 holds that genuinely needed the other model.
+
+Worth keeping because the instinct was reasonable and wrong: a check that
+fires often looks like a check that is too strict, and the only way to tell is
+to read what it rejected.
+
+### What the user is actually feeling
+
+Not dropping, which is at zero, but the **latency of the fallback**. Every one
+of those 75 holds pays a second transcription. `dictator history` and the hold
+log now name the engine, so the pattern is at least visible, and the engine
+gap is #3's subject rather than a bug here.
