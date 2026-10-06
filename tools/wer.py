@@ -94,7 +94,13 @@ def transcribe(wav: Path, model: "Path|None") -> "tuple[str, float]":
     if model is None:
         import dictator
         d = dictator.Dictator(remember=False, learn=False, expand=False)
-        return d.transcribe(str(wav)).text, time.time() - t0
+        # `.heard`, not `.text`. The references were written by correcting what
+        # the model produced, which is the raw transcript, and `.text` is that
+        # after the shaping pass has removed the fillers. Scoring one against
+        # the other counts every deliberately dropped "uh" as an error: it put
+        # a hold at the top of the worst list whose only difference from its
+        # reference was two fillers the product is supposed to remove.
+        return d.transcribe(str(wav)).heard, time.time() - t0
     wb = stt.whisper_bin()
     cmd = [wb, "-m", str(model), "-f", str(wav), "-nt", "-np", "-l", "auto",
            "--prompt", stt.whisper_prompt()]
@@ -112,7 +118,10 @@ def main() -> int:
     ap.add_argument("--n", type=int, default=40)
     a = ap.parse_args()
 
-    refs = [w for w in truth.sample(a.n) if truth.done(w)]
+    # Every reference on disk, not the current sample. A reference somebody
+    # took the trouble to write is worth scoring, and the sample was being
+    # redrawn whenever the corpus grew.
+    refs = truth.written()
     if not refs:
         print("No references yet. Write some with:  dictator truth")
         return 1

@@ -190,3 +190,50 @@ def test_stopping_a_sound_that_already_ended_is_not_an_error():
             raise AssertionError("it terminated something already finished")
 
     truth.stop(Ended())
+
+
+def test_transcribing_a_file_does_not_delete_it(tmp_path, monkeypatch):
+    """A library whose `transcribe(path)` removes the caller's file is a trap,
+    and this one was. It destroyed a benchmark corpus one measurement at a
+    time, and then the forty recordings somebody had just spent twenty minutes
+    writing reference transcripts for, because the scorer transcribed each one
+    and this deleted it afterwards. Nothing in the signature said so."""
+    import dictator
+    from dictator import stt
+
+    w = _wav(tmp_path, "1790000000020")
+    monkeypatch.setattr(stt, "transcribe_ex", lambda p: ("said something", 0.9))
+    d = dictator.Dictator(remember=False, learn=False, expand=False)
+    d.transcribe(str(w))
+    assert w.exists(), "transcribe deleted the file it was given"
+
+
+def test_the_listener_still_cleans_up_its_own_recording(tmp_path, monkeypatch):
+    """The one caller that should: its file is a temporary one nobody else
+    owns, and leaving them behind fills the disk a hold at a time."""
+    import dictator
+    from dictator import stt
+
+    w = _wav(tmp_path, "1790000000021")
+    monkeypatch.setattr(stt, "transcribe_ex", lambda p: ("said something", 0.9))
+    d = dictator.Dictator(remember=False, learn=False, expand=False)
+    d.keep_audio = False
+    d.transcribe(str(w), ours=True)
+    assert not w.exists(), "the listener's temporary recording was left behind"
+
+
+def test_a_library_call_does_not_grow_the_benchmark_corpus(tmp_path,
+                                                           monkeypatch):
+    """Transcribing the corpus was adding a copy of every file back into it.
+    166 recordings had grown 586 transcripts before anybody looked, and each
+    pass made the next one slower and the corpus less like what was said."""
+    import dictator
+    from dictator import api, stt
+
+    monkeypatch.setattr(api, "capturing", lambda: True)
+    monkeypatch.setattr(stt, "transcribe_ex", lambda p: ("said something", 0.9))
+    w = _wav(tmp_path, "1790000000022")
+    before = len(list(truth.CORPUS.glob("*.wav")))
+    dictator.Dictator(remember=False, learn=False,
+                      expand=False).transcribe(str(w))
+    assert len(list(truth.CORPUS.glob("*.wav"))) == before

@@ -237,7 +237,9 @@ class Dictation:
 
         threading.Thread(target=still_working, daemon=True).start()
         try:
-            said = self.sdk.transcribe(wav, app=app or "")
+            # ours: this is the listener's own temporary recording, and it is
+            # the one caller that should have it cleaned up afterwards.
+            said = self.sdk.transcribe(wav, app=app or "", ours=True)
         finally:
             done.set()
         core.set_hud("listening", 0.0)

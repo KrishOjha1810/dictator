@@ -130,8 +130,14 @@ class Dictator:
 
     # ---- the whole thing ---------------------------------------------
 
-    def transcribe(self, wav: "str | Path", app: str = "") -> Transcript:
-        """Audio file in, finished text out. This is the pipeline."""
+    def transcribe(self, wav: "str | Path", app: str = "",
+                   ours: bool = False) -> Transcript:
+        """Audio file in, finished text out. This is the pipeline.
+
+        `ours` says the file is a recording this program made and may be
+        cleaned up afterwards. The key listener passes it; nobody else should,
+        and the default is False because a library that deletes the path it
+        was handed is a trap, and this one was."""
         wav = str(wav)
         started = time.time()
         said = Transcript(seconds=stt.audio_seconds(wav))
@@ -144,7 +150,7 @@ class Dictator:
             said.took = time.time() - started
             return said
         finally:
-            self._retire(wav, said)
+            self._retire(wav, said, ours=ours)
         said.language = stt.language()
         said.engine = stt.LAST_ENGINE
         # The model saying "there was nothing" is not a transcript. Pasting
@@ -321,7 +327,8 @@ class Dictator:
 
     # ---- internals -----------------------------------------------------
 
-    def _retire(self, wav: str, said: "Transcript | None" = None) -> None:
+    def _retire(self, wav: str, said: "Transcript | None" = None,
+                ours: bool = False) -> None:
         """Keep the last recording, because when a transcription comes out
         wrong the audio is the only evidence that matters.
 
@@ -331,8 +338,13 @@ class Dictator:
         down and record forty sentences to order produces careful, unnatural
         speech, which is the wrong thing to measure. Their ordinary dictation
         is the right corpus, and this is how it gets collected."""
+        # And only a recording we made gets kept, for the same reason. A
+        # measurement run transcribing the benchmark corpus was adding a copy
+        # of every file back into it: 166 recordings had grown 586 transcripts
+        # before anybody looked, and each pass made the next pass slower and
+        # the corpus less like what the user actually said.
         try:
-            if capturing():
+            if ours and capturing():
                 keep = CORPUS / f"{int(time.time() * 1000)}.wav"
                 keep.parent.mkdir(parents=True, exist_ok=True)
                 shutil.copy(wav, keep)
@@ -340,6 +352,17 @@ class Dictator:
                     keep.with_suffix(".txt").write_text(said.heard or "")
         except Exception as e:
             core.log(f"dictator: could not keep the recording: {e}")
+        # Only a recording WE made. This used to delete whatever path it was
+        # handed, which is right for the listener, whose file is a temporary
+        # one nobody else owns, and catastrophic for every other caller: a
+        # library whose `transcribe(path)` removes the caller's file.
+        #
+        # It destroyed a benchmark corpus one measurement at a time, and then
+        # the forty recordings somebody had just spent twenty minutes writing
+        # reference transcripts for, because the scorer transcribed each one
+        # and this deleted it afterwards. Nothing in the signature said so.
+        if not ours:
+            return
         try:
             if self.keep_audio:
                 os.replace(wav, core.STATE_DIR / "last-dictation.wav")

@@ -60,15 +60,55 @@ def candidates() -> list:
     return out
 
 
+PICKED = REFS / "sample.json"
+
+
 def sample(n: int = 40) -> list:
-    """`n` recordings, chosen by seed rather than by eye.
+    """`n` recordings, chosen by seed rather than by eye, and then REMEMBERED.
 
     A set made of the holds somebody remembered as bad measures the bad ones,
-    and the number that comes out of it is not an error rate."""
+    and the number that comes out of it is not an error rate. Hence the seed.
+
+    But a seed only reproduces a shuffle of the SAME list, and this list grows
+    every time the user dictates. Forty references were written and then the
+    scorer could not find one of them, because four more recordings had been
+    captured in between and the shuffle landed differently. So the choice is
+    written down the first time and read back after, which is what "the same
+    sample" has to mean for a benchmark somebody fills in over several
+    sittings."""
+    try:
+        stems = json.loads(PICKED.read_text())
+        have = {w.stem: w for w in candidates()}
+        kept = [have[st] for st in stems if st in have]
+        if len(kept) >= min(n, len(stems)):
+            return kept[:n]
+    except Exception:
+        pass
     pool = candidates()
     rng = random.Random(SEED)
     rng.shuffle(pool)
-    return pool[:n]
+    chosen = pool[:n]
+    try:
+        REFS.mkdir(parents=True, exist_ok=True)
+        PICKED.write_text(json.dumps([w.stem for w in chosen]))
+    except Exception as e:
+        core.log(f"truth: could not record the sample: {e}")
+    return chosen
+
+
+def written() -> list:
+    """Every reference on disk, whatever sample it came from.
+
+    What a scorer should use: a reference somebody took the trouble to write
+    is worth scoring even if the sample has since been redrawn."""
+    out = []
+    for p in sorted(REFS.glob("*.json")):
+        if p.name == PICKED.name:
+            continue
+        w = CORPUS / (p.stem + ".wav")
+        if w.exists():
+            out.append(w)
+    return out
 
 
 def path_for(wav: Path) -> Path:
