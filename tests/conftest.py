@@ -32,6 +32,7 @@ def _own_state_dir(tmp_path, monkeypatch):
             # anyone noticed.
             ("truth", "CORPUS", tmp_path / "corpus"),
             ("truth", "REFS", tmp_path / "references"),
+            ("truth", "PICKED", tmp_path / "references" / "sample.json"),
             # Harmless on its own, but it is the same shape and the test that
             # looks for this shape should find nothing.
             ("stt", "_MIC_LOCK", tmp_path / "mic.lock"),

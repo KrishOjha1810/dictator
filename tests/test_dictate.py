@@ -252,7 +252,7 @@ def test_the_user_is_told_before_they_are_handed_the_fragment(monkeypatch):
         engine = "parakeet"          # the real Transcript carries this
 
     d = dictate.Dictation()
-    monkeypatch.setattr(d.sdk, "transcribe", lambda wav, app="": _Said())
+    monkeypatch.setattr(d.sdk, "transcribe", lambda wav, app="", ours=False: _Said())
     d.sdk.last_learned = []
     monkeypatch.setattr(dictate.mac, "frontmost_app", lambda: "Terminal")
     pasted = []
@@ -281,7 +281,7 @@ def test_an_ordinary_hold_says_nothing_about_being_cut(monkeypatch):
         engine = "parakeet"          # the real Transcript carries this
 
     d = dictate.Dictation()
-    monkeypatch.setattr(d.sdk, "transcribe", lambda wav, app="": _Said())
+    monkeypatch.setattr(d.sdk, "transcribe", lambda wav, app="", ours=False: _Said())
     d.sdk.last_learned = []
     monkeypatch.setattr(dictate.mac, "frontmost_app", lambda: "Terminal")
     monkeypatch.setattr(dictate.paste, "deliver", lambda text, app: True)
