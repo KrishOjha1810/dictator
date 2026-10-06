@@ -77,11 +77,31 @@ extension NSScreen {
 /// Never fall back to the global origin: a transparent shadowless window at
 /// (0,0) sits behind the Dock and is indistinguishable from one that never
 /// appeared, which is exactly the failure this whole program exists to avoid.
+/// The screen the person is actually working on.
+///
+/// This used to prefer the notched one, because the orb tucks into the notch
+/// and that looks good on a laptop. On a desk with an external display it is
+/// simply the wrong screen: the user types into a window on the monitor in
+/// front of them and the one indicator telling them the microphone is live
+/// appears on the laptop, often closed or off to one side. An indicator you
+/// have to go and look for is not an indicator.
+///
+/// `NSScreen.main` is AppKit's name for the screen with the KEYBOARD FOCUS,
+/// not the built-in one, so it is already the right answer and was being
+/// asked second. The notch is now only a placement detail of whichever screen
+/// wins, which `orbOrigin()` already handles either way.
 func pickScreen() -> NSScreen? {
-    if let notched = NSScreen.screens.first(where: { $0.notchRect != nil }) { return notched }
-    if let m = NSScreen.main { return m }
+    if let focused = NSScreen.main { return focused }
+    // No focused window, which happens between apps. The pointer is the next
+    // best guess at where somebody is looking.
     let mouse = NSEvent.mouseLocation
-    return NSScreen.screens.first { $0.frame.contains(mouse) } ?? NSScreen.screens.first
+    if let under = NSScreen.screens.first(where: { $0.frame.contains(mouse) }) {
+        return under
+    }
+    if let notched = NSScreen.screens.first(where: { $0.notchRect != nil }) {
+        return notched
+    }
+    return NSScreen.screens.first
 }
 
 // ---------------------------------------------------------------- truth
@@ -467,6 +487,12 @@ final class App: NSObject, NSApplicationDelegate {
         if win.isVisible { return }
         let look = view.look
         makeWindow()
+        // Choose the screen NOW, not once at launch. Somebody with a laptop
+        // on a desk moves between displays all day, and an indicator that
+        // picked its screen when the listener started is on the wrong one for
+        // the rest of the session. The window is rebuilt here anyway, so this
+        // costs nothing.
+        place()
         view.apply(look, force: true)
         win.orderFrontRegardless()
     }

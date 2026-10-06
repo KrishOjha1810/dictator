@@ -387,3 +387,35 @@ def test_registering_is_attempted_as_part_of_building_the_app():
         "the bundle is signed and then never registered"
     assert build.index("_sign(APP)") < build.index("_register(APP)"), \
         "register after signing, or it registers a bundle about to change"
+
+
+def test_the_orb_goes_to_the_screen_with_the_keyboard_focus():
+    """It used to prefer the notched screen, because the orb tucks into the
+    notch and that looks good on a laptop. On a desk with an external display
+    it is simply the wrong screen: the person types into a window on the
+    monitor in front of them and the one indicator saying the microphone is
+    live appears on the laptop, often closed or off to one side.
+
+    `NSScreen.main` is AppKit's name for the screen with the KEYBOARD FOCUS,
+    not the built-in one, so it was already the right answer and was being
+    asked second.
+
+    Asserted on the source: the decision is NSScreen behaviour and cannot be
+    faked in a test without a second display attached."""
+    src = (Path(__file__).resolve().parent.parent
+           / "native" / "orb.swift").read_text()
+    pick = src[src.index("func pickScreen()"):]
+    pick = pick[:pick.index("\n}") + 2]
+    assert pick.index("NSScreen.main") < pick.index("notchRect"), \
+        "the notch is still preferred over the screen being typed into"
+
+
+def test_the_orb_chooses_its_screen_on_every_hold():
+    """An indicator that picked its screen when the listener started is on the
+    wrong one for the rest of the session, and somebody with a laptop on a
+    desk moves between displays all day."""
+    src = (Path(__file__).resolve().parent.parent
+           / "native" / "orb.swift").read_text()
+    show = src[src.index("private func show()"):]
+    show = show[:show.index("private func hide()")]
+    assert "place()" in show, "the window is rebuilt but never re-placed"
