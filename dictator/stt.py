@@ -878,6 +878,47 @@ def _too_little(text: str, wav: str) -> bool:
 _FINE_ABOVE_ASCII = "\u2018\u2019\u201c\u201d\u2026"
 
 
+# Two words in a row that are in neither dictionary. One is an ordinary
+# mishearing inside a good sentence; two in a row is a stretch of speech the
+# transcriber could not represent at all.
+MANGLED_RUN = 2
+
+
+def _mangled_stretch(text: str) -> bool:
+    """Did Parakeet get the English right and invent the Hindi.
+
+    The failure the other three checks cannot see, and the one that matters
+    most, because it is this product's whole case. A hold with both languages
+    in it comes back with the English half correct and the Hindi half turned
+    into English-looking proper nouns:
+
+        "Can you listen to me now? Kia Abdumujason paraheo."
+        "Are you able to listen to me now? Kya Abdumjesun Paraheho."
+
+    Both are "kya aap mujhe sun pa rahe ho". The English half makes the word
+    rate normal, the capitalisation ordinary and every character ASCII, so
+    `_too_little`, `_parakeet_lost` and `_not_english` all pass it. They judge
+    the whole answer, and half of the answer is fine.
+
+    This looks at the run instead. Measured over 127 Parakeet answers that the
+    other three checks kept: exactly THREE have two or more consecutive words
+    in neither dictionary, and all three are the mangled ones above. Nothing
+    good is caught. A run of one is left alone, because that is a single odd
+    word in a working sentence ("Manit", "acur") and rejecting those would
+    send good holds to the slower model.
+    """
+    from . import known
+    run = 0
+    for w in re.findall(r"[A-Za-z'][A-Za-z']*", text or ""):
+        if len(w) > 2 and not known._known(w.lower()):
+            run += 1
+            if run >= MANGLED_RUN:
+                return True
+        else:
+            run = 0
+    return False
+
+
 def _not_english(text: str) -> bool:
     """Did it answer in a language it does not have?
 
@@ -1036,7 +1077,7 @@ def _transcribe_ex(wav: str) -> "tuple[str, float]":
     if language() != "hinglish" and parakeet_ready():
         got = _parakeet(wav)
         if got and not _parakeet_lost(got) and not _too_little(got, wav) \
-                and not _not_english(got):
+                and not _not_english(got) and not _mangled_stretch(got):
             LAST_ENGINE = "parakeet"
             return got, 0.9
         # Parakeet only drops speech like this when the audio is not English,

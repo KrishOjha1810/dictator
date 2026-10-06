@@ -157,3 +157,63 @@ def test_an_empty_answer_from_the_fast_engine_also_falls_back():
     guard = body.index("if got:")
     assert force < guard, \
         "the fallback is inside `if got:` again, so an empty answer is ignored"
+
+
+# ---- the failure the other three checks cannot see -------------------------
+
+MANGLED = [
+    # Both of these are "kya aap mujhe sun pa rahe ho". The English half is
+    # transcribed correctly and the Hindi half is turned into English-looking
+    # proper nouns, which is what makes it invisible to the other checks.
+    "Can you listen to me now? Kia Abdumujason paraheo.",
+    "Are you able to listen to me now? Kya Abdumjesun Paraheho.",
+    "Kya Abdum Miriya White Sun Baraheho.",
+]
+
+INTACT = [
+    # A single odd word inside a working sentence. Rejecting these would send
+    # good holds to the slower model for one mishearing.
+    "Can you give me a simple message to update Manit on our progress?",
+    "And that too from the acur interest part.",
+    "I understood the borrower struct, but the accuracy interest",
+    # Ordinary romanised Hinglish, which is the thing this product is for.
+    "mujhe yeh chahiye aur kya karna hai",
+    "sari links ek baar aur verify kar lo jitni bhi hai",
+    "the pull request is ready for review",
+    "",
+]
+
+
+@pytest.mark.parametrize("text", MANGLED)
+def test_a_mangled_stretch_is_caught(text):
+    """A hold with both languages comes back with the English right and the
+    Hindi invented. The word rate is normal, the capitalisation is ordinary
+    and every character is ASCII, so `_too_little`, `_parakeet_lost` and
+    `_not_english` all pass it: they judge the whole answer and half of the
+    answer is fine."""
+    assert stt._mangled_stretch(text), text
+
+
+@pytest.mark.parametrize("text", INTACT)
+def test_a_working_answer_is_left_alone(text):
+    """Measured over 127 Parakeet answers the other three checks kept, exactly
+    three have two or more consecutive words in neither dictionary, and all
+    three are the mangled ones. Nothing good is caught, and this half is what
+    keeps it that way."""
+    assert not stt._mangled_stretch(text), text
+
+
+def test_one_odd_word_is_not_a_mangled_stretch():
+    """The threshold is a RUN, not a count. One unknown word is an ordinary
+    mishearing; two in a row is a stretch of speech that could not be
+    represented at all."""
+    assert not stt._mangled_stretch("the acur interest part of the thing")
+    assert stt._mangled_stretch("the acur abdumjesun interest part")
+
+
+def test_the_other_three_checks_pass_what_this_one_catches():
+    """The reason this exists. If any of them already caught these, this check
+    would be redundant and the comment explaining it would be wrong."""
+    for text in MANGLED:
+        assert not stt._parakeet_lost(text), text
+        assert not stt._not_english(text), text
