@@ -37,7 +37,7 @@ is the thing being worked on.
 ### Download the app
 
 **[Download Dictator for Mac](https://github.com/KrishOjha1810/dictator/releases/latest/download/Dictator.dmg)**
-(Apple silicon, macOS 14 or newer, about 25 MB). Every version, with its
+(Apple silicon, macOS 14 or newer, about 24 MB). Every version, with its
 SHA256, is on the [releases page](https://github.com/KrishOjha1810/dictator/releases).
 
 1. Open `Dictator.dmg` and drag Dictator into Applications.
@@ -45,12 +45,13 @@ SHA256, is on the [releases page](https://github.com/KrishOjha1810/dictator/rele
    Apple's developer programme. Press **Done**, not Move to Trash.
 3. Open **System Settings → Privacy & Security**, scroll down, and press
    **Open Anyway** next to Dictator. Confirm. This happens once.
-4. Allow the microphone and Accessibility when it asks.
+4. Allow the microphone and Accessibility when it asks. The speech models
+   download on first launch, English first (about 700 MB), then Hindi and
+   Hinglish in the background (1.5 GB). Each is checked against its published
+   SHA256 before it is used.
 
 This is a preview. The app is new and has had less use than the install below,
-which is still the way to run it if anything here goes wrong. It does not yet
-download the speech models itself: it uses the ones in `~/.dictator/models`,
-which the install below puts there. Why the warning
+which is still the way to run it if anything here goes wrong. Why the warning
 exists and what it does and does not mean is in
 [`docs/platforms.md`](docs/platforms.md).
 

@@ -62,6 +62,9 @@ Branch: `feat/dmg-app`. Nothing merges to `main` until M1 passes its tests.
       673 passed, 16 failed, 6 skipped; the 16 are the jellyfish ones, the
       test_standalone failure is fixed)
 
+- [x] Models downloaded on first launch in bundle mode, English first, each
+      checked against Hugging Face's SHA256 and size (2026-10-08, `e13cd35`)
+
 ### Lane B: Native
 
 - [x] Swift helpers built ahead of time: hotkey, rec, paste, orb, readback
@@ -103,8 +106,11 @@ Branch: `feat/dmg-app`. Nothing merges to `main` until M1 passes its tests.
 
 ### Release certificate
 
-- [ ] "Dictator Release" certificate created
-- [ ] Backed up as an encrypted `.p12` outside the repo
+- [x] "Dictator Release" certificate created (2026-10-08, `tools/release_cert.sh`;
+      identity `40C4B74C…`, keychain in `~/.dictator-release`)
+- [x] Exported as a password-protected `.p12` outside the repo
+      (`~/.dictator-release/release.p12`). Still to do: a second copy somewhere
+      that is not this Mac
 
 ---
 
@@ -149,8 +155,8 @@ no warnings. None of it is ticked: the app has not been launched, even with
 
 | What | Value | Date |
 |---|---|---|
-| App installed size | 50.9 MB (python 37.3, helpers 9.9, dictator 1.6, site-packages 0.8, Frameworks 0) | 2026-10-08, `7737ede` |
-| .dmg size | 24.6 MB (25,804,430 bytes, UDZO zlib-9) | 2026-10-08, `7737ede` |
+| App installed size | 51.2 MB (python 37.4, helpers 10.0, dictator 1.7, site-packages 0.8, Frameworks 0) | 2026-10-08, v0.1.0, release-signed |
+| .dmg size | 24.1 MB (25,295,165 bytes, UDZO zlib-9) | 2026-10-08, v0.1.0, release-signed |
 | App and .dmg after the review fixes | app 51.0 MB (python 37.3, helpers 9.9, dictator 1.6, site-packages 0.8); .dmg 24.9 MB (26,094,341 bytes) | 2026-10-08, review fixes |
 | First launch to first sentence | — | |
 
@@ -217,3 +223,6 @@ no warnings. None of it is ticked: the app has not been launched, even with
   - Build: the libpython "keep it if linked" check was inverted by
     pipefail; jellyfish is pinned by wheel hash; the whisper.cpp stamp
     hashes the CMake flags; Swift helpers rebuild when the target changes.
+- 2026-10-08: The test suite leaves a temporary signing keychain on the
+  user's keychain search list on every run (about 20 found on this Mac).
+  Pre-existing, from the signing identity test; not fixed yet.
