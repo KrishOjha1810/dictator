@@ -12,6 +12,11 @@
 //
 // It does nothing itself but ask, then run the dictation loop as a child. The
 // child inherits the bundle's permissions, which is the point.
+//
+// Built from a checkout that is still all it does. Inside Dictator.app from
+// the .dmg it also has a face: a menu bar item, the onboarding cards and the
+// Hub (MenuBar.swift, Onboarding.swift, Hub.swift). Those only ever read
+// status.json and run the CLI; see Backend.swift.
 
 import AVFoundation
 import AppKit
@@ -38,6 +43,12 @@ func askForMicrophone(_ done: @escaping (Bool) -> Void) {
 }
 
 func runDictation() {
+    // With a UI the child is supervised instead of waited on, so Pause can
+    // stop it without taking the menu bar item down with it.
+    if showsUI {
+        DispatchQueue.main.async { Supervisor.shared.start() }
+        return
+    }
     // Written into Info.plist by the build, because the app has to be able to
     // find the code it runs and there is no fixed place that code has to live.
     // This was hardcoded once, which meant a bundle that looked right and
@@ -116,6 +127,9 @@ func publish(trusted: Bool) {
 /// app has: it is an accessory with no window and no menu bar item, and the
 /// terminal that started it has usually been closed by now.
 func notify(_ body: String) {
+    // Not while the onboarding cards are up: they are already saying it, on
+    // screen, in the place the user is looking.
+    if onboarding { return }
     let p = Process()
     p.executableURL = URL(fileURLWithPath: "/usr/bin/osascript")
     p.arguments = ["-e", "display notification \(quoted(body)) "
@@ -153,19 +167,17 @@ func quoted(_ s: String) -> String {
 /// TCC databases and compares code requirements, which belongs in one place,
 /// so this shells out to it rather than growing a second copy.
 func diagnose() {
-    let info = Bundle.main.infoDictionary ?? [:]
-    guard let cli = info["DictatorCLI"] as? String,
-          FileManager.default.isExecutableFile(atPath: cli) else {
+    // In a repo install this is `python3 <DictatorCLI> permissions
+    // --explain`, as it always was; in the bundle, the bundled Python.
+    guard let (exe, argv, e) = cliCommand(["permissions", "--explain"]) else {
         NSLog("dictator: waiting for Accessibility, and cannot find the "
               + "dictator command to explain why")
         return
     }
     let p = Process()
-    p.executableURL = URL(fileURLWithPath: "/usr/bin/env")
-    p.arguments = ["python3", cli, "permissions", "--explain"]
-    var env = ProcessInfo.processInfo.environment
-    env["PATH"] = "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin"
-    p.environment = env
+    p.executableURL = exe
+    p.arguments = argv
+    p.environment = e
     let pipe = Pipe()
     p.standardOutput = pipe
     p.standardError = pipe
@@ -188,48 +200,76 @@ func diagnose() {
            ?? "Waiting for Accessibility.")
 }
 
+/// Ask for what is missing, wait for Accessibility, then start dictation.
+///
+/// `prompt` is false on the very first launch of the app with a UI: the
+/// onboarding cards ask, one at a time and with a sentence of why, instead of
+/// two system dialogs landing on top of each other before anything has been
+/// explained. The waiting below is the same either way.
+func begin(prompt: Bool) {
+    let start: (@escaping (Bool) -> Void) -> Void = prompt
+        ? askForMicrophone : { $0(true) }
+    start { _ in
+        if !(prompt ? askForAccessibility() : AXIsProcessTrusted()) {
+            waitForAccessibility()
+        } else {
+            publish(trusted: true)
+            DispatchQueue.global().async { runDictation() }
+        }
+    }
+}
+
+func waitForAccessibility() {
+    // First run: the dialog is on screen now. Wait for the answer rather
+    // than failing, because the user is in the middle of granting it.
+    //
+    // But a dialog only appears when macOS has no row for this app at all.
+    // If a row exists for an older signature, no dialog ever appears, the
+    // checkbox is already ticked, and waiting here is waiting for
+    // something that cannot happen. Give it a few seconds for the honest
+    // first-run case, then say what is wrong.
+    publish(trusted: false)
+    NSLog("dictator: waiting for Accessibility")
+    var ticks = 0
+    Timer.scheduledTimer(withTimeInterval: 2.0, repeats: true) { t in
+        if AXIsProcessTrusted() {
+            // Recovering here rather than asking for a restart is the
+            // point: the child is spawned fresh, so it is a NEW process,
+            // which is the only kind macOS honours a new grant for.
+            t.invalidate()
+            publish(trusted: true)
+            FileHandle.standardError.write(
+                "dictator: Accessibility granted, starting dictation.\n"
+                    .data(using: .utf8)!)
+            notify("Accessibility granted. Hold fn and talk.")
+            DispatchQueue.global().async { runDictation() }
+            return
+        }
+        ticks += 1
+        // Once at five seconds, then every two minutes. Loud enough that
+        // it cannot be sat in, quiet enough that a log left overnight is
+        // still readable.
+        if ticks == 3 || ticks % 60 == 0 {
+            publish(trusted: false)
+            DispatchQueue.global().async { diagnose() }
+        }
+    }
+}
+
+/// True while the first-launch cards are on screen.
+var onboarding = false
+
 let app = NSApplication.shared
 app.setActivationPolicy(.accessory)
 
-askForMicrophone { _ in
-    if !askForAccessibility() {
-        // First run: the dialog is on screen now. Wait for the answer rather
-        // than failing, because the user is in the middle of granting it.
-        //
-        // But a dialog only appears when macOS has no row for this app at all.
-        // If a row exists for an older signature, no dialog ever appears, the
-        // checkbox is already ticked, and waiting here is waiting for
-        // something that cannot happen. Give it a few seconds for the honest
-        // first-run case, then say what is wrong.
-        publish(trusted: false)
-        NSLog("dictator: waiting for Accessibility")
-        var ticks = 0
-        Timer.scheduledTimer(withTimeInterval: 2.0, repeats: true) { t in
-            if AXIsProcessTrusted() {
-                // Recovering here rather than asking for a restart is the
-                // point: the child is spawned fresh, so it is a NEW process,
-                // which is the only kind macOS honours a new grant for.
-                t.invalidate()
-                publish(trusted: true)
-                FileHandle.standardError.write(
-                    "dictator: Accessibility granted, starting dictation.\n"
-                        .data(using: .utf8)!)
-                notify("Accessibility granted. Hold fn and talk.")
-                DispatchQueue.global().async { runDictation() }
-                return
-            }
-            ticks += 1
-            // Once at five seconds, then every two minutes. Loud enough that
-            // it cannot be sat in, quiet enough that a log left overnight is
-            // still readable.
-            if ticks == 3 || ticks % 60 == 0 {
-                publish(trusted: false)
-                DispatchQueue.global().async { diagnose() }
-            }
-        }
-    } else {
-        publish(trusted: true)
-        DispatchQueue.global().async { runDictation() }
-    }
+if showsUI {
+    // The UI decides when to call begin(): straight away on a normal launch,
+    // without prompts behind the onboarding cards on the first one, and not
+    // at all with DICTATOR_FAKE, which must never start the real thing.
+    let ui = UI()
+    app.delegate = ui
+    app.run()
+} else {
+    begin(prompt: true)
+    app.run()
 }
-app.run()

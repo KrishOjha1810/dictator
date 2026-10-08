@@ -1,0 +1,4 @@
+{"snippets": [
+  {"trigger": "my work email", "text": "krish@example.com", "count": 12},
+  {"trigger": "standup update", "text": "Yesterday: shipped the parser fix.\nToday: the build pipeline.\nBlockers: none.", "count": 3}
+ ]}
