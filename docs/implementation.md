@@ -130,10 +130,26 @@ source, and for the maintainer.
 ### Principle
 
 The app is invisible while it works. The product is still: hold fn, talk,
-the words land at the cursor. The UI exists for three moments only: the first
-five minutes, changing a setting, and something going wrong. Every screen
-below maps to an existing CLI command, so nothing is a new feature, only a
-new place to reach it.
+the words land at the cursor. The UI is there for the first five minutes, for
+looking back at what you said, for changing a setting, and for when something
+goes wrong. Every screen below maps to something the CLI already does, so
+nothing here is a new feature, only a new place to reach it.
+
+### Reference: Wispr Flow
+
+The layout follows Wispr Flow's Mac app, which splits into two parts: a small
+floating **Flow Bar** for dictation, and a main window, the **Hub**, with a
+sidebar of Home, Dictionary, Snippets, Style and Scratchpad, and Settings and
+Help at the bottom. Home shows a stats card (streak, average words per minute,
+total words) and the transcript history grouped by day. (Wispr Flow help
+centre, "Navigating the Wispr Flow App", checked 8 October 2026.)
+
+What is taken from it: the structure. A floating bar plus a sidebar window, a
+stats card, history grouped by day, permission cards that turn green.
+
+What is not taken: its look, logo, colours or wording, and three features
+that contradict this product. **No sign-in** (there is no account; nothing
+leaves the Mac), **no team sharing**, **no cloud sync**.
 
 ### The journey, from download to first sentence
 
@@ -145,88 +161,147 @@ new place to reach it.
 2. **Open the .dmg, drag Dictator to Applications.**
 3. **Open Dictator.** macOS blocks it. The user goes to System Settings,
    Privacy & Security, Open Anyway. (Measured on 27.0.1.)
-4. **Welcome window** (onboarding, below). The only full window the app shows
-   unless asked.
-5. **Menu bar icon appears.** The orb appears under the notch while talking,
-   as now.
+4. **Onboarding** (below).
+5. **Menu bar icon appears**, the Hub opens once on Home, and from then on the
+   app is the bar and the menu bar icon.
 
-### Onboarding window, four steps
+### Onboarding, six cards
 
-One window, 520 x 420, one step at a time, a Continue button that only
-enables when the step is actually done. The app checks the real state, not
-whether a button was clicked, the same way `doctor` does.
+One window, 560 x 440, one card at a time. Continue only enables when the
+step is actually done: the app checks the real state, not whether a button
+was clicked, the same way `doctor` does.
 
 ```
 ┌─────────────────────────────────────────────┐
-│  ●○○○                                       │
+│  ●●○○○○                                     │
 │                                             │
 │  Dictator needs your microphone             │
 │                                             │
-│  It records only while you hold the key.    │
+│  It listens only while you hold the key.    │
 │  Audio never leaves this Mac.               │
 │                                             │
-│            [ Allow microphone ]             │
+│            [ Allow microphone ]   ✓         │
 │                                             │
 │                              [ Continue → ] │
 └─────────────────────────────────────────────┘
 ```
 
-| Step | Asks for | Done when | Maps to |
+| Card | Shows | Done when | Maps to |
 |---|---|---|---|
-| 1 Microphone | System mic prompt | `AVCaptureDevice` status is authorized | `askForMicrophone` in `main.swift` |
-| 2 Accessibility | System prompt, then a button that opens the right pane | `AXIsProcessTrusted()` is true | `askForAccessibility`, `tcc.py` |
-| 3 Speech models | Nothing. Shows the English download with a progress bar, Hinglish continues in the background | `stt.missing(essential_only=True)` is empty | `install.sh` step 4 |
-| 4 Try it | "Hold fn and say: testing one two three." A text box on the window receives it | Text appears in the box | `dictate` |
+| 1 Welcome | "Hold a key, talk, the words land at your cursor. Nothing leaves this Mac." | Continue | — |
+| 2 Microphone | Button that triggers the system prompt | `AVCaptureDevice` status is authorized | `askForMicrophone` in `main.swift` |
+| 3 Accessibility | Button that triggers the system prompt and opens the right pane | `AXIsProcessTrusted()` is true | `askForAccessibility`, `tcc.py` |
+| 4 Your key | fn, right ⌘, right ⌥, left ⌘, with "press it now" | The key press is seen | `KEYS` in `bin/dictator`, `hotkey.py` |
+| 5 Languages | English ready, Hinglish downloading with a progress bar that continues in the background | `stt.missing(essential_only=True)` is empty | `install.sh` step 4 |
+| 6 Try it | "Hold fn and say: *yaar ye test kar ke dekho*." A text box on the card receives it | Text appears in the box | `dictate` |
 
-If step 2 hits the stale-entry trap described in the README (switch on, app
-not trusted), the step says so in one sentence and offers the fix `doctor`
-already knows (`forget`).
+If card 3 hits the stale-entry trap described in the README (switch on, app
+not trusted), it says so in one sentence and offers the fix `doctor` already
+knows (`forget`).
+
+### The bar
+
+Today's orb becomes a small pill with a live waveform, in the same place by
+default. It keeps the orb's rule exactly: **visible if and only if our
+microphone is open**, from the same three layers in `orb.swift` (CoreAudio
+presence, the lock for ownership, `hud.json` for appearance only).
+
+```
+        ╭──────────────────╮
+        │  ▁▃▅▇▅▃▂▅▇▃▁   EN │     holding the key: waveform + language
+        ╰──────────────────╯
+        ╭──────────────────╮
+        │      · · ·        │     released: transcribing
+        ╰──────────────────╯
+```
+
+Position is a setting: under the notch (today's place) or bottom centre
+(Wispr Flow's). Esc while holding cancels.
+
+### The Hub
+
+```
+┌──────────────┬──────────────────────────────────────────────┐
+│  Dictator    │  Home                                        │
+│              │                                              │
+│ ▸ Home       │  ┌───────────┬───────────┬───────────┐       │
+│   Words      │  │ 2,340     │ 142 wpm   │ 6 days    │       │
+│   Snippets   │  │ words     │ average   │ streak    │       │
+│   Apps       │  └───────────┴───────────┴───────────┘       │
+│   Review     │                                              │
+│   Meetings   │  Today's recap                               │
+│              │  Fixed the loop in the parser, replied to…   │
+│              │                                              │
+│              │  Today                                       │
+│              │  10:42  yaar ye function thoda slow lag…     │
+│              │  10:15  can you check the build logs         │
+│ ──────────── │  Yesterday                                   │
+│   Settings   │  …                                           │
+│   Help       │                       🔍 Search what you said│
+└──────────────┴──────────────────────────────────────────────┘
+```
+
+| Wispr Flow | Dictator page | Contains | Maps to |
+|---|---|---|---|
+| Home | **Home** | Stats card, today's recap, history by day, search | `history.py`, `search.py`, `recap.py` |
+| Dictionary | **Words** | Names and terms, learned from corrections or added by hand | `learn`, `unlearn`, `words`, `vocab.py`, `learn.py` |
+| Snippets | **Snippets** | Say a short phrase, get a longer text | `snippet`, `snippets.py` |
+| Style | **Apps** | Rules per application, applied locally, never by a cloud model | `profiles.py`, `format`, `shape.py` |
+| Scratchpad | **Review** | What it may have got wrong today, and was it right | `review`, `truth`, `review.py` |
+| — | **Meetings** | Meeting capture and its notes | `meeting.py`, `capture` |
+| Settings | **Settings** | Below | |
+
+The stats are counted from local history only. Words per minute needs the
+duration of each utterance in history; if it is not stored today, that is a
+small change to `history.py`.
+
+### Settings
+
+| Section | Contains | Maps to |
+|---|---|---|
+| General | Hold key, start at login, sounds, bar position, show bar | `KEYS`, `on`/`off`, `always.py`, `orbnative.py` |
+| Language | Auto, English, Hinglish; model status and download | `stt.py`, `hindi.py`, `roman.py` |
+| Microphone | Input device | `record.swift` |
+| Privacy | Where history lives, delete today or all | `history`, `forget` |
+| Advanced | Install command line tool (links `dictator` into `~/.local/bin`, no admin password), Run diagnostics (shows `doctor`), log | `doctor`, `log`, `errors` |
+| About | Version, licences, model credits (the parakeet CC-BY-4.0 attribution goes here) | — |
 
 ### Menu bar
 
-A small monochrome icon. It is the app's only permanent surface.
+A small monochrome icon with a status dot. The status is the same truth as
+`doctor`.
 
 ```
   Dictator                     ● Ready
   ─────────────────────────────
-  Hold fn to talk
+  Open Dictator…
   Language            Auto  ▸   (Auto · English · Hinglish)
-  ─────────────────────────────
-  Today's recap…                 (recap)
-  History…                       (history, search)
   ─────────────────────────────
   Hinglish model     downloading 41%
   ─────────────────────────────
+  Pause dictation
   Settings…                ⌘,
   Check for updates…
-  Pause dictation                (off / on)
   Quit Dictator
 ```
 
-The status dot is the same truth as `doctor`: Ready, Paused, Needs permission,
-Downloading model, or an error in one line that opens the fix.
+States: Ready, Listening, Downloading model, Paused, Needs permission (opens
+the fix), Error (one line, opens the fix).
 
-### Settings window, five tabs
+### How the UI talks to Python
 
-| Tab | Contains | Maps to |
-|---|---|---|
-| General | Hold key (fn, right ⌘, right ⌥, left ⌘), start at login, show orb | `KEYS` in `bin/dictator`, `on`/`off`, `always.py` |
-| Words | Learned words and corrections, add and remove | `learn`, `unlearn`, `words` |
-| Snippets | Phrases you say often and what they expand to | `snippet` |
-| Apps | Per-application rules | `profiles.py`, `format` |
-| Privacy | Where history lives, delete today / all, review what it got wrong | `history`, `forget`, `review` |
+The SwiftUI app never imports Python and Python never draws UI. Two channels:
 
-And an About pane with the version, the model credits (the parakeet
-CC-BY-4.0 attribution goes here), and a "Run diagnostics" button that shows
-`doctor` output.
+- **State, Python to app:** `~/.dictator/status.json`, written by the
+  dictation loop: state, model download progress, last error. Same idea as
+  `hud.json`, which stays for the bar.
+- **Actions, app to Python:** the bundled CLI with a `--json` flag, for
+  example `dictator words --json`, `dictator learn <term>`,
+  `dictator history --json --day 2026-10-08`. Every page is a thin view over
+  a command that already exists and is already tested.
 
-### What stays as it is
-
-- The orb under the notch, and its rule: visible if and only if our
-  microphone is open.
-- The CLI. The app offers "Install command line tool" in Settings, which
-  links `dictator` into `~/.local/bin` without asking for an admin password.
-- Meetings and readback, reached from the menu once they are stable.
+This is also what lets the UI be built in parallel with the bundle work: it
+can run against a fake `status.json` and canned JSON from day one.
 
 ---
 
@@ -317,17 +392,37 @@ and no `~/.dictator`, and ideally on a second Mac.
 
 ---
 
-## Phases
+## Milestones and lanes
 
-| Phase | Output | Rough size |
+Three milestones. The order is chosen so the risky unknowns are answered
+first: whether permissions work on an app approved with Open Anyway, whether
+each update needs approval again, and whether the drag to Applications avoids
+translocation. Those only show up on a real bundle, so a real bundle comes
+before any new screen.
+
+| Milestone | Done when | Rough size |
 |---|---|---|
-| 1 Bundle mode | Python runs from `Resources/`, helpers prebuilt, `doctor` knows the mode. Ad-hoc `.dmg` that dictates. No new UI yet | about a week |
-| 2 Signing and release | Release certificate, `build_dmg.sh`, first GitHub release to testers | 2 to 3 days |
-| 3 Onboarding | The four-step window | about a week |
-| 4 Menu bar and settings | Menu, five tabs, CLI installer | 1 to 2 weeks |
-| 5 Updates | Manual check, then Sparkle if it passes the test | 2 to 3 days |
+| **M1 Working .dmg** | A `.dmg` downloaded from a real GitHub release, approved with Open Anyway, dictates in English and Hinglish. Today's UI (the orb, no windows) | about 1.5 weeks |
+| **M2 The app** | Onboarding, the bar, the Hub, Settings, the menu bar | about 3 weeks, overlapping M1 |
+| **M3 Public release** | Download page, screenshots, update check, version 1.0 | a few days |
 
-Estimates, for one person, not measured.
+Work is split into lanes that can run at the same time once three contracts
+are fixed: the bundle layout above, the `DICTATOR_BUNDLE` and `PYTHONPATH`
+environment, and `status.json` plus `--json` output.
+
+| Lane | Work | Needs | Feeds |
+|---|---|---|---|
+| A Runtime | Bundled Python and jellyfish, bundle mode in the Python files listed under Code changes, `doctor` reports the mode | contracts | M1 |
+| B Native | Prebuilt Swift helpers, whisper.cpp and parakeet built from source | contracts | M1 |
+| C UI | SwiftUI onboarding, bar, Hub, Settings, menu bar, against fake data first | contracts | M2 |
+| D Pipeline | `tools/build_dmg.sh`: fetch, build, assemble, sign, package | A, B | M1 |
+| E Verification | The tests in "Tests before the first release" | D | M1, M2 |
+| F Distribution | Download page, screenshots, update check | E | M3 |
+
+The critical path is B, then D, then E. Everything else runs beside it.
+
+Progress is tracked in `progress.md`. Estimates are for one person and not
+measured.
 
 ---
 
