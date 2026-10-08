@@ -49,7 +49,13 @@ PY_URL="https://github.com/astral-sh/python-build-standalone/releases/download/$
 
 # The one third-party Python package. vocab.py degrades without it, so a
 # bundle that silently lost it would still run, and match names worse.
+# Pinned by the hash of the one wheel this runtime takes (cp312, macOS arm64),
+# the same as the Python archive above: a version number alone lets PyPI, or
+# whatever index this Mac is pointed at, hand over a different file, and it
+# would be signed with the release identity and shipped. The hash is PyPI's
+# own for that file. Another version or another Python means a new hash.
 JELLYFISH="jellyfish==1.2.1"
+JELLYFISH_SHA256="675ab43840488944899ca87f02d4813c1e32107e56afaba7489705a70214e8aa"
 
 step() { printf '\n== %s\n' "$*"; }
 kb() { du -sk "$1" | awk '{print $1}'; }
@@ -91,8 +97,10 @@ cp "$ROOT/bin/dictator" "$C/Resources/bin/dictator"
 chmod +x "$C/Resources/bin/dictator"
 
 # -I so a PYTHONPATH or user site-packages on the build machine cannot leak in.
+echo "$JELLYFISH --hash=sha256:$JELLYFISH_SHA256" > "$BUILD/jellyfish.req"
 "$PY" -I -m pip install --quiet --disable-pip-version-check --no-cache-dir \
-    --only-binary :all: --target "$C/Resources/site-packages" "$JELLYFISH"
+    --only-binary :all: --require-hashes -r "$BUILD/jellyfish.req" \
+    --target "$C/Resources/site-packages"
 rm -rf "$C/Resources/site-packages/bin"
 
 # Trim the runtime. Each of these is something the dictation loop never
@@ -118,8 +126,13 @@ find "$L" -type d \( -name tests -o -name test \) -prune -exec rm -rf {} +
 # libpython is for programs that embed Python. The interpreter here is linked
 # statically and its extension modules resolve symbols from it at load time,
 # so the dylib is 17 MB nobody opens. Kept if that ever stops being true.
-if ! { find "$C/Resources" -name '*.so' -print0 | xargs -0 otool -L;
-       otool -L "$C/Resources/python/bin/python3.12"; } | grep -q libpython; then
+# Collected first and searched after: piped straight into `grep -q`, grep
+# exits at the first match, otool dies of SIGPIPE, pipefail turns that into a
+# failure and the `!` into "nothing links it", which deleted the dylib in
+# exactly the case it was meant to be kept.
+links="$(find "$C/Resources" -name '*.so' -print0 | xargs -0 otool -L;
+         otool -L "$C/Resources/python/bin/python3.12")"
+if ! grep -q libpython <<<"$links"; then
     rm -f "$C"/Resources/python/lib/libpython3*.dylib
 fi
 find "$C/Resources" -name '__pycache__' -type d -prune -exec rm -rf {} +

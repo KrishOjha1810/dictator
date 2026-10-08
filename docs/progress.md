@@ -28,7 +28,9 @@ Branch: `feat/dmg-app`. Nothing merges to `main` until M1 passes its tests.
       bundled Python imports dictator and jellyfish with only these set)
 - [x] `~/.dictator/status.json` fields: state, model progress, last error
       (2026-10-08, `77f5151`, tests only; not yet seen written by a running
-      app)
+      app). Each model now also carries `"essential": true|false`, added
+      after review so onboarding waits only for the English models; an
+      additive change, and the app falls back to the file name without it
 - [x] `--json` output for the commands the UI reads (2026-10-08, `77f5151`;
       `stats --json` run from the bundle, the others by test)
 
@@ -56,7 +58,9 @@ Branch: `feat/dmg-app`. Nothing merges to `main` until M1 passes its tests.
 - [x] `doctor` reports "app bundle" or "repo install" (2026-10-08, `77f5151`)
 - [x] Tests for bundle mode pass, existing tests still pass (2026-10-08,
       `faa3a7b`; 665 passed, 17 failed, 6 skipped, the 17 the same jellyfish
-      and test_standalone failures as the baseline)
+      and test_standalone failures as the baseline. After the review fixes:
+      673 passed, 16 failed, 6 skipped; the 16 are the jellyfish ones, the
+      test_standalone failure is fixed)
 
 ### Lane B: Native
 
@@ -147,6 +151,7 @@ no warnings. None of it is ticked: the app has not been launched, even with
 |---|---|---|
 | App installed size | 50.9 MB (python 37.3, helpers 9.9, dictator 1.6, site-packages 0.8, Frameworks 0) | 2026-10-08, `faa3a7b` |
 | .dmg size | 24.6 MB (25,804,430 bytes, UDZO zlib-9) | 2026-10-08, `faa3a7b` |
+| App and .dmg after the review fixes | app 51.0 MB (python 37.3, helpers 9.9, dictator 1.6, site-packages 0.8); .dmg 24.9 MB (26,094,341 bytes) | 2026-10-08, review fixes |
 | First launch to first sentence | — | |
 
 ---
@@ -180,3 +185,35 @@ no warnings. None of it is ticked: the app has not been launched, even with
   9.9 MB against 4.5 MB for Homebrew copies plus their dylibs, which is why
   the app is 50.9 MB and not the 44.7 MB lane D measured with stand-ins. Both
   are under the plan's 60 to 90 MB and 30 to 45 MB.
+- 2026-10-08, review of the merged lanes, fixed:
+  - When the key listener died, status.json always ended as "paused": its
+    closed stdout reads as ready, so the "listener exited" branch never ran,
+    and the stop path wrote "ready" over whatever was there. A missing
+    permission now ends as `needs_permission`, a dead listener as `error`
+    (exit 1), and only a deliberate stop as `paused`.
+  - Three threads wrote status.json through one temporary name per
+    process. Under load about a third of reads were invalid JSON. Now one
+    name per thread, behind a lock.
+  - Nothing rewrote status.json while a model downloaded, so the
+    onboarding models card never unlocked by itself, and it also waited for
+    the optional 1.5 GB Hinglish model. The loop now republishes while a
+    model is missing; the card waits for the essential models only and has
+    "Continue, finish in background".
+  - The app stopped the loop with SIGTERM, which Python's default kills
+    outright: the recorder kept the microphone open for up to 120 s after
+    Pause or Quit. The loop now treats SIGTERM as Ctrl-C; Quit waits up to
+    2 s for it.
+  - In the app, a dictation child that died took the whole menu bar app
+    with it, and nothing restarted it. The app now stays, shows the error
+    and offers "Restart dictation". A status.json from an earlier run is no
+    longer shown as the present.
+  - `dictator status` inside the app asked launchd and said "not running"
+    and "dictator on". It now reads the loop's pid file; `dictator on`
+    refuses inside the app, since it would start a second loop.
+  - The release CI could never publish: the tests job always failed on the
+    models directory leaking into ~/.dictator (now redirected in
+    tests/conftest.py). Actions are pinned to commits, and the release
+    keychain is deleted right after signing.
+  - Build: the libpython "keep it if linked" check was inverted by
+    pipefail; jellyfish is pinned by wheel hash; the whisper.cpp stamp
+    hashes the CMake flags; Swift helpers rebuild when the target changes.

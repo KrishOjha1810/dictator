@@ -76,16 +76,25 @@ readback.swift dictator-readback
 "
 
 # Rebuild when the source, or this script (its flags), is newer than the
-# binary. Compiled beside the target and renamed over it, the same reason
-# swiftbuild.py does: a half written binary is never left at the real path.
+# binary, or when it was built for another target: dates say nothing about
+# DICTATOR_MIN_MACOS, and a second run with a lower one left the helpers at
+# the old floor while whisper.cpp moved. The target is kept in OUT/.targets,
+# outside Helpers/ so it is never copied into the app. Compiled beside the
+# target and renamed over it, the same reason swiftbuild.py does: a half
+# written binary is never left at the real path.
+TARGETS="$OUT/.targets"
+mkdir -p "$TARGETS"
 swift_build() {
     local src="$1" out="$2" target="${3:-$TARGET}"
-    if [ -x "$out" ] && [ "$out" -nt "$src" ] && [ "$out" -nt "$0" ]; then
+    local stamp="$TARGETS/$(basename "$out")"
+    if [ -x "$out" ] && [ "$out" -nt "$src" ] && [ "$out" -nt "$0" ] \
+            && [ "$(cat "$stamp" 2>/dev/null)" = "$target" ]; then
         return 0
     fi
     say "swiftc $(basename "$src") -> $(basename "$out")"
     swiftc -O -target "$target" "$src" -o "$out.new"
     mv -f "$out.new" "$out"
+    echo "$target" > "$stamp"
 }
 
 echo "$SWIFT_HELPERS" | while read -r src name; do
@@ -133,29 +142,33 @@ fi
 # prefixes are ignored outright for the same reason.
 STAMP="$CMAKE_DIR/.dictator-built"
 BINS="whisper-cli whisper-server parakeet-cli"
-# The stamp holds the tag and the deployment target, not a date: on CI a fresh
-# checkout makes this script newer than any cached build, and a date check
-# would throw the cache away every time. Change the flags below, change STAMP_V.
-STAMP_V=1
-STAMP_KEY="$WHISPER_TAG $MIN_MACOS v$STAMP_V"
+CMAKE_ARGS=(
+    -DCMAKE_BUILD_TYPE=Release
+    -DCMAKE_OSX_ARCHITECTURES=arm64
+    -DCMAKE_OSX_DEPLOYMENT_TARGET="$MIN_MACOS"
+    -DCMAKE_IGNORE_PREFIX_PATH="/opt/homebrew;/usr/local"
+    -DBUILD_SHARED_LIBS=OFF
+    -DGGML_METAL=ON
+    -DGGML_METAL_EMBED_LIBRARY=ON
+    -DGGML_NATIVE=OFF
+    -DGGML_OPENMP=OFF
+    -DWHISPER_BUILD_EXAMPLES=ON
+    -DWHISPER_BUILD_SERVER=ON
+    -DWHISPER_BUILD_TESTS=OFF
+    -DWHISPER_SDL2=OFF
+    -DWHISPER_CURL=OFF
+    -DWHISPER_COREML=OFF
+)
+# The stamp holds the tag, the deployment target and a hash of the flags, not
+# a date: on CI a fresh checkout makes this script newer than any cached
+# build, and a date check would throw the cache away every time. The flags are
+# hashed rather than trusted to a version number somebody has to remember to
+# bump: CI restores an older cache for the same tag, and with a forgotten bump
+# a flag change shipped the old binaries.
+STAMP_KEY="$WHISPER_TAG $MIN_MACOS $(printf '%s\n' "${CMAKE_ARGS[@]}" | shasum -a 256 | cut -c1-16)"
 if [ "$(cat "$STAMP" 2>/dev/null)" != "$STAMP_KEY" ]; then
     say "building whisper.cpp $WHISPER_TAG (Metal, static ggml, macOS $MIN_MACOS)"
-    "$CMAKE" -S "$SRC_DIR" -B "$CMAKE_DIR" \
-        -DCMAKE_BUILD_TYPE=Release \
-        -DCMAKE_OSX_ARCHITECTURES=arm64 \
-        -DCMAKE_OSX_DEPLOYMENT_TARGET="$MIN_MACOS" \
-        -DCMAKE_IGNORE_PREFIX_PATH="/opt/homebrew;/usr/local" \
-        -DBUILD_SHARED_LIBS=OFF \
-        -DGGML_METAL=ON \
-        -DGGML_METAL_EMBED_LIBRARY=ON \
-        -DGGML_NATIVE=OFF \
-        -DGGML_OPENMP=OFF \
-        -DWHISPER_BUILD_EXAMPLES=ON \
-        -DWHISPER_BUILD_SERVER=ON \
-        -DWHISPER_BUILD_TESTS=OFF \
-        -DWHISPER_SDL2=OFF \
-        -DWHISPER_CURL=OFF \
-        -DWHISPER_COREML=OFF >/dev/null
+    "$CMAKE" -S "$SRC_DIR" -B "$CMAKE_DIR" "${CMAKE_ARGS[@]}" >/dev/null
     "$CMAKE" --build "$CMAKE_DIR" --config Release -j "$JOBS" \
         --target $BINS >/dev/null
     echo "$STAMP_KEY" > "$STAMP"

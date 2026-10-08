@@ -256,9 +256,12 @@ def test_model_progress_never_reads_full_before_the_file_lands(tmp_path,
     with open(tmp_path / (name + ".part"), "wb") as f:
         f.truncate(mb * 1024 * 1024 * 2)          # sparse, and oversized
     got = stt.model_status()
-    assert got["ggml-tiny.bin"] == {"have": True, "progress": 1.0}
+    assert got["ggml-tiny.bin"] == {"have": True, "progress": 1.0,
+                                    "essential": True}
     assert got[name]["have"] is False and got[name]["progress"] == 0.99
-    assert got[stt.SHIPPED[1][0]] == {"have": False, "progress": 0.0}
+    assert got[name]["essential"] is False
+    assert got[stt.SHIPPED[1][0]] == {"have": False, "progress": 0.0,
+                                      "essential": True}
 
 
 def test_a_hold_is_published_as_it_happens(monkeypatch):
@@ -332,6 +335,130 @@ def test_ready_while_english_is_still_arriving_says_downloading(tmp_path,
     (tmp_path / (stt.SHIPPED[2][0] + ".part")).write_bytes(b"x")
     dictate.publish("ready")
     assert core.read_status()["state"] == "ready"
+
+
+def _run_with_listener(monkeypatch, script):
+    """dictate.run against a fake listener: a python that prints `script`'s
+    lines and does whatever it does next. Nothing real is started."""
+    from dictator import dictate
+    monkeypatch.setattr(dictate.orbnative, "show", lambda: True)
+    monkeypatch.setattr(dictate.orbnative, "hide", lambda: None)
+    monkeypatch.setattr(dictate.warmup, "at_startup", lambda: None)
+    monkeypatch.setattr(dictate.core, "set_hud", lambda *a, **k: None)
+    monkeypatch.setattr(dictate.stt, "missing", lambda *a, **k: [])
+    monkeypatch.setattr(
+        dictate.hotkey, "listen",
+        lambda *a, **k: subprocess.Popen(
+            [sys.executable, "-c", script], stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE, text=True))
+    return dictate.run("fn", debug=False)
+
+
+def test_a_listener_without_permission_leaves_needs_permission(monkeypatch):
+    """It prints why on stderr and exits. That used to end as "paused", which
+    the menu offers no fix for."""
+    code = _run_with_listener(monkeypatch, (
+        "import sys; print('READY', flush=True); "
+        "sys.stderr.write('could not create an event tap.\\n'); sys.exit(1)"))
+    st = core.read_status()
+    assert st["state"] == "needs_permission" and "Accessibility" in st["error"]
+    assert code == 1
+
+
+def test_a_listener_that_dies_leaves_an_error(monkeypatch):
+    code = _run_with_listener(monkeypatch,
+                              "print('READY', flush=True); import sys; sys.exit(3)")
+    st = core.read_status()
+    assert st["state"] == "error" and st["error"] == "The key listener exited."
+    assert code == 1
+
+
+def test_a_listener_that_says_goodbye_leaves_paused(monkeypatch):
+    from dictator import dictate
+    code = _run_with_listener(monkeypatch,
+                              "print('READY', flush=True); print('BYE', flush=True)")
+    assert core.read_status()["state"] == "paused" and code == 0
+    assert not dictate.loop_running()
+
+
+def test_status_writers_on_several_threads_never_leave_half_a_file():
+    """Three threads of the loop write status.json. With one temporary name
+    per process they wrote into the same file and left invalid JSON."""
+    import threading
+    stop = threading.Event()
+    bad = []
+
+    def writer(state, error):
+        while not stop.is_set():
+            core.write_status(state, error=error)
+
+    def reader():
+        while not stop.is_set():
+            try:
+                json.loads(core.STATUS_FILE.read_text())
+            except FileNotFoundError:
+                pass
+            except ValueError:
+                bad.append(1)
+    ts = [threading.Thread(target=writer, args=("ready", None)),
+          threading.Thread(target=writer, args=("error", "x" * 150)),
+          threading.Thread(target=reader)]
+    for t in ts:
+        t.start()
+    time.sleep(0.5)
+    stop.set()
+    for t in ts:
+        t.join()
+    assert not bad
+    json.loads(core.STATUS_FILE.read_text())
+    assert [p.name for p in core.STATUS_FILE.parent.glob("status.json*")] == \
+        ["status.json"]
+
+
+def test_a_model_that_lands_is_published_without_a_key_press(tmp_path,
+                                                              monkeypatch):
+    """status.json is written on state changes, and a finished download is
+    not one. The watcher writes the same state again with the new models."""
+    import threading
+    from dictator import dictate, stt
+    monkeypatch.setattr(stt, "MODEL_DIR", tmp_path)
+    for name, *_ in stt.SHIPPED[:2]:
+        (tmp_path / name).write_bytes(b"x")
+    dictate.publish("ready")
+    turbo = stt.SHIPPED[2][0]
+    assert core.read_status()["models"][turbo]["have"] is False
+    stop = threading.Event()
+    t = threading.Thread(target=dictate._watch_models, args=(stop, 0.05))
+    t.start()
+    (tmp_path / turbo).write_bytes(b"x")
+    t.join(timeout=3)
+    stop.set()
+    assert not t.is_alive(), "it stops once every model is there"
+    st = core.read_status()
+    assert st["state"] == "ready" and st["models"][turbo]["have"] is True
+
+
+def test_ready_waits_for_every_hold_still_transcribing(monkeypatch):
+    """Two holds in flight: the first one finishing must not say ready while
+    the second is still being transcribed."""
+    from dictator import dictate
+    seen = []
+    monkeypatch.setattr(dictate, "publish", lambda s, e=None: seen.append(s))
+    monkeypatch.setattr(dictate.core, "set_hud", lambda *a, **k: None)
+    monkeypatch.setattr(dictate.threading, "Thread",
+                        lambda target, args=(), daemon=None: type(
+                            "T", (), {"start": lambda self: None})())
+    d = dictate.Dictation()
+    monkeypatch.setattr(d, "_deliver", lambda *a, **k: None)
+    for _ in range(2):
+        d.proc = type("P", (), {"terminate": lambda s: None,
+                                "wait": lambda s, timeout=None: 0,
+                                "poll": lambda s: 0})()
+        d.up(900.0)
+    d._finish("/tmp/a.wav", "Terminal")
+    assert seen[-1] == "transcribing"
+    d._finish("/tmp/b.wav", "Terminal")
+    assert seen[-1] == "ready"
 
 
 # ---- what the app's pages read --------------------------------------------------
@@ -461,3 +588,26 @@ def test_the_apps_fixtures_have_the_clis_shape(tmp_path, name, args):
     assert set(fixture) == set(_cli(tmp_path, *args))
     if name == "history":
         assert set(fixture["items"][0]) == set(views._row({}))
+
+
+def test_status_inside_the_app_does_not_ask_launchd(tmp_path):
+    """The app's loop is its own child and its login item is SMAppService's,
+    so launchd knows nothing about either. Running comes from the loop's pid
+    file; login_item is left to the app."""
+    app = _fake_bundle(tmp_path)
+    state = tmp_path / "state"
+    state.mkdir()
+    env = dict(os.environ, DICTATOR_STATE=str(state), DICTATOR_BUNDLE=str(app))
+
+    def status(*args):
+        out = subprocess.run([sys.executable, str(REPO / "bin" / "dictator"),
+                              "status", *args], cwd=str(tmp_path), env=env,
+                             capture_output=True, text=True, timeout=60)
+        assert out.returncode == 0, out.stderr
+        return out.stdout
+
+    got = json.loads(status("--json"))
+    assert got["running"] is False and got["login_item"] is None
+    (state / "dictate.pid").write_text(str(os.getpid()))
+    assert json.loads(status("--json"))["running"] is True
+    assert "dictator on" not in status()

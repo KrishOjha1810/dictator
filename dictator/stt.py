@@ -66,8 +66,13 @@ def arriving(name: str) -> bool:
 
 
 def model_status() -> dict:
-    """{filename: {"have": bool, "progress": 0.0 to 1.0}} for every shipped
-    model, for status.json.
+    """{filename: {"have": bool, "progress": 0.0 to 1.0, "essential": bool}}
+    for every shipped model, for status.json.
+
+    `essential` is the last column of SHIPPED, so the app can wait for the
+    models English needs and not for the Hinglish one, which is allowed to
+    keep arriving after the user has moved on. Without it the app had to
+    wait for all of them, 1.5 GB of optional model included.
 
     Progress is the size of the .part file against the size in SHIPPED, which
     is in mebibytes and rounded, so it is held just under 1.0 until the file
@@ -75,9 +80,10 @@ def model_status() -> dict:
     missing is a bar that lies. Three stat calls, so it is cheap enough to
     run on every state change."""
     out = {}
-    for name, mb, _what, _essential in SHIPPED:
+    for name, mb, _what, essential in SHIPPED:
         if (MODEL_DIR / name).exists():
-            out[name] = {"have": True, "progress": 1.0}
+            out[name] = {"have": True, "progress": 1.0,
+                         "essential": essential}
             continue
         got = 0.0
         try:
@@ -85,7 +91,8 @@ def model_status() -> dict:
             got = min(0.99, size / float(mb * 1024 * 1024))
         except Exception:
             pass
-        out[name] = {"have": False, "progress": round(got, 3)}
+        out[name] = {"have": False, "progress": round(got, 3),
+                     "essential": essential}
     return out
 
 # Which engine answered the last transcription. Recorded rather than

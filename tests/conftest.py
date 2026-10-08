@@ -89,6 +89,30 @@ def _own_state_dir(tmp_path, monkeypatch):
                 monkeypatch.setattr(m, attr, value)
         except Exception:
             pass
+    # The models, and the same shape once more: stt works out MODEL_DIR from
+    # STATE_DIR at import, so on a Mac (or a CI runner) with no voicebridge
+    # models it is ~/.dictator/models, and anything that downloads a model
+    # writes there. Redirected to a directory of links to whatever models
+    # are really there, so the tests that need a real model still find one
+    # and nothing a test writes lands beside them.
+    try:
+        from pathlib import Path
+        from dictator import stt
+        real = Path.home() / ".dictator"
+        if str(stt.MODEL_DIR).startswith(str(real)):
+            # Not tmp_path/models: tests make that one themselves.
+            models = tmp_path / "linked-models"
+            models.mkdir(exist_ok=True)
+            for f in stt.MODEL_DIR.glob("*.bin"):
+                try:
+                    (models / f.name).symlink_to(f)
+                except OSError:
+                    pass
+            monkeypatch.setattr(stt, "MODEL_DIR", models)
+            monkeypatch.setattr(stt, "MODEL", models / stt.MODEL.name)
+            monkeypatch.setattr(stt, "_PARAKEET", models / stt._PARAKEET.name)
+    except Exception:
+        pass
     # shared() caches a Vocab that has already read the real file.
     try:
         from dictator import vocab

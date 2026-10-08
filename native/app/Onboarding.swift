@@ -53,6 +53,11 @@ struct OnboardingView: View {
                     Button("Back") { st.card -= 1 }
                 }
                 Spacer()
+                // The models card is the one step that can take minutes, and
+                // what it waits for keeps arriving with the window closed.
+                if st.card == 4 && !ready {
+                    Button("Continue, finish in background") { st.card += 1 }
+                }
                 Button(st.card == count - 1 ? "Done" : "Continue →") {
                     if st.card == count - 1 { done() } else { st.card += 1 }
                 }

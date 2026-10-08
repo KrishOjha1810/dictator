@@ -180,6 +180,10 @@ struct Status: Equatable {
         var name: String
         var have: Bool
         var progress: Double
+        /// Needed before dictation works. The loop says so per model; a file
+        /// written before it did falls back to the one rule the loop uses
+        /// today, that the large multilingual model is the optional one.
+        var essential: Bool
     }
 
     var state = "starting"
@@ -200,17 +204,24 @@ struct Status: Equatable {
         if let m = o["models"] as? [String: Any] {
             s.models = m.keys.sorted().map { k in
                 let r = m[k] as? [String: Any] ?? [:]
+                let lower = k.lowercased()
                 return Model(name: k, have: r["have"] as? Bool ?? false,
-                             progress: (r["progress"] as? NSNumber)?.doubleValue ?? 0)
+                             progress: (r["progress"] as? NSNumber)?.doubleValue ?? 0,
+                             essential: r["essential"] as? Bool
+                                 ?? !(lower.contains("large") || lower.contains("turbo")))
             }
         }
         return s
     }
 
-    /// Every model the loop knows about is on disk. Card 5 of onboarding
+    /// Every model English needs is on disk. The models card of onboarding
     /// waits for this, and an empty list means the loop has not said yet,
-    /// which is not the same as done.
-    var modelsReady: Bool { !models.isEmpty && models.allSatisfy { $0.have } }
+    /// which is not the same as done. The Hinglish model is not waited for:
+    /// it is 1.5 GB, it is optional, and the card says it keeps arriving in
+    /// the background.
+    var modelsReady: Bool {
+        !models.isEmpty && models.filter { $0.essential }.allSatisfy { $0.have }
+    }
 
     var label: String {
         switch state {
@@ -248,22 +259,36 @@ func modelTitle(_ file: String) -> String {
 // The dictation child, when there is a UI around it.
 
 /// Starts `dictator dictate <key>` and keeps it running. Pause stops it on
-/// purpose; anything else that stops it takes the app down with it, so
-/// launchd restarts the pair together, which is the rule the headless app
-/// has always had.
+/// purpose. Anything else that stops it is a failure, and what happens next
+/// depends on who started the app. A repo install runs under its LaunchAgent,
+/// so the app exits with the child and launchd restarts the pair together,
+/// which is the rule the headless app has always had. The app from the .dmg
+/// is opened from Finder or as a login item, and nothing would restart it,
+/// so it stays, says what went wrong, and offers to restart dictation.
 final class Supervisor {
     static let shared = Supervisor()
     private var child: Process?
     private var stopping = false
     private(set) var paused = false
+    /// Why dictation is not running when it should be, for the menu. nil
+    /// while it runs, while paused, and before the first start.
+    private(set) var failure: String?
+    /// When the current child was started. A status.json written before
+    /// this is an earlier run's, and is not shown as the present.
+    private(set) var startedAt: Double = 0
     var onChange: (() -> Void)?
 
     var running: Bool { child?.isRunning ?? false }
 
+    /// Start dictation, unless the user paused it. Resume clears the pause
+    /// first; the Accessibility wait calling this after a pause does not
+    /// undo it.
     func start() {
-        guard !fake, child == nil else { return }
+        guard !fake, !paused, child == nil else { return }
         guard let (exe, argv, e) = cliCommand(["dictate", Prefs.key]) else {
             NSLog("dictator: cannot find the dictator command")
+            failure = "Cannot find Dictator's own files. Reinstall the app."
+            onChange?()
             return
         }
         let p = Process()
@@ -283,15 +308,29 @@ final class Supervisor {
                     self.onChange?()
                     return
                 }
-                exit(p.terminationStatus)
+                guard Mode.current.isBundle else { exit(p.terminationStatus) }
+                // The loop writes its own last word into status.json (a
+                // missing permission, or the listener dying), and that is
+                // more specific than anything said here, so it is only
+                // covered when it is not one of those.
+                let s = Status.read()
+                if !((s.state == "error" || s.state == "needs_permission")
+                        && s.updated >= self.startedAt.rounded(.down)) {
+                    self.failure = "Dictation stopped (exit \(p.terminationStatus))."
+                }
+                NSLog("dictator: dictation exited with \(p.terminationStatus)")
+                self.onChange?()
             }
         }
         do { try p.run() } catch {
             NSLog("dictator: could not start dictation: \(error)")
+            failure = "Dictation could not start: \(error.localizedDescription)"
+            onChange?()
             return
         }
         child = p
-        paused = false
+        failure = nil
+        startedAt = Date().timeIntervalSince1970
         onChange?()
     }
 
@@ -301,8 +340,18 @@ final class Supervisor {
         p.terminate()
     }
 
-    func pause() { paused = true; stop(); onChange?() }
+    func pause() { paused = true; failure = nil; stop(); onChange?() }
     func resume() { paused = false; start() }
+
+    /// Quit: stop the child and give it a moment to close the microphone
+    /// and write "paused". It treats SIGTERM as a clean stop; killed with
+    /// the app instead, its recorder would keep the microphone open.
+    func stopAndWait(_ seconds: Double = 2.0) {
+        guard let p = child, p.isRunning else { return }
+        stop()
+        let until = Date().addingTimeInterval(seconds)
+        while p.isRunning && Date() < until { usleep(50_000) }
+    }
 
     /// A new hold key means a new child; the old one is listening for the
     /// old key.

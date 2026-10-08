@@ -34,6 +34,8 @@ final class AppModel: ObservableObject {
     @Published var trusted = AXIsProcessTrusted()
     @Published var mic = AVCaptureDevice.authorizationStatus(for: .audio)
     @Published var paused = false
+    @Published var failure: String? = nil
+    @Published var running = false
     @Published var page: Page = .home
     @Published var language = "english"
     @Published var key = Prefs.key
@@ -46,19 +48,32 @@ final class AppModel: ObservableObject {
         let m = AVCaptureDevice.authorizationStatus(for: .audio)
         if m != mic { mic = m }
         if Supervisor.shared.paused != paused { paused = Supervisor.shared.paused }
+        if Supervisor.shared.failure != failure { failure = Supervisor.shared.failure }
+        if Supervisor.shared.running != running { running = Supervisor.shared.running }
     }
 
     /// What the dot shows. See the top of this file for why two things
     /// override the file.
     var state: String {
         if paused { return "paused" }
-        if !fake && !trusted { return "needs_permission" }
+        if fake { return status.state }
+        if !trusted { return "needs_permission" }
+        if failure != nil { return "error" }
+        // A file from an earlier run, or from a loop that is no longer
+        // there, is not the present. Its "ready" would promise a key that
+        // does nothing; what it says about a permission or an error, the
+        // loop wrote on its way out and is still true.
+        let current = running && status.updated >= Supervisor.shared.startedAt.rounded(.down)
+        if !current && !["error", "needs_permission"].contains(status.state) {
+            return "starting"
+        }
         return status.state
     }
 
     var shown: Status {
         var s = status
         s.state = state
+        if let f = failure, state == "error" { s.error = f }
         return s
     }
 
@@ -114,7 +129,7 @@ final class UI: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     func applicationWillTerminate(_ note: Notification) {
-        Supervisor.shared.stop()
+        Supervisor.shared.stopAndWait()
     }
 
     /// A monochrome mic with a coloured dot beside it. The mic is a template
@@ -189,6 +204,11 @@ final class UI: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
         menu.addItem(.separator())
         add(menu, model.paused ? "Resume dictation" : "Pause dictation", #selector(togglePause))
+        // Dictation stopped by itself. Inside the app nothing restarts it, so
+        // the way back is here rather than in quitting and reopening.
+        if !fake && !model.paused && !model.running && model.trusted {
+            add(menu, "Restart dictation", #selector(restartDictation))
+        }
         add(menu, "Settings…", #selector(openSettings), key: ",")
         add(menu, "Quit Dictator", #selector(quit), key: "q")
     }
@@ -217,6 +237,12 @@ final class UI: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     @objc func togglePause() {
         if Supervisor.shared.paused { Supervisor.shared.resume() } else { Supervisor.shared.pause() }
+        model.refresh()
+        drawIcon()
+    }
+
+    @objc func restartDictation() {
+        Supervisor.shared.start()
         model.refresh()
         drawIcon()
     }

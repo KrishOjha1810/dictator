@@ -194,6 +194,13 @@ def main(argv) -> int:
         return 0
 
     if cmd == "on":
+        if core.BUNDLE is not None:
+            # The app starts its own dictation and is its own login item.
+            # A LaunchAgent copy beside it would be a second loop on the
+            # same key, and every sentence pasted twice.
+            print("Inside Dictator.app this is a setting: Dictator > "
+                  "Settings > Open at login.")
+            return 1
         from dictator import always
         print(always.on(_key_from(rest)))
         return 0
@@ -205,6 +212,24 @@ def main(argv) -> int:
 
     if cmd == "status":
         from dictator import always
+        if core.BUNDLE is not None:
+            # Inside the app there is no LaunchAgent to ask about: the app
+            # runs the loop as its own child and its login item is
+            # SMAppService's, which only the app can read. Asking launchd
+            # here said "not running" while dictation worked, and pointed at
+            # `dictator on`, which would start a second loop.
+            from dictator import dictate
+            running = dictate.loop_running()
+            if "--json" in rest:
+                from dictator import views
+                out = views.status()
+                out["login_item"] = None
+                out["running"] = running
+                return _json(out)
+            state = (core.read_status() or {}).get("state") or "unknown"
+            print(f"Dictation is {'running' if running else 'not running'}"
+                  f" ({state}). Open at login is in Dictator > Settings.")
+            return 0
         if "--json" in rest:
             from dictator import views
             out = views.status()

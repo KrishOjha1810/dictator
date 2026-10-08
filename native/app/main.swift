@@ -94,10 +94,10 @@ func runDictation() {
 // to make that state impossible to sit in without being told.
 
 func statePath() -> String {
-    let info = Bundle.main.infoDictionary ?? [:]
-    let log = (info["DictatorLog"] as? String)
-        ?? home.appendingPathComponent(".dictator/dictate.log").path
-    return (log as NSString).deletingLastPathComponent + "/permission.json"
+    // The same directory everything else uses (Backend.swift's stateDir),
+    // DICTATOR_STATE included, which this used to ignore and so wrote into
+    // the real ~/.dictator from a run pointed somewhere else.
+    return stateDir.appendingPathComponent("permission.json").path
 }
 
 /// Write down what THIS process can see, because AXIsProcessTrusted() can only

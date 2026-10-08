@@ -11,6 +11,7 @@ failure to write a log file must never be the reason dictation stops.
 """
 import json
 import os
+import threading
 import time
 from pathlib import Path
 
@@ -166,6 +167,8 @@ def set_hud(phase: str, level: float = 0.0, text: str = "") -> None:
 # how far each model has got. hud.json is the same idea for the orb, and stays
 # separate because it is rewritten several times a second while this changes
 # only when the state does.
+_status_lock = threading.Lock()
+
 STATUS_STATES = ("ready", "listening", "transcribing", "downloading",
                  "paused", "needs_permission", "error")
 
@@ -192,10 +195,19 @@ def write_status(state: str, models: "dict|None" = None,
                      if error else None,
             "updated": int(time.time()),
         })
-        tmp = str(STATUS_FILE) + f".{os.getpid()}.tmp"
-        with open(tmp, "w") as f:
-            f.write(payload)
-        os.replace(tmp, STATUS_FILE)
+        # Three threads of the loop write this, so a temporary name per
+        # process was shared between them: two writers truncated and filled
+        # the same file, and the one that was renamed into place held the
+        # shorter payload with the tail of the longer one, which is not JSON.
+        # The app then showed "Starting" until the next state change. A name
+        # per thread keeps the files apart, and the lock makes the last
+        # caller the one whose state is left in the file.
+        tmp = (str(STATUS_FILE)
+               + f".{os.getpid()}.{threading.get_ident()}.tmp")
+        with _status_lock:
+            with open(tmp, "w") as f:
+                f.write(payload)
+            os.replace(tmp, STATUS_FILE)
         return True
     except Exception:
         return False
