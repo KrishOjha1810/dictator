@@ -444,3 +444,20 @@ def test_status_carries_the_loops_last_word():
     assert got["mode"] == "repo install" and got["bundle"] is None
     assert got["status"]["state"] == "listening"
     json.dumps(got)
+
+
+@pytest.mark.parametrize("name,args", [
+    ("stats", ("stats", "--json")),
+    ("words", ("words", "--json")),
+    ("snippet", ("snippet", "--json")),
+    ("history", ("history", "--json")),
+])
+def test_the_apps_fixtures_have_the_clis_shape(tmp_path, name, args):
+    """DICTATOR_FAKE=1 draws the app from native/app/Fixtures. A fixture with
+    a shape the CLI never prints makes a window that looks right and is
+    wrong, so each one has the same top-level keys as the real command."""
+    fixture = json.loads((REPO / "native" / "app" / "Fixtures"
+                          / f"{name}.json").read_text())
+    assert set(fixture) == set(_cli(tmp_path, *args))
+    if name == "history":
+        assert set(fixture["items"][0]) == set(views._row({}))

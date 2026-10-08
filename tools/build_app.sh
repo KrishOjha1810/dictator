@@ -22,10 +22,12 @@ ROOT=$(cd "$(dirname "$0")/.." && pwd)
 OUT=$1
 mkdir -p "$OUT"
 
-# 13.0 is LSMinimumSystemVersion in native/app/Info.plist, and the oldest
-# macOS with NavigationSplitView and SMAppService.
+# The same floor as the helpers (tools/build_native.sh): 14.0, because the orb
+# helper needs CADisplayLink. The app itself would run on 13, the oldest macOS
+# with NavigationSplitView and SMAppService, but not usefully without its orb.
+MIN_MACOS=${DICTATOR_MIN_MACOS:-14.0}
 swiftc -O \
-    -target arm64-apple-macos13.0 \
+    -target "arm64-apple-macos$MIN_MACOS" \
     -module-name Dictator \
     "$ROOT"/native/app/*.swift \
     -o "$OUT/Dictator"

@@ -13,7 +13,7 @@
   <!-- No Dock icon: this is a key, not a window. Built from the .dmg it has
        a menu bar item; built from a checkout, nothing on screen at all. -->
   <key>LSUIElement</key><true/>
-  <key>LSMinimumSystemVersion</key><string>13.0</string>
+  <key>LSMinimumSystemVersion</key><string>14.0</string>
   <!-- These strings ARE the permission dialog. macOS shows them verbatim, so
        they have to answer "why does this want that" in one sentence. -->
   <key>NSMicrophoneUsageDescription</key>

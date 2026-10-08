@@ -21,8 +21,11 @@
 #   DICTATOR_SIGN_ID     codesign identity, default "-" (ad-hoc). Everything
 #                        is signed here so it runs straight out of OUT_DIR;
 #                        build_dmg.sh signs again with the release identity.
-#   DICTATOR_MIN_MACOS   deployment target, default 15.0, the same floor the
-#                        meeting app's Info.plist already declares.
+#   DICTATOR_MIN_MACOS   deployment target, default 14.0: orb.swift uses
+#                        CADisplayLink, which macOS 13 does not have.
+#                        build_dmg.sh writes the same value into the app's
+#                        LSMinimumSystemVersion. The meeting recorder is built
+#                        for the floor its own Info.plist declares (15.0).
 #   WHISPER_TAG          whisper.cpp release, default the pinned one below.
 
 set -euo pipefail
@@ -40,7 +43,7 @@ FRAMEWORKS="$OUT/Frameworks"
 mkdir -p "$HELPERS" "$FRAMEWORKS"
 
 SIGN_ID="${DICTATOR_SIGN_ID:--}"
-MIN_MACOS="${DICTATOR_MIN_MACOS:-15.0}"
+MIN_MACOS="${DICTATOR_MIN_MACOS:-14.0}"
 TARGET="arm64-apple-macos$MIN_MACOS"
 
 # Pinned to the release every number in docs/findings.md was measured on (the
@@ -76,12 +79,12 @@ readback.swift dictator-readback
 # binary. Compiled beside the target and renamed over it, the same reason
 # swiftbuild.py does: a half written binary is never left at the real path.
 swift_build() {
-    local src="$1" out="$2"
+    local src="$1" out="$2" target="${3:-$TARGET}"
     if [ -x "$out" ] && [ "$out" -nt "$src" ] && [ "$out" -nt "$0" ]; then
         return 0
     fi
     say "swiftc $(basename "$src") -> $(basename "$out")"
-    swiftc -O -target "$TARGET" "$src" -o "$out.new"
+    swiftc -O -target "$target" "$src" -o "$out.new"
     mv -f "$out.new" "$out"
 }
 
@@ -97,7 +100,9 @@ done
 # ships with the identifier in native/meetingapp/Info.plist as is.
 MEET="$HELPERS/Dictator Meeting.app"
 mkdir -p "$MEET/Contents/MacOS"
-swift_build "$REPO/native/meeting.swift" "$MEET/Contents/MacOS/DictatorMeeting"
+MEET_MIN="$(plutil -extract LSMinimumSystemVersion raw "$REPO/native/meetingapp/Info.plist")"
+swift_build "$REPO/native/meeting.swift" "$MEET/Contents/MacOS/DictatorMeeting" \
+    "arm64-apple-macos$MEET_MIN"
 cp -f "$REPO/native/meetingapp/Info.plist" "$MEET/Contents/Info.plist"
 
 
@@ -128,8 +133,13 @@ fi
 # prefixes are ignored outright for the same reason.
 STAMP="$CMAKE_DIR/.dictator-built"
 BINS="whisper-cli whisper-server parakeet-cli"
-if [ ! -f "$STAMP" ] || [ "$0" -nt "$STAMP" ]; then
-    say "building whisper.cpp $WHISPER_TAG (Metal, static ggml)"
+# The stamp holds the tag and the deployment target, not a date: on CI a fresh
+# checkout makes this script newer than any cached build, and a date check
+# would throw the cache away every time. Change the flags below, change STAMP_V.
+STAMP_V=1
+STAMP_KEY="$WHISPER_TAG $MIN_MACOS v$STAMP_V"
+if [ "$(cat "$STAMP" 2>/dev/null)" != "$STAMP_KEY" ]; then
+    say "building whisper.cpp $WHISPER_TAG (Metal, static ggml, macOS $MIN_MACOS)"
     "$CMAKE" -S "$SRC_DIR" -B "$CMAKE_DIR" \
         -DCMAKE_BUILD_TYPE=Release \
         -DCMAKE_OSX_ARCHITECTURES=arm64 \
@@ -148,7 +158,7 @@ if [ ! -f "$STAMP" ] || [ "$0" -nt "$STAMP" ]; then
         -DWHISPER_COREML=OFF >/dev/null
     "$CMAKE" --build "$CMAKE_DIR" --config Release -j "$JOBS" \
         --target $BINS >/dev/null
-    touch "$STAMP"
+    echo "$STAMP_KEY" > "$STAMP"
 fi
 
 for b in $BINS; do
