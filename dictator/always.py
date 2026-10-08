@@ -112,6 +112,10 @@ def build_app() -> str:
     import shutil
     if not shutil.which("swiftc"):
         return ""
+    # Every file in the directory, not just main.swift: the menu bar, the
+    # onboarding cards and the Hub live beside it, and main.swift alone no
+    # longer compiles.
+    sources = sorted(src.glob("*.swift"))
     # Do not rebuild what has not changed. Every rebuild produces a different
     # binary, and macOS drops the Accessibility grant when the binary changes
     # even though the designated requirement is unchanged, so an unconditional
@@ -122,13 +126,13 @@ def build_app() -> str:
     exe = macos / "Dictator"
     if exe.exists() and _bundle_points_here():
         newest = max((f.stat().st_mtime for f in
-                      (src / "main.swift", src / "Info.plist") if f.exists()),
+                      (*sources, src / "Info.plist") if f.exists()),
                      default=0)
         if exe.stat().st_mtime >= newest:
             return str(APP)
     macos.mkdir(parents=True, exist_ok=True)
     try:
-        subprocess.run(["swiftc", "-O", str(src / "main.swift"),
+        subprocess.run(["swiftc", "-O", *map(str, sources),
                         "-o", str(macos / "Dictator")],
                        check=True, capture_output=True, timeout=300)
         # Tell the bundle where its own code is. Without this the app has to
