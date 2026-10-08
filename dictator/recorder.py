@@ -19,7 +19,7 @@ from pathlib import Path
 from . import core, swiftbuild
 
 SRC = Path(__file__).resolve().parent.parent / "native" / "record.swift"
-BIN = core.STATE_DIR / "bin" / "dictator-rec"
+BIN = core.helper_path("dictator-rec")
 
 # What the recorder says on its way out. Zero means it ended when it was meant
 # to, either because we terminated it or because max-seconds came up, and any

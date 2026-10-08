@@ -61,7 +61,7 @@ from pathlib import Path
 from . import core, swiftbuild
 
 SRC = Path(__file__).resolve().parent.parent / "native" / "hotkey.swift"
-BIN = core.STATE_DIR / "bin" / "dictator-hotkey"
+BIN = core.helper_path("dictator-hotkey")
 
 KEYS = ("fn", "rightcmd", "rightopt", "leftcmd")
 

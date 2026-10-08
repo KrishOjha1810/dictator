@@ -37,6 +37,18 @@ KEYCHAIN = core.STATE_DIR / "signing.keychain-db"
 PASSFILE = core.STATE_DIR / "signing.pass"
 
 
+def local() -> bool:
+    """Is signing on this Mac this install's job at all?
+
+    Not inside the downloadable app. That was signed once, with the release
+    certificate, before the .dmg was made, and the user's grants are pinned
+    to that certificate. Re-signing any part of it here with a local identity,
+    or ad-hoc as the callers fall back to, would replace the identity they
+    granted with one nobody granted: the exact failure this module exists to
+    prevent, caused by this module."""
+    return core.BUNDLE is None
+
+
 def _run(args, **kw):
     return subprocess.run(args, capture_output=True, text=True, timeout=120, **kw)
 
@@ -234,7 +246,12 @@ def identity() -> str:
     Creates it on first call and reuses it forever after. Regenerating it would
     change the app's identity and silently revoke the user's permissions, which
     is the exact problem this module exists to prevent, so the existing
-    keychain is always preferred over making a new one."""
+    keychain is always preferred over making a new one.
+
+    In bundle mode there is nothing to create a keychain for, so this says ""
+    and callers check local() before they sign anything."""
+    if not local():
+        return ""
     try:
         core.STATE_DIR.mkdir(parents=True, exist_ok=True)
         if KEYCHAIN.exists() and PASSFILE.exists():

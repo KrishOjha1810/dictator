@@ -43,6 +43,7 @@ Teaching it your words:
   dictator truth [n]     write down what you actually said, to measure by
   dictator unlearn WORD  stop fixing it
   dictator history [n]   what you have said
+  dictator stats         words, words a minute, and your streak
   dictator find WORDS    search everything you have ever dictated
   dictator recap [today|week|N]   what you worked on, summarised locally
   dictator forget "words"  erase everything you said containing them
@@ -68,7 +69,19 @@ Formatting:
   dictator format in Slack lists on      change it there and nowhere else
   dictator format in terminal sentences off
   dictator format in Slack default       back to the global rules
+
+For the app: status, words, snippets, history and stats take --json and
+print what the app's pages draw. history --json --day YYYY-MM-DD for one day.
 """
+
+
+def _json(obj) -> int:
+    """Print one JSON document for the app to read. Nothing else may go to
+    stdout on these paths, or the app reads a sentence where it expected an
+    object."""
+    import json
+    print(json.dumps(obj, ensure_ascii=False))
+    return 0
 
 
 def _key_from(args, default="fn"):
@@ -192,6 +205,12 @@ def main(argv) -> int:
 
     if cmd == "status":
         from dictator import always
+        if "--json" in rest:
+            from dictator import views
+            out = views.status()
+            out["login_item"] = always.installed()
+            out["running"] = always.running()
+            return _json(out)
         print(always.status())
         return 0
 
@@ -368,6 +387,9 @@ def main(argv) -> int:
         return 0
 
     if cmd == "words":
+        if "--json" in rest:
+            from dictator import views
+            return _json(views.words())
         from dictator import vocab
         terms = vocab.shared().terms
         if not terms:
@@ -401,6 +423,13 @@ def main(argv) -> int:
         from dictator import history
         import time as _t
         n = int(rest[0]) if rest and rest[0].isdigit() else 20
+        if "--json" in rest:
+            from dictator import views
+            day = None
+            if "--day" in rest:
+                i = rest.index("--day")
+                day = rest[i + 1] if i + 1 < len(rest) else ""
+            return _json(views.history(limit=n, day=day))
         rows = history.recent(limit=n)
         if not rows:
             print("nothing recorded yet.")
@@ -417,6 +446,17 @@ def main(argv) -> int:
             print(f"{'':16}  {who}")
             if r.get("kept") and r["kept"] != r.get("shown"):
                 print(f"{'':16}  you changed it to: {r['kept'][:80]}")
+        return 0
+
+    if cmd == "stats":
+        from dictator import views
+        got = views.stats()
+        if "--json" in rest:
+            return _json(got)
+        print(f"  {got['words']:,} words")
+        print(f"  {got['wpm']} words a minute" if got["wpm"] is not None
+              else "  words a minute: not known yet")
+        print(f"  {got['streak_days']} day streak")
         return 0
 
     if cmd == "recap":
@@ -515,6 +555,9 @@ def main(argv) -> int:
         return snippet(rest)
 
     if cmd in ("snippets", "expansions"):
+        if "--json" in rest:
+            from dictator import views
+            return _json(views.snippets())
         from dictator import snippets as _sn
         items = _sn.shared().items
         if not items:
@@ -898,6 +941,11 @@ def snippet(rest) -> int:
     from dictator import snippets as _sn
     force = "--anyway" in rest or "--force" in rest
     args = [a for a in rest if not a.startswith("--")]
+    # With nothing to add, --json is the app's Snippets page asking for the
+    # list. Adding one from the app is the same two arguments as here.
+    if "--json" in rest and len(args) < 2:
+        from dictator import views
+        return _json(views.snippets())
     if len(args) < 2:
         print('usage: dictator snippet "my work email" "krish@example.com"')
         print("\n  The trigger is what you SAY. The second half is what you")
@@ -1052,9 +1100,27 @@ def doctor() -> int:
 
     print("dictator doctor\n")
 
+    # Which of the two installs this is, first, because every hint below
+    # depends on it: a checkout fixes a missing helper with swiftc or brew,
+    # the app fixes it by being downloaded again.
+    from dictator import views
+    bundled = core.BUNDLE is not None
+    print(f"  ..   {views.mode()}"
+          + (f"  {core.BUNDLE}" if bundled else
+             f"  {Path(__file__).resolve().parent.parent}"))
+    for name, got in views.helpers().items():
+        print(f"  ..     {name:20} {got['from']:18}"
+              + (f" {got['path']}" if got["from"] != "missing" else ""))
+    print()
+
     import shutil
-    ok("swiftc (builds the key listener)", bool(shutil.which("swiftc")),
-       "" if shutil.which("swiftc") else "run: xcode-select --install")
+    if bundled:
+        # Nothing is compiled inside the app, so a missing swiftc is not a
+        # fault there and must not be counted as one.
+        print("  ok   swiftc  (not needed: the app's helpers are prebuilt)")
+    else:
+        ok("swiftc (builds the key listener)", bool(shutil.which("swiftc")),
+           "" if shutil.which("swiftc") else "run: xcode-select --install")
     # Which recorder, by name. The native one is AVFoundation and needs
     # nothing installed; sox is the fallback and is a Homebrew package the
     # user had to go and get. Saying "records your voice: ok" without saying
@@ -1064,9 +1130,13 @@ def doctor() -> int:
        {"native": "AVFoundation, nothing to install",
         "sox": "sox (fallback: swiftc could not build the native recorder)",
         "": "neither swiftc nor sox. Run: xcode-select --install"}[which_rec])
-    whisper = shutil.which("whisper-cli") or shutil.which("whisper-cpp")
+    # The same search transcription uses, so doctor and dictation cannot
+    # disagree about which whisper there is. It looks in the app first.
+    whisper = stt.whisper_bin()
     ok("whisper (turns it into text)", bool(whisper),
-       "" if whisper else "run: brew install whisper-cpp")
+       "" if whisper else
+       ("the app bundle is incomplete. Download Dictator again" if bundled
+        else "run: brew install whisper-cpp"))
 
     # Without this the vocabulary and everything learned from corrections is
     # silently inert, which looks exactly like the feature not existing.
@@ -1076,7 +1146,9 @@ def doctor() -> int:
     except Exception:
         has_phonetics = False
     ok("phonetic matching (corrections and learning)", has_phonetics,
-       "" if has_phonetics else "run: python3 -m pip install --user jellyfish")
+       "" if has_phonetics else
+       ("the app bundle is incomplete. Download Dictator again" if bundled
+        else "run: python3 -m pip install --user jellyfish"))
 
     # English and Hinglish need different models, and the big one arrives in
     # the background after the installer has finished, so report each one and
@@ -1087,7 +1159,8 @@ def doctor() -> int:
         ok(f"  {why}", here,
            "" if here else
            (f"downloading now ({mb}MB)" if stt.arriving(name)
-            else f"missing ({mb}MB); run ./install.sh again"))
+            else f"missing ({mb}MB)"
+            + ("" if bundled else "; run ./install.sh again")))
 
     # The delivery helper. Without it nothing arrives anywhere, and the only
     # symptom is that the key appears to do nothing.
@@ -1106,7 +1179,9 @@ def doctor() -> int:
 
         # The quietest failure in this program: dictation keeps working and it
         # is the wrong copy of it. Checked here because nothing else looks.
-        here = always._bundle_points_here()
+        # Only a checkout can be pointed at the wrong code. The app runs the
+        # copy inside itself, by construction.
+        here = bundled or always._bundle_points_here()
         ok("the app runs this copy of dictator", here,
            "" if here else
            "it is set up to run a different checkout, so nothing you change "

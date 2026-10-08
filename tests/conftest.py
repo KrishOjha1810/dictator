@@ -15,6 +15,12 @@ def _own_state_dir(tmp_path, monkeypatch):
     monkeypatch.setattr(core, "LOG_FILE", tmp_path / "log")
     monkeypatch.setattr(core, "HUD_FILE", tmp_path / "hud.json")
     monkeypatch.setattr(core, "ERRORS_FILE", tmp_path / "errors.jsonl")
+    # Every hold writes it, so every dictation test would otherwise tell the
+    # real app's menu bar what the test was doing.
+    monkeypatch.setattr(core, "STATUS_FILE", tmp_path / "status.json")
+    # And a test run started from inside the app must not look for helpers in
+    # the real bundle; the bundle mode tests set this themselves.
+    monkeypatch.setattr(core, "BUNDLE", None)
     for mod, attr, value in (
             ("history", "DB", tmp_path / "history.db"),
             ("learn", "PENDING", tmp_path / "pending-words.json"),

@@ -38,6 +38,42 @@ def state_dir(override: "str|None" = None) -> Path:
 STATE_DIR = state_dir()
 
 
+# Running from the downloadable app rather than from a checkout. The app sets
+# DICTATOR_BUNDLE to its own path before it starts Python, and that is the only
+# way this is ever decided: guessing from where this file sits would call a
+# checkout that happens to be named Dictator.app a bundle.
+#
+# What changes in bundle mode is where the compiled helpers come from. In a
+# checkout they are built on this Mac into STATE_DIR/bin. In the app they were
+# built and signed before the .dmg was made, and they live inside the bundle,
+# where nothing on the user's Mac may compile or re-sign them: either would
+# change the signature the user's Microphone and Accessibility grants are
+# pinned to.
+def bundle_root(value: "str|None" = None) -> "Path|None":
+    """The app bundle this runs from, or None for a checkout. A function for
+    the same reason state_dir is one: tested without reloading the module."""
+    where = value if value is not None else os.environ.get("DICTATOR_BUNDLE")
+    if not where or not where.strip():
+        return None
+    return Path(os.path.expanduser(where.strip()))
+
+
+BUNDLE = bundle_root()
+
+
+def helper_path(name: str) -> Path:
+    """Where the compiled helper called `name` is, for this kind of install.
+
+    One place, because every module that runs a helper used to spell out
+    STATE_DIR/bin/name for itself, and one copy left behind would keep
+    looking there after the app moved the helpers into the bundle. Read at
+    call time, so a test can redirect either STATE_DIR or BUNDLE and every
+    caller follows."""
+    if BUNDLE is not None:
+        return BUNDLE / "Contents" / "Helpers" / name
+    return STATE_DIR / "bin" / name
+
+
 def bundle_id(base: str = "com.dictator.dictation") -> str:
     """The identifier the app is signed with, which is per ACCOUNT, not global.
 
@@ -57,7 +93,21 @@ def bundle_id(base: str = "com.dictator.dictation") -> str:
 
     The suffix is a hash of the home directory, not the user's name, so no
     account name is written into a file. It is short because it ends up in the
-    designated requirement that people read in `dictator permissions`."""
+    designated requirement that people read in `dictator permissions`.
+
+    Inside the downloadable app the identifier is whatever the release was
+    signed with, read from the bundle's own Info.plist, because that is the
+    one macOS keyed the grants to. Computing a per-account one here would send
+    the permission checks looking for a row that cannot exist."""
+    if BUNDLE is not None and base == "com.dictator.dictation":
+        try:
+            import plistlib
+            info = plistlib.loads(
+                (BUNDLE / "Contents" / "Info.plist").read_bytes())
+            if info.get("CFBundleIdentifier"):
+                return str(info["CFBundleIdentifier"])
+        except Exception:
+            pass
     import hashlib
     who = hashlib.sha256(
         str(Path.home().resolve()).encode("utf-8")).hexdigest()[:8]
@@ -65,6 +115,7 @@ def bundle_id(base: str = "com.dictator.dictation") -> str:
 LOG_FILE = STATE_DIR / "log"
 HUD_FILE = STATE_DIR / "hud.json"
 ERRORS_FILE = STATE_DIR / "errors.jsonl"
+STATUS_FILE = STATE_DIR / "status.json"
 
 
 def log(msg: str) -> None:
@@ -107,6 +158,55 @@ def set_hud(phase: str, level: float = 0.0, text: str = "") -> None:
         os.replace(tmp, HUD_FILE)
     except Exception:
         pass
+
+
+# What the app's menu bar and windows show. The app never imports Python, so
+# this file is the whole of what it knows about the dictation loop: whether it
+# is ready, listening, transcribing, waiting for a permission or broken, and
+# how far each model has got. hud.json is the same idea for the orb, and stays
+# separate because it is rewritten several times a second while this changes
+# only when the state does.
+STATUS_STATES = ("ready", "listening", "transcribing", "downloading",
+                 "paused", "needs_permission", "error")
+
+
+def write_status(state: str, models: "dict|None" = None,
+                 error: "str|None" = None) -> bool:
+    """Publish the loop's state for the app to read. True if it was written.
+
+    Atomic for the same reason set_hud is: the app polls this and must never
+    read half a file. An unknown state is refused rather than written, because
+    the app maps each one to a word and an icon, and a state it has never
+    heard of would show as nothing at all. Never raises."""
+    if state not in STATUS_STATES:
+        log(f"status: refusing unknown state {state!r}")
+        return False
+    try:
+        STATE_DIR.mkdir(parents=True, exist_ok=True)
+        payload = json.dumps({
+            "state": state,
+            "models": models or {},
+            # One line: it goes into a menu item, and a traceback there is
+            # worse than nothing.
+            "error": (" ".join(str(error).split())[:200] or None)
+                     if error else None,
+            "updated": int(time.time()),
+        })
+        tmp = str(STATUS_FILE) + f".{os.getpid()}.tmp"
+        with open(tmp, "w") as f:
+            f.write(payload)
+        os.replace(tmp, STATUS_FILE)
+        return True
+    except Exception:
+        return False
+
+
+def read_status() -> dict:
+    """What write_status last wrote, or {} if nothing has."""
+    try:
+        return json.loads(STATUS_FILE.read_text())
+    except Exception:
+        return {}
 
 
 _last_surfaced: dict = {}

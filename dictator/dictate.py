@@ -23,8 +23,6 @@ Two rules make that safe rather than merely convenient:
     is text you can delete, not a message somebody received.
 """
 import os
-from pathlib import Path
-import shutil
 import subprocess
 import threading
 import time
@@ -55,6 +53,28 @@ TOO_BRIEF = 1.0
 # transcribing a click into nothing.
 MIN_MS = 250
 MAX_SECS = 120
+
+
+def publish(state: str, error: "str|None" = None) -> None:
+    """Tell the app what the loop is doing, through status.json.
+
+    Called on state changes only, never from the level pump or the
+    still-working loop, so it costs a few stat calls and one small write per
+    hold. "ready" turns into "downloading" while a model English needs is
+    still arriving, because a ready that cannot transcribe is not ready; the
+    Hinglish model arriving in the background leaves it ready, since English
+    works without it. Never raises."""
+    try:
+        models = stt.model_status()
+    except Exception:
+        models = {}
+    if state == "ready":
+        try:
+            if any(stt.arriving(m[0]) for m in stt.missing(essential_only=True)):
+                state = "downloading"
+        except Exception:
+            pass
+    core.write_status(state, models=models, error=error)
 
 
 def _engine_name(engine: str) -> str:
@@ -88,6 +108,15 @@ class Dictation:
         self._n = 0
         self.app = ""               # what was in front when you pressed
         self.started = 0.0
+        # Set when the listener says it cannot see the keyboard. Kept, so
+        # that the end of a hold does not report "ready" over the top of it.
+        self.blocked = ""
+
+    def _publish(self, state: str) -> None:
+        if state == "ready" and self.blocked:
+            publish("needs_permission", self.blocked)
+        else:
+            publish(state)
 
     # ---- the two edges ----------------------------------------------------
 
@@ -113,6 +142,7 @@ class Dictation:
         # thing left is the work that needs the audio. See warmup.py.
         warmup.models()
         core.set_hud("hearing", 0.0)
+        self._publish("listening")
         # An indicator that does not move tells you the mic is open and nothing
         # else. Moving with your voice is what tells you it is hearing YOU, and
         # it is the difference between a light and a meter: a stuck light and a
@@ -170,8 +200,10 @@ class Dictation:
             pass
         if held_ms < MIN_MS:
             core.set_hud("listening", 0.0)
+            self._publish("ready")
             return
         core.set_hud("thinking", 0.0)
+        self._publish("transcribing")
         threading.Thread(target=self._finish,
                          args=(self.wav, self.app, held_ms / 1000.0, cut),
                          daemon=True).start()
@@ -185,10 +217,24 @@ class Dictation:
             except Exception:
                 pass
         core.set_hud("listening", 0.0)
+        self._publish("ready")
 
     # ---- off the key thread -----------------------------------------------
 
     def _finish(self, wav, app, secs: float = 0.0, cut: str = ""):
+        """One hold, delivered, and then the app told it is over. The work
+        is in _deliver; this only makes sure "transcribing" cannot outlive
+        it, whichever of its many returns it leaves by."""
+        try:
+            self._deliver(wav, app, secs, cut)
+        finally:
+            # Unless another hold has started meanwhile: that one is
+            # listening, and saying ready over it would be the app showing a
+            # closed microphone while it is open.
+            if not self.proc:
+                self._publish("ready")
+
+    def _deliver(self, wav, app, secs: float = 0.0, cut: str = ""):
         """One hold, from the recording to the words being on screen.
 
         The pipeline itself lives in api.py and this calls it. It used to live
@@ -340,24 +386,14 @@ def _paste_where_you_are(text: str, send: bool = False) -> bool:
     return True
 
 
-_PASTE_BIN = core.STATE_DIR / "bin" / "dictator-paste"
-_PASTE_SRC = Path(__file__).resolve().parent.parent / "native" / "paste.swift"
-
-
 def _paste_helper() -> str:
-    """Build it once, then reuse."""
-    try:
-        if _PASTE_BIN.exists() and _PASTE_BIN.stat().st_mtime >= _PASTE_SRC.stat().st_mtime:
-            return str(_PASTE_BIN)
-        if not _PASTE_SRC.exists() or not shutil.which("swiftc"):
-            return ""
-        _PASTE_BIN.parent.mkdir(parents=True, exist_ok=True)
-        subprocess.run(["swiftc", "-O", str(_PASTE_SRC), "-o", str(_PASTE_BIN)],
-                       check=True, capture_output=True, timeout=240)
-        return str(_PASTE_BIN)
-    except Exception as e:
-        core.log(f"dictate: could not build the paste helper: {e}")
-        return ""
+    """Build it once, then reuse.
+
+    The same helper paste.py delivers with, found and built the same way. This
+    used to carry its own copy of the swiftc call, which would have gone on
+    compiling into ~/.dictator inside the app, where the helper is prebuilt
+    and nothing may be compiled."""
+    return paste.helper()
 
 
 def run(key: str = "fn", send: bool = False, debug: bool = True) -> int:
@@ -378,6 +414,7 @@ def run(key: str = "fn", send: bool = False, debug: bool = True) -> int:
     # and is not, or the reverse.
     p = hotkey.listen(key, min_hold_ms=0, max_session_ms=int(MAX_SECS * 1000))
     if not p:
+        publish("error", "Could not start the key listener.")
         print("Could not start the key listener. See `dictator log`.")
         print("If this is the first run, grant Accessibility and try again:")
         print("  System Settings > Privacy & Security > Accessibility")
@@ -394,6 +431,13 @@ def run(key: str = "fn", send: bool = False, debug: bool = True) -> int:
             for ln in iter(p.stderr.readline, ""):
                 if ln.strip():
                     print(f"  {ln.rstrip()}", flush=True)
+                # The two lines that mean no key press will ever arrive.
+                # Everything else it says is advice around them.
+                if ("trusted = false" in ln
+                        or "could not create an event tap" in ln):
+                    d.blocked = ("Dictator needs Accessibility to see the "
+                                 "key. Allow it in Privacy & Security.")
+                    d._publish("ready")
         except Exception:
             pass
     threading.Thread(target=_drain, daemon=True).start()
@@ -429,6 +473,7 @@ def run(key: str = "fn", send: bool = False, debug: bool = True) -> int:
             r, _, _ = select.select([p.stdout], [], [], 0.25)
             if not r:
                 if p.poll() is not None:
+                    publish("error", "The key listener exited.")
                     print("The key listener exited.")
                     return 1
                 continue
@@ -440,6 +485,7 @@ def run(key: str = "fn", send: bool = False, debug: bool = True) -> int:
                 continue
             if parts[0] == "READY":
                 armed = True
+                d._publish("ready")
                 note(f"listening for {key}. Press it and I will say so.")
             elif parts[0] == "DOWN":
                 note("heard the key go down, recording...")
@@ -485,6 +531,11 @@ def run(key: str = "fn", send: bool = False, debug: bool = True) -> int:
             p.wait(timeout=2)
         except Exception:
             pass
+        # Stopped on purpose, or the listener said goodbye. Either way nothing
+        # is listening now, and leaving "ready" in the file would have the app
+        # promise a key that does nothing. An error written above stays.
+        if core.read_status().get("state") != "error":
+            publish("paused")
         try:
             orbnative.hide()
         except Exception:

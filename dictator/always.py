@@ -21,7 +21,12 @@ PLIST = Path.home() / "Library" / "LaunchAgents" / f"{LABEL}.plist"
 
 
 REPO = Path(__file__).resolve().parent.parent
-APP = Path.home() / "Applications" / "Dictator.app"
+# In a checkout the app is built here, on this Mac, from native/app. Inside the
+# downloadable app it is the app: the login item points at the bundle the user
+# dragged into Applications, and nothing is built under their home directory.
+# REPO is then Contents/Resources, so the CLI below is the one the app ships.
+APP = (core.BUNDLE if core.BUNDLE is not None
+       else Path.home() / "Applications" / "Dictator.app")
 
 
 def _cli() -> str:
@@ -90,7 +95,17 @@ def build_app() -> str:
     granted per application and a login item started by launchd is not the
     terminal they granted. With it, there is one entry called "Dictator",
     it asks for itself on first run, and there is nothing to set
-    up. That is the entire reason this exists."""
+    up. That is the entire reason this exists.
+
+    In bundle mode there is nothing to build: the app was built, signed and
+    handed over in the .dmg, and rebuilding it here would cost the user the
+    permissions they granted to that signature. It is returned as it is."""
+    if core.BUNDLE is not None:
+        exe = core.BUNDLE / "Contents" / "MacOS" / "Dictator"
+        if exe.exists():
+            return str(core.BUNDLE)
+        core.log(f"dictation app: no executable at {exe}")
+        return ""
     src = REPO / "native" / "app"
     if not (src / "main.swift").exists():
         return ""
@@ -174,6 +189,8 @@ def _sign(app: Path) -> None:
     certificate makes the identity the certificate instead, which rebuilding
     does not touch. See signing.py."""
     from . import signing
+    if not signing.local():
+        return
     who = signing.identity()
     args = ["codesign", "--force", "-s", who or "-", str(app)]
     r = subprocess.run(args, capture_output=True, text=True, timeout=120)
@@ -223,7 +240,7 @@ def on(key: str = "fn") -> str:
     # asked once, by name, with a reason, and never has to find a checkbox.
     app = build_app()
     if app:
-        args = [str(APP / "Contents" / "MacOS" / "Dictator")]
+        args = [str(Path(app) / "Contents" / "MacOS" / "Dictator")]
     else:
         args = ["/usr/bin/env", "python3", _cli(), "dictate", key]
     core.STATE_DIR.mkdir(parents=True, exist_ok=True)

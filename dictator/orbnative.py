@@ -14,7 +14,7 @@ from pathlib import Path
 from . import core, swiftbuild
 
 SRC = Path(__file__).resolve().parent.parent / "native" / "orb.swift"
-BIN = core.STATE_DIR / "bin" / "dictator-orb"
+BIN = core.helper_path("dictator-orb")
 PID = core.STATE_DIR / "orb.pid"
 
 

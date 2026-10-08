@@ -52,7 +52,12 @@ PLIST = REPO / "native" / "meetingapp" / "Info.plist"
 # grants that com.dictator.dictation already holds. Adding this to the
 # dictation bundle would have meant re-signing that bundle, and a rebuild of it
 # has already cost this user his permissions once.
-APP = Path.home() / "Applications" / "Dictator Meeting.app"
+#
+# Inside the downloadable app it is one of the helpers the app ships with,
+# built and signed before the .dmg was made, so it is used where it is and
+# never rebuilt or re-signed here. See core.helper_path.
+APP = (core.helper_path("Dictator Meeting.app") if core.BUNDLE is not None
+       else Path.home() / "Applications" / "Dictator Meeting.app")
 EXE = APP / "Contents" / "MacOS" / "DictatorMeeting"
 
 MEETINGS = core.STATE_DIR / "meetings"
@@ -80,6 +85,9 @@ def build_app(force: bool = False) -> str:
     permission every single time they started a meeting. `always.build_app`
     learned this the expensive way and this is the same check for the same
     reason."""
+    if core.BUNDLE is not None:
+        from . import swiftbuild
+        return str(APP) if swiftbuild.prebuilt(EXE, "meeting") else ""
     if not SRC.exists() or not PLIST.exists():
         return ""
     if not shutil.which("swiftc"):
@@ -121,6 +129,8 @@ def _sign() -> None:
     """Same local certificate as the dictation app, so this bundle's own
     permissions also survive a rebuild. See signing.py."""
     from . import signing
+    if not signing.local():
+        return
     who = signing.identity()
     r = subprocess.run(["codesign", "--force", "-s", who or "-", str(APP)],
                        capture_output=True, text=True, timeout=120)

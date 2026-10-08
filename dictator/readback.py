@@ -16,7 +16,7 @@ from pathlib import Path
 from . import core, swiftbuild
 
 SRC = Path(__file__).resolve().parent.parent / "native" / "readback.swift"
-BIN = core.STATE_DIR / "bin" / "dictator-readback"
+BIN = core.helper_path("dictator-readback")
 
 
 def build(force: bool = False) -> str:

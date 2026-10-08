@@ -64,6 +64,30 @@ def arriving(name: str) -> bool:
     """Is this one being downloaded right now?"""
     return (MODEL_DIR / (name + ".part")).exists()
 
+
+def model_status() -> dict:
+    """{filename: {"have": bool, "progress": 0.0 to 1.0}} for every shipped
+    model, for status.json.
+
+    Progress is the size of the .part file against the size in SHIPPED, which
+    is in mebibytes and rounded, so it is held just under 1.0 until the file
+    is actually in place: a bar that reads full while the model is still
+    missing is a bar that lies. Three stat calls, so it is cheap enough to
+    run on every state change."""
+    out = {}
+    for name, mb, _what, _essential in SHIPPED:
+        if (MODEL_DIR / name).exists():
+            out[name] = {"have": True, "progress": 1.0}
+            continue
+        got = 0.0
+        try:
+            size = (MODEL_DIR / (name + ".part")).stat().st_size
+            got = min(0.99, size / float(mb * 1024 * 1024))
+        except Exception:
+            pass
+        out[name] = {"have": False, "progress": round(got, 3)}
+    return out
+
 # Which engine answered the last transcription. Recorded rather than
 # inferred, because the routing has changed more than once and a
 # history full of guesses about it would be worse than no history.
@@ -227,6 +251,15 @@ _BREW_BINS = ("/opt/homebrew/bin", "/usr/local/bin")
 
 
 def _find(name: str) -> str:
+    # The app's own copy first. Inside the downloadable app whisper and
+    # parakeet ship in Contents/Helpers, built from the pinned source, and a
+    # Homebrew install on the same Mac is a different version that the app
+    # was never tested against. Falling through to it is still better than
+    # nothing, so the search below stays.
+    if core.BUNDLE is not None:
+        own = core.helper_path(name)
+        if own.exists() and os.access(own, os.X_OK):
+            return str(own)
     p = shutil.which(name)
     if p:
         return p
