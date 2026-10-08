@@ -1,0 +1,183 @@
+# Build Dictator.app and its .dmg on every change, and publish the .dmg as a
+# GitHub Release when a v* tag is pushed.
+#
+# Three jobs run side by side (the Python tests, the native helpers with
+# whisper.cpp, the app executable) and one job after them assembles, signs and
+# packages, with tools/build_dmg.sh doing the same thing it does on the
+# maintainer's Mac. The bundle has to come out the same either way, so CI
+# calls the scripts and keeps no build logic of its own.
+#
+# Signing: with the repository secrets DICTATOR_P12_BASE64 and
+# DICTATOR_P12_PASSWORD set, the one self-signed release certificate is
+# imported into a throwaway keychain and used. Without them the app is signed
+# ad-hoc, which is fine for checking the build and wrong for a release: a new
+# identity per build means every user's Microphone and Accessibility grants
+# stop applying on update. So a tag without the secrets fails rather than
+# publishing that.
+name: release
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+  workflow_dispatch:
+
+env:
+  # whisper.cpp tag the native build compiles. The cache key follows it, so
+  # bumping it here is all a rebuild takes.
+  WHISPER_TAG: v1.9.4
+
+jobs:
+  tests:
+    runs-on: macos-15          # Apple silicon
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - run: python -m pip install pytest jellyfish==1.2.1
+      - run: python -m pytest -q tests
+
+  native:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/cache@v6
+        with:
+          path: build/cache/whisper.cpp-${{ env.WHISPER_TAG }}
+          key: whisper-${{ env.WHISPER_TAG }}-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('tools/build_native.sh') }}
+          restore-keys: whisper-${{ env.WHISPER_TAG }}-${{ runner.os }}-${{ runner.arch }}-
+      - run: tools/build_native.sh build/native
+      # Artifacts drop the executable bit and symlinks. A tarball keeps both.
+      - run: tar -czf native.tgz -C build native
+      - uses: actions/upload-artifact@v7
+        with:
+          name: native
+          path: native.tgz
+          retention-days: 3
+
+  app:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v7
+      - run: tools/build_app.sh build/appbin
+      - run: tar -czf appbin.tgz -C build appbin
+      - uses: actions/upload-artifact@v7
+        with:
+          name: appbin
+          path: appbin.tgz
+          retention-days: 3
+
+  dmg:
+    needs: [tests, native, app]
+    runs-on: macos-15
+    permissions:
+      contents: write          # to create the release on a tag
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0       # the build number is the commit count
+
+      - name: Version
+        id: v
+        run: |
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+          else
+            echo "version=0.0.0-${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
+          fi
+          # The Python runtime is pinned inside build_dmg.sh; key the cache on
+          # that pin so a new pin downloads once and an old one never again.
+          rel=$(sed -n 's/^PY_RELEASE="\(.*\)"/\1/p' tools/build_dmg.sh)
+          ver=$(sed -n 's/^PY_VERSION="\(.*\)"/\1/p' tools/build_dmg.sh)
+          echo "python=$ver-$rel" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/cache@v6
+        with:
+          path: build/cache/cpython-*.tar.gz
+          key: python-${{ steps.v.outputs.python }}
+
+      - uses: actions/download-artifact@v8
+        with:
+          path: artifacts
+      - run: |
+          mkdir -p build
+          tar -xzf artifacts/native/native.tgz -C build
+          tar -xzf artifacts/appbin/appbin.tgz -C build
+
+      - name: Import the release certificate
+        env:
+          P12: ${{ secrets.DICTATOR_P12_BASE64 }}
+          P12_PASSWORD: ${{ secrets.DICTATOR_P12_PASSWORD }}
+        run: |
+          if [ -z "$P12" ]; then
+            if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+              echo "::error::No release certificate in secrets; refusing to publish an ad-hoc signed release"
+              exit 1
+            fi
+            echo "No release certificate in secrets, signing ad-hoc"
+            echo "DICTATOR_SIGN_ID=-" >> "$GITHUB_ENV"
+            exit 0
+          fi
+          KC="$RUNNER_TEMP/release.keychain-db"
+          KC_PASS="$(uuidgen)"
+          echo "$P12" | base64 --decode > "$RUNNER_TEMP/release.p12"
+          security create-keychain -p "$KC_PASS" "$KC"
+          security set-keychain-settings -lut 3600 "$KC"
+          security unlock-keychain -p "$KC_PASS" "$KC"
+          security import "$RUNNER_TEMP/release.p12" -k "$KC" -P "$P12_PASSWORD" \
+            -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple: -s -k "$KC_PASS" "$KC" >/dev/null
+          security list-keychains -d user -s "$KC" $(security list-keychains -d user | tr -d '"')
+          rm -f "$RUNNER_TEMP/release.p12"
+          # A self-signed certificate is not trusted by the runner, so it does
+          # not show under `find-identity -v`. codesign still signs with it
+          # when named by its hash, and the hash is the same on every release.
+          ID=$(security find-identity -p codesigning "$KC" | awk '/\)/{print $2; exit}')
+          [ -n "$ID" ] || { echo "::error::No signing identity in the certificate"; exit 1; }
+          echo "DICTATOR_SIGN_ID=$ID" >> "$GITHUB_ENV"
+          echo "KC=$KC" >> "$GITHUB_ENV"
+
+      - name: Assemble, sign, package
+        env:
+          DICTATOR_NATIVE_DIR: build/native
+          DICTATOR_APP_DIR: build/appbin
+        run: |
+          export DICTATOR_NATIVE_DIR="$PWD/$DICTATOR_NATIVE_DIR" DICTATOR_APP_DIR="$PWD/$DICTATOR_APP_DIR"
+          tools/build_dmg.sh "${{ steps.v.outputs.version }}"
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: Dictator-${{ steps.v.outputs.version }}
+          path: |
+            build/Dictator-*.dmg
+            build/Dictator-*.dmg.sha256
+
+      - name: Release notes
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          {
+            echo "Dictator ${{ steps.v.outputs.version }} for Apple silicon, macOS 14 or newer."
+            echo
+            echo "macOS blocks it on first open, because it is not paid into Apple's"
+            echo "developer programme. Open System Settings, Privacy & Security, and"
+            echo "press Open Anyway, once."
+            echo
+            echo '```'
+            cat build/Dictator-*.dmg.sha256
+            echo '```'
+          } > build/notes.md
+
+      - uses: softprops/action-gh-release@v3
+        if: startsWith(github.ref, 'refs/tags/v')
+        with:
+          files: |
+            build/Dictator-*.dmg
+            build/Dictator-*.dmg.sha256
+          body_path: build/notes.md
+
+      - name: Remove the keychain
+        if: always()
+        run: |
+          if [ -n "${KC:-}" ]; then security delete-keychain "$KC" || true; fi
