@@ -22,16 +22,16 @@ Branch: `feat/dmg-app`. Nothing merges to `main` until M1 passes its tests.
 ## Contracts (before the lanes start)
 
 - [x] Bundle layout and helper names fixed (`implementation.md`, "What is
-      inside the .dmg") (2026-10-08, `faa3a7b`; the meeting
+      inside the .dmg") (2026-10-08, `7737ede`; the meeting
       helper keeps the repo's name, `Dictator Meeting.app`)
-- [x] Environment: `DICTATOR_BUNDLE`, `PYTHONPATH` (2026-10-08, `faa3a7b`;
+- [x] Environment: `DICTATOR_BUNDLE`, `PYTHONPATH` (2026-10-08, `7737ede`;
       bundled Python imports dictator and jellyfish with only these set)
 - [x] `~/.dictator/status.json` fields: state, model progress, last error
-      (2026-10-08, `77f5151`, tests only; not yet seen written by a running
+      (2026-10-08, `a9c9b37`, tests only; not yet seen written by a running
       app). Each model now also carries `"essential": true|false`, added
       after review so onboarding waits only for the English models; an
       additive change, and the app falls back to the file name without it
-- [x] `--json` output for the commands the UI reads (2026-10-08, `77f5151`;
+- [x] `--json` output for the commands the UI reads (2026-10-08, `a9c9b37`;
       `stats --json` run from the bundle, the others by test)
 
 ---
@@ -41,23 +41,23 @@ Branch: `feat/dmg-app`. Nothing merges to `main` until M1 passes its tests.
 ### Lane A: Runtime
 
 - [x] Fetch standalone Python (pinned version, SHA256 checked) (2026-10-08,
-      `47d2ea8`; CPython 3.12.14, python-build-standalone 20260924)
+      `4518884`; CPython 3.12.14, python-build-standalone 20260924)
 - [x] jellyfish installed into the bundle's `site-packages` (2026-10-08,
-      `47d2ea8`)
+      `4518884`)
 - [x] `core.BUNDLE`, and helper paths point into `Contents/Helpers`
-      (2026-10-08, `77f5151`; doctor from the bundle lists all nine helpers as
+      (2026-10-08, `a9c9b37`; doctor from the bundle lists all nine helpers as
       "app bundle")
-- [x] `swiftbuild.py`: never compiles in bundle mode (2026-10-08, `77f5151`; a
+- [x] `swiftbuild.py`: never compiles in bundle mode (2026-10-08, `a9c9b37`; a
       blocking swiftc shim was never reached)
 - [x] `stt.py`: finds bundled whisper and parakeet first (2026-10-08,
-      `77f5151`)
+      `a9c9b37`)
 - [ ] `always.py`: login item points at `/Applications/Dictator.app`
       (2026-10-08: written and tested against a fake bundle, never installed)
-- [x] `signing.py`: skips local signing in bundle mode (2026-10-08, `77f5151`,
+- [x] `signing.py`: skips local signing in bundle mode (2026-10-08, `a9c9b37`,
       tests)
-- [x] `doctor` reports "app bundle" or "repo install" (2026-10-08, `77f5151`)
+- [x] `doctor` reports "app bundle" or "repo install" (2026-10-08, `a9c9b37`)
 - [x] Tests for bundle mode pass, existing tests still pass (2026-10-08,
-      `faa3a7b`; 665 passed, 17 failed, 6 skipped, the 17 the same jellyfish
+      `7737ede`; 665 passed, 17 failed, 6 skipped, the 17 the same jellyfish
       and test_standalone failures as the baseline. After the review fixes:
       673 passed, 16 failed, 6 skipped; the 16 are the jellyfish ones, the
       test_standalone failure is fixed)
@@ -65,16 +65,16 @@ Branch: `feat/dmg-app`. Nothing merges to `main` until M1 passes its tests.
 ### Lane B: Native
 
 - [x] Swift helpers built ahead of time: hotkey, rec, paste, orb, readback
-      (2026-10-08, `3782a17`)
-- [x] Meeting.app built ahead of time (2026-10-08, `3782a17`; as `Dictator
+      (2026-10-08, `11ebfc3`)
+- [x] Meeting.app built ahead of time (2026-10-08, `11ebfc3`; as `Dictator
       Meeting.app`, identifier `com.dictator.meeting`, not per account)
 - [x] whisper.cpp built from source, pinned tag, Metal on (2026-10-08,
-      `3782a17`; v1.9.1, commit checked; Metal transcription seen by lane B,
+      `11ebfc3`; v1.9.1, commit checked; Metal transcription seen by lane B,
       not rerun here)
-- [x] parakeet-cli built from the same tree (2026-10-08, `3782a17`; `--help`
+- [x] parakeet-cli built from the same tree (2026-10-08, `11ebfc3`; `--help`
       only, no parakeet transcription yet)
 - [x] Static ggml, or dylibs in `Frameworks/` with `@rpath` fixed (2026-10-08,
-      `3782a17`; static, `Frameworks/` empty, `otool -L` clean on all 14
+      `11ebfc3`; static, `Frameworks/` empty, `otool -L` clean on all 14
       Mach-O files)
 
 ### Lane D: Pipeline
@@ -83,12 +83,12 @@ Branch: `feat/dmg-app`. Nothing merges to `main` until M1 passes its tests.
       (2026-10-08: runs end to end in 59 s on this tree, with the Python
       tarball and whisper.cpp clone cached; not yet from a clean checkout)
 - [x] Signs inside out, `codesign --verify --deep --strict` passes
-      (2026-10-08, `faa3a7b`; still valid after running the bundled CLI)
+      (2026-10-08, `7737ede`; still valid after running the bundled CLI)
 - [x] Produces `Dictator-<version>.dmg` with an Applications link (2026-10-08,
-      `faa3a7b`; `hdiutil verify` passes, mounted read-only, app inside
+      `7737ede`; `hdiutil verify` passes, mounted read-only, app inside
       verifies)
-- [x] SHA256 printed for the release notes (2026-10-08, `faa3a7b`)
-- [x] Measured app size and .dmg size recorded below (2026-10-08, `faa3a7b`)
+- [x] SHA256 printed for the release notes (2026-10-08, `7737ede`)
+- [x] Measured app size and .dmg size recorded below (2026-10-08, `7737ede`)
 
 ### Lane E: Verification
 
@@ -112,7 +112,7 @@ Branch: `feat/dmg-app`. Nothing merges to `main` until M1 passes its tests.
 
 ### Lane C: UI
 
-Code for everything below except the bar is in `ddebfb6` and compiles with
+Code for everything below except the bar is in `75662ed` and compiles with
 no warnings. None of it is ticked: the app has not been launched, even with
 `DICTATOR_FAKE=1`, so no window has been seen.
 
@@ -149,8 +149,8 @@ no warnings. None of it is ticked: the app has not been launched, even with
 
 | What | Value | Date |
 |---|---|---|
-| App installed size | 50.9 MB (python 37.3, helpers 9.9, dictator 1.6, site-packages 0.8, Frameworks 0) | 2026-10-08, `faa3a7b` |
-| .dmg size | 24.6 MB (25,804,430 bytes, UDZO zlib-9) | 2026-10-08, `faa3a7b` |
+| App installed size | 50.9 MB (python 37.3, helpers 9.9, dictator 1.6, site-packages 0.8, Frameworks 0) | 2026-10-08, `7737ede` |
+| .dmg size | 24.6 MB (25,804,430 bytes, UDZO zlib-9) | 2026-10-08, `7737ede` |
 | App and .dmg after the review fixes | app 51.0 MB (python 37.3, helpers 9.9, dictator 1.6, site-packages 0.8); .dmg 24.9 MB (26,094,341 bytes) | 2026-10-08, review fixes |
 | First launch to first sentence | — | |
 
