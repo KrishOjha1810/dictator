@@ -27,7 +27,7 @@ import subprocess
 import threading
 import time
 
-from . import core, hotkey, mac, orbnative, paste, stt, warmup
+from . import core, fetch, hotkey, mac, orbnative, paste, stt, warmup
 from .api import Dictator
 
 # When a hold that produced nothing is worth telling the user about.
@@ -539,6 +539,10 @@ def run(key: str = "fn", send: bool = False, debug: bool = True) -> int:
     # Models that are still arriving get their progress written as it moves,
     # not only when a key is pressed.
     stop_watch = threading.Event()
+    # The app has no installer to fetch them, so the loop does, English
+    # first. A repo install got them from install.sh and is left alone.
+    if core.BUNDLE:
+        fetch.in_background()
     if stt.missing():
         threading.Thread(target=_watch_models, args=(stop_watch,),
                          daemon=True).start()

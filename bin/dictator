@@ -44,6 +44,7 @@ Teaching it your words:
   dictator unlearn WORD  stop fixing it
   dictator history [n]   what you have said
   dictator stats         words, words a minute, and your streak
+  dictator models        which speech models are here; `models fetch` downloads the rest
   dictator find WORDS    search everything you have ever dictated
   dictator recap [today|week|N]   what you worked on, summarised locally
   dictator forget "words"  erase everything you said containing them
@@ -482,6 +483,21 @@ def main(argv) -> int:
         print(f"  {got['wpm']} words a minute" if got["wpm"] is not None
               else "  words a minute: not known yet")
         print(f"  {got['streak_days']} day streak")
+        return 0
+
+    if cmd == "models":
+        from dictator import fetch, stt
+        if rest[:1] == ["fetch"]:
+            got = fetch.fetch_missing()
+            left = [m[0] for m in stt.missing()]
+            print(f"  downloaded: {', '.join(got) or 'nothing'}")
+            if left:
+                print(f"  still missing: {', '.join(left)}")
+            return 1 if left else 0
+        for name, m in stt.model_status().items():
+            state = "here" if m["have"] else (
+                f"downloading {m['progress']:.0%}" if m["progress"] else "missing")
+            print(f"  {name:40s} {state}")
         return 0
 
     if cmd == "recap":
