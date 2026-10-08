@@ -184,11 +184,15 @@ jobs:
             cat build/Dictator-*.dmg.sha256
             echo '```'
           } > build/notes.md
+          # The same file under a name that never changes, so the README can
+          # link releases/latest/download/Dictator.dmg and stay right forever.
+          cp build/Dictator-*.dmg build/Dictator.dmg
 
       - uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64  # v3
         if: startsWith(github.ref, 'refs/tags/v')
         with:
           files: |
+            build/Dictator.dmg
             build/Dictator-*.dmg
             build/Dictator-*.dmg.sha256
           body_path: build/notes.md

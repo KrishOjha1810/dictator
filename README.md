@@ -34,6 +34,28 @@ is the thing being worked on.
 
 ## Install
 
+### Download the app
+
+**[Download Dictator for Mac](https://github.com/KrishOjha1810/dictator/releases/latest/download/Dictator.dmg)**
+(Apple silicon, macOS 14 or newer, about 25 MB). Every version, with its
+SHA256, is on the [releases page](https://github.com/KrishOjha1810/dictator/releases).
+
+1. Open `Dictator.dmg` and drag Dictator into Applications.
+2. Open Dictator. macOS stops it, because Dictator is free and not paid into
+   Apple's developer programme. Press **Done**, not Move to Trash.
+3. Open **System Settings → Privacy & Security**, scroll down, and press
+   **Open Anyway** next to Dictator. Confirm. This happens once.
+4. Allow the microphone and Accessibility when it asks.
+
+This is a preview. The app is new and has had less use than the install below,
+which is still the way to run it if anything here goes wrong. It does not yet
+download the speech models itself: it uses the ones in `~/.dictator/models`,
+which the install below puts there. Why the warning
+exists and what it does and does not mean is in
+[`docs/platforms.md`](docs/platforms.md).
+
+### Install from source
+
 ```bash
 curl -fsSL https://raw.githubusercontent.com/KrishOjha1810/dictator/main/get.sh | bash
 ```
