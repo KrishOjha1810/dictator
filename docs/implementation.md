@@ -167,7 +167,7 @@ leaves the Mac), **no team sharing**, **no cloud sync**.
 
 ### Onboarding, six cards
 
-One window, 560 x 440, one card at a time. Continue only enables when the
+One window, 640 x 480, light, one card at a time. Continue only enables when the
 step is actually done: the app checks the real state, not whether a button
 was clicked, the same way `doctor` does.
 
@@ -191,9 +191,9 @@ was clicked, the same way `doctor` does.
 | 1 Welcome | "Hold a key, talk, the words land at your cursor. Nothing leaves this Mac." | Continue | — |
 | 2 Microphone | Button that triggers the system prompt | `AVCaptureDevice` status is authorized | `askForMicrophone` in `main.swift` |
 | 3 Accessibility | Button that triggers the system prompt and opens the right pane | `AXIsProcessTrusted()` is true | `askForAccessibility`, `tcc.py` |
-| 4 Your key | fn, right ⌘, right ⌥, left ⌘, with "press it now" | The key press is seen | `KEYS` in `bin/dictator`, `hotkey.py` |
-| 5 Languages | English ready, Hinglish downloading with a progress bar that continues in the background | `stt.missing(essential_only=True)` is empty | `install.sh` step 4 |
-| 6 Try it | "Hold fn and say: *yaar ye test kar ke dekho*." A text box on the card receives it | Text appears in the box | `dictate` |
+| 4 Your key | fn, right ⌘, right ⌥, left ⌘, with "press it now" | The key press is seen. The choice is applied, and the loop restarted, once, on Continue | `KEYS` in `bin/dictator`, `hotkey.py` |
+| 5 Languages | "Do you speak Hinglish?" Yes sets `dictator language hinglish`, so the English-only engine is skipped. Under it, English ready, Hinglish downloading with a progress bar that continues in the background | `stt.missing(essential_only=True)` is empty | `language`, `install.sh` step 4 |
+| 6 Try it | "Hold fn and say: *yaar ye test kar ke dekho*." The card shows "Listening…", then the text and its time-to-paste | `last.json` is newer than the card | `dictate`, `core.write_last` |
 
 If card 3 hits the stale-entry trap described in the README (switch on, app
 not trusted), it says so in one sentence and offers the fix `doctor` already
@@ -227,7 +227,7 @@ Position is a setting: under the notch (today's place) or bottom centre
 │ ▸ Home       │  ┌───────────┬───────────┬───────────┐       │
 │   Words      │  │ 2,340     │ 142 wpm   │ 6 days    │       │
 │   Snippets   │  │ words     │ average   │ streak    │       │
-│   Apps       │  └───────────┴───────────┴───────────┘       │
+│   Style      │  └───────────┴───────────┴───────────┘       │
 │   Review     │                                              │
 │   Meetings   │  Today's recap                               │
 │              │  Fixed the loop in the parser, replied to…   │
@@ -246,7 +246,7 @@ Position is a setting: under the notch (today's place) or bottom centre
 | Home | **Home** | Stats card, today's recap, history by day, search | `history.py`, `search.py`, `recap.py` |
 | Dictionary | **Words** | Names and terms, learned from corrections or added by hand | `learn`, `unlearn`, `words`, `vocab.py`, `learn.py` |
 | Snippets | **Snippets** | Say a short phrase, get a longer text | `snippet`, `snippets.py` |
-| Style | **Apps** | Rules per application, applied locally, never by a cloud model | `profiles.py`, `format`, `shape.py` |
+| Style | **Style** | Rules everywhere and per application, applied locally, never by a cloud model | `profiles.py`, `format`, `shape.py` |
 | Scratchpad | **Review** | What it may have got wrong today, and was it right | `review`, `truth`, `review.py` |
 | — | **Meetings** | Meeting capture and its notes | `meeting.py`, `capture` |
 | Settings | **Settings** | Below | |

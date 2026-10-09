@@ -241,11 +241,12 @@ seen and where, then the fix. Done in this order.
       dictation, and no error anywhere. Fixed in `main.swift`.
 - [x] Windows opened on another Space behind a full-screen app. Fixed with
       `collectionBehavior` in `MenuBar.swift`.
-- [ ] "Try it" card stays empty: it waits for the text to be pasted into its
+- [x] "Try it" card stays empty: it waits for the text to be pasted into its
       own box, but the paste went to "the front app" with nothing focused
       (history: app empty, saw "gone"). Fix: the loop writes the last result
-      into status.json and the card shows it directly.
-- [ ] Hinglish model downloaded five times: each key press on the "Your key"
+      into last.json and the card shows it directly, with "Listening…" until
+      a hold newer than the card arrives, and the time-to-paste.
+- [x] Hinglish model downloaded five times: each key press on the "Your key"
       card restarted the dictation loop, which killed the download thread
       (log: five "downloading ggml-large-v3-turbo.bin" in three seconds).
       Fix: one key change on Continue only, and downloads that resume.
@@ -255,14 +256,15 @@ seen and where, then the fix. Done in this order.
 - [ ] Repeated sentence pasted four times ("Yar ye test karke dekho" x4):
       the loop guard noticed and still pasted it. Fix: collapse repeats
       before pasting.
-- [ ] No Dock icon, so no normal way to quit or force quit. Fix: a regular
-      app with a Dock icon and an app menu with Quit, an app icon, and a
-      "Show in Dock" setting.
-- [ ] Opening the copy inside the .dmg: no warning, killed by Gatekeeper
+- [x] No Dock icon, so no normal way to quit or force quit. Fix: a regular
+      app with a Dock icon and an app menu with Quit, an app icon
+      (`tools/make_icon.swift`), and a "Show in Dock" setting. Closing the
+      windows leaves it running.
+- [x] Opening the copy inside the .dmg: no warning, killed by Gatekeeper
       after 8 seconds (log: "Security policy would not allow process").
       Fix: the app notices it runs from a disk image or a translocated path
       and offers to move itself to Applications; README says so too.
-- [ ] Fake mode reads sample data from the maintainer's Desktop path built
+- [x] Fake mode reads sample data from the maintainer's Desktop path built
       into the binary, so macOS asked for Desktop access. Fix: fixtures ship
       inside the app; no source path in a release build.
 
@@ -289,14 +291,17 @@ seen and where, then the fix. Done in this order.
 
 ### Redesign: light, Wispr Flow as the reference
 
-- [ ] Light theme throughout: onboarding, Hub, Settings
-- [ ] Hub like Wispr Flow's: sidebar with icons, Home with stats and history
+- [x] Light theme throughout: onboarding, Hub, Settings (`Theme.swift`)
+- [x] Hub like Wispr Flow's: sidebar with icons, Home with stats and history
       by day with copy, Words, Snippets, Style per app
-- [ ] Onboarding redesigned, with the Try it card showing the live result
+- [x] Onboarding redesigned, with the Try it card showing the live result
 - [ ] The bar: a pill with a live waveform, keeping "visible only when our
       microphone is open"
 - [ ] Better than the reference: time-to-paste shown per sentence, a local
-      only badge, a Hinglish switch, and fixing a word in history teaches it
+      only badge, a Hinglish switch, and fixing a word in history teaches it.
+      Done: the badge, the Hinglish question in onboarding, and time-to-paste
+      on Home and on the row of the last sentence. Left: time-to-paste for
+      every row needs `history.py` to store it; fixing a word in history.
 
 ### Then
 
