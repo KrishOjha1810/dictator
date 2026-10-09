@@ -1,1 +1,1 @@
-{"position": "top", "hide_idle": false}
+{"position": "top", "idle": "hover", "controls": ["dictate", "notetaker", "scratchpad"], "shortcuts": {"notetaker": true, "scratchpad": true}, "hide_idle": false}
