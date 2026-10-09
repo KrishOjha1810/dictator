@@ -1,0 +1,145 @@
+---
+import { latest, formatSize } from "../lib/releases";
+
+const faqs = [
+  {
+    q: "Is it free?",
+    a: "Yes. There is no account, no trial and no subscription.",
+  },
+  {
+    q: "Does my voice leave my Mac?",
+    a: "No. Speech is recognised by models that run on your Mac. The only downloads are the models themselves on first launch and app updates, and each model is checked against its published SHA256 before it is used.",
+  },
+  {
+    q: "Why does macOS warn me when I first open it?",
+    a: "Dictator is not paid into Apple's developer programme, so macOS stops it the first time. Press Done, then open System Settings → Privacy & Security and press Open Anyway next to Dictator. This happens once. The install guide walks through it.",
+  },
+  {
+    q: "Which Macs does it run on?",
+    a: "Macs with Apple silicon (M1 or newer) on macOS 14 Sonoma or later. iOS and Windows versions are coming.",
+  },
+  {
+    q: "How much space does it need?",
+    a: `The app is about ${formatSize(latest.mac.size)}. On first launch it downloads the English model (about 700 MB), then the Hindi and Hinglish models in the background (about 1.5 GB).`,
+  },
+  {
+    q: "How do updates work?",
+    a: "Installed copies check for new versions and update themselves. You can also choose Check for Updates from the menu bar, or download any version from the releases page.",
+  },
+  {
+    q: "Which key do I hold?",
+    a: "Right ⌥ Option, unless you change it. You can also pick fn (🌐), right ⌘ or left ⌘. Double-tap the key for hands free dictation.",
+  },
+];
+---
+
+<section class="frame" id="faq">
+  <div class="panel">
+    <div class="wrap">
+      <header>
+        <span class="eyebrow">Questions</span>
+        <h2>Good to know</h2>
+      </header>
+      <div class="list">
+        {
+          faqs.map((f, i) => (
+            <details open={i === 0}>
+              <summary>
+                {f.q}
+                <span class="plus" aria-hidden="true" />
+              </summary>
+              <p>{f.a}</p>
+            </details>
+          ))
+        }
+      </div>
+    </div>
+  </div>
+</section>
+
+<style>
+  .wrap {
+    display: grid;
+    grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.2fr);
+    gap: clamp(28px, 5vw, 80px);
+  }
+
+  header {
+    display: grid;
+    align-content: start;
+    gap: 20px;
+  }
+
+  h2 {
+    font-size: clamp(40px, 5.4vw, 76px);
+  }
+
+  .list {
+    display: grid;
+    gap: 10px;
+  }
+
+  details {
+    border-radius: var(--radius-md);
+    background: var(--card);
+    box-shadow: var(--shadow-card);
+  }
+
+  summary {
+    list-style: none;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 16px;
+    padding: 22px 24px;
+    font-size: 20px;
+    letter-spacing: -0.025em;
+    cursor: pointer;
+  }
+
+  summary::-webkit-details-marker {
+    display: none;
+  }
+
+  .plus {
+    position: relative;
+    flex: none;
+    width: 28px;
+    height: 28px;
+    border-radius: 8px;
+    background: var(--mint-100);
+  }
+
+  .plus::before,
+  .plus::after {
+    content: "";
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    width: 11px;
+    height: 1.6px;
+    background: var(--mint-700);
+    translate: -50% -50%;
+    transition: rotate 0.2s ease;
+  }
+
+  .plus::after {
+    rotate: 90deg;
+  }
+
+  details[open] .plus::after {
+    rotate: 0deg;
+  }
+
+  details p {
+    padding: 0 24px 24px;
+    color: var(--muted);
+    max-width: 62ch;
+  }
+
+  @media (max-width: 860px) {
+    .wrap {
+      grid-template-columns: 1fr;
+    }
+  }
+</style>

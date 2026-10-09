@@ -1,0 +1,356 @@
+---
+const apps = ["Slack", "Terminal", "VS Code", "Chrome", "Notion", "Mail", "Messages", "Linear", "Figma", "Notes"];
+
+const landed = [
+  { app: "Slack", where: "#design-review", time: "Thu, 2:04 PM", initial: "S" },
+  { app: "Terminal", where: "zsh — ~/api", time: "Thu, 3:31 PM", initial: ">" },
+  { app: "Mail", where: "Re: launch plan", time: "Fri, 10:02 AM", initial: "M" },
+];
+
+const pills = [
+  "Runs on device",
+  "No audio uploaded",
+  "No account",
+  "Works offline",
+  "Models SHA256-checked",
+  "No subscription",
+];
+
+const keys = [
+  { label: "right ⌥", note: "default", on: true },
+  { label: "fn", note: "globe" },
+  { label: "right ⌘", note: "" },
+  { label: "left ⌘", note: "" },
+];
+---
+
+<section class="frame" id="features">
+  <div class="panel">
+    <div class="strip">
+      <p class="mono">Works in every text field on your Mac</p>
+      <ul>
+        {apps.map((a) => <li>{a}</li>)}
+      </ul>
+    </div>
+
+    <header class="section-head">
+      <h2>The keyboard that keeps up with how you talk</h2>
+      <p>From the moment you hold the key to the moment the words land, Dictator handles the whole sentence.</p>
+    </header>
+
+    <div class="bento">
+      <article class="tile green">
+        <h3>Every app, every field. No plugins.</h3>
+        <ul class="stack">
+          {
+            landed.map((l) => (
+              <li>
+                <span class="avatar">{l.initial}</span>
+                <span class="when">{l.time}</span>
+                <strong>{l.app}</strong>
+                <span class="chip">Pasted</span>
+              </li>
+            ))
+          }
+        </ul>
+      </article>
+
+      <article class="tile mint">
+        <div class="marquee" aria-hidden="true">
+          {
+            [0, 1, 2].map((row) => (
+              <div class="row" style={`--dir:${row % 2 ? "reverse" : "normal"};--dur:${28 + row * 6}s`}>
+                {[...pills.slice(row * 2), ...pills.slice(0, row * 2), ...pills.slice(row * 2), ...pills.slice(0, row * 2)].map((p, i) => (
+                  <span style={`--o:${(i + row) % 3 === 0 ? 1 : 0.7}`}>{p}</span>
+                ))}
+              </div>
+            ))
+          }
+        </div>
+        <ul class="visually-hidden">
+          {pills.map((p) => <li>{p}</li>)}
+        </ul>
+        <h3 class="big">Private by default</h3>
+      </article>
+
+      <article class="tile scene">
+        <div class="mini-sky" aria-hidden="true"></div>
+        <div class="keys-card">
+          <div class="keys">
+            {
+              keys.map((k) => (
+                <span class:list={["k", { on: k.on }]}>
+                  {k.label}
+                  {k.note && <small>{k.note}</small>}
+                </span>
+              ))
+            }
+          </div>
+          <p class="cap">Hold to talk. Double-tap for hands free.</p>
+        </div>
+      </article>
+    </div>
+  </div>
+</section>
+
+<style>
+  .strip {
+    display: grid;
+    gap: 18px;
+    justify-items: center;
+    margin-bottom: clamp(56px, 8vw, 112px);
+  }
+
+  .strip p {
+    font-size: 11px;
+    color: var(--muted);
+  }
+
+  .strip ul {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 8px;
+  }
+
+  .strip li {
+    padding: 14px 22px;
+    border-radius: 12px;
+    background: var(--card);
+    box-shadow: var(--shadow-card);
+    font-size: 17px;
+    font-weight: 600;
+    letter-spacing: -0.03em;
+    color: var(--muted);
+  }
+
+  .bento {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: clamp(14px, 1.8vw, 24px);
+  }
+
+  .tile {
+    position: relative;
+    border-radius: var(--radius-lg);
+    min-height: clamp(420px, 34vw, 520px);
+    overflow: hidden;
+    padding: clamp(24px, 2.4vw, 36px);
+  }
+
+  .tile h3 {
+    font-size: clamp(26px, 2.4vw, 36px);
+    letter-spacing: -0.045em;
+    line-height: 1.02;
+  }
+
+  /* ---- green: stacked "pasted" rows ---- */
+
+  .green {
+    background: linear-gradient(170deg, #94c6b2 0%, #7fb3a2 55%, #6aa392 100%);
+    color: #fff;
+  }
+
+  .green h3 {
+    max-width: 13ch;
+  }
+
+  .stack {
+    list-style: none;
+    margin: 48px 0 0;
+    padding: 0 6%;
+    display: grid;
+    gap: 14px;
+  }
+
+  .stack li {
+    display: grid;
+    grid-template-columns: auto 1fr auto;
+    grid-template-rows: auto auto;
+    column-gap: 14px;
+    align-items: center;
+    padding: 16px 18px;
+    border-radius: 16px;
+    background: #fff;
+    color: #14211d;
+    box-shadow: 0 10px 24px -14px rgba(20, 40, 36, 0.4);
+  }
+
+  .stack li:nth-child(2) {
+    background: rgba(255, 255, 255, 0.82);
+  }
+
+  .stack li:nth-child(3) {
+    background: rgba(255, 255, 255, 0.55);
+    mask-image: linear-gradient(180deg, #000 30%, transparent);
+  }
+
+  .avatar {
+    grid-row: span 2;
+    width: 44px;
+    height: 44px;
+    border-radius: 50%;
+    display: grid;
+    place-items: center;
+    background: #e6efeb;
+    color: var(--mint-700);
+    font-family: var(--font-mono);
+    font-weight: 500;
+  }
+
+  .when {
+    font-size: 12px;
+    color: #63736e;
+  }
+
+  .stack strong {
+    grid-column: 2;
+    font-size: 21px;
+    font-weight: 500;
+    letter-spacing: -0.03em;
+    color: var(--mint-700);
+  }
+
+  .stack .chip {
+    grid-column: 3;
+    grid-row: 1;
+    align-self: start;
+    background: #eef3f1;
+    color: #8a9b95;
+  }
+
+  /* ---- mint: moving pills + big claim ---- */
+
+  .mint {
+    background: var(--mint-50);
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+  }
+
+  .marquee {
+    display: grid;
+    gap: 12px;
+    margin: 0 calc(-1 * clamp(24px, 2.4vw, 36px));
+    mask-image: linear-gradient(90deg, transparent, #000 12%, #000 88%, transparent);
+  }
+
+  .row {
+    display: flex;
+    gap: 10px;
+    width: max-content;
+    animation: slide var(--dur) linear infinite;
+    animation-direction: var(--dir);
+  }
+
+  .row span {
+    white-space: nowrap;
+    padding: 16px 26px;
+    border-radius: 999px;
+    background: var(--mint-100);
+    color: var(--mint-500);
+    font-size: 19px;
+    letter-spacing: -0.02em;
+    opacity: var(--o);
+  }
+
+  @keyframes slide {
+    to {
+      transform: translateX(-50%);
+    }
+  }
+
+  .big {
+    font-size: clamp(44px, 4.6vw, 68px) !important;
+    line-height: 0.95 !important;
+    color: var(--ink-soft);
+    max-width: 8ch;
+  }
+
+  /* ---- scene: a key chooser over a small sky ---- */
+
+  .scene {
+    padding: 0;
+  }
+
+  .mini-sky {
+    position: absolute;
+    inset: 0;
+    background:
+      radial-gradient(60% 30% at 70% 30%, rgba(255, 180, 150, 0.85), transparent 70%),
+      radial-gradient(40% 20% at 20% 45%, rgba(255, 210, 200, 0.7), transparent 70%),
+      radial-gradient(45% 30% at 60% 88%, rgba(255, 250, 220, 0.9), transparent 70%),
+      linear-gradient(180deg, #7ea7ba 0%, #c9b2b4 45%, #94c4b7 70%, #6aa797 100%);
+  }
+
+  .keys-card {
+    position: absolute;
+    left: 6%;
+    top: 6%;
+    right: 22%;
+    padding: 22px;
+    border-radius: 20px;
+    background: #fff;
+    color: #14211d;
+    box-shadow: 0 24px 50px -24px rgba(20, 40, 36, 0.5);
+  }
+
+  .keys {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 8px;
+  }
+
+  .k {
+    display: grid;
+    place-items: center;
+    gap: 2px;
+    padding: 14px 8px;
+    border-radius: 12px;
+    background: #eef3f1;
+    color: var(--mint-700);
+    font-size: 17px;
+    letter-spacing: -0.02em;
+  }
+
+  .k small {
+    font-family: var(--font-mono);
+    font-size: 9px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: #8a9b95;
+  }
+
+  .k.on {
+    background: var(--mint-600);
+    color: #fff;
+  }
+
+  .k.on small {
+    color: rgba(255, 255, 255, 0.8);
+  }
+
+  .cap {
+    margin-top: 22px;
+    font-size: 21px;
+    line-height: 1.1;
+    letter-spacing: -0.035em;
+  }
+
+  @media (max-width: 960px) {
+    .bento {
+      grid-template-columns: 1fr;
+    }
+
+    .tile {
+      min-height: 400px;
+    }
+
+    .keys-card {
+      right: 6%;
+    }
+  }
+</style>

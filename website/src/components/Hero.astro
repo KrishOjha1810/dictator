@@ -1,0 +1,460 @@
+---
+import Nav from "./Nav.astro";
+import Sky from "./Sky.astro";
+import { latest, latestMacHref } from "../lib/releases";
+
+// What the demo card plays, in order. Each one is a hold, a release, and the
+// sentence landing in the app the cursor was in.
+const scenes = [
+  {
+    app: "Slack",
+    where: "#eng-backend",
+    context: "anyone know why the export job takes 40s?",
+    said: "yaar ye function thoda slow lag raha hai, can you check the loop",
+    lang: "Hinglish",
+  },
+  {
+    app: "Terminal",
+    where: "zsh — ~/api",
+    context: "$ git add -A",
+    said: 'git commit -m "cache the invoice totals so the export stops timing out"',
+    lang: "English",
+  },
+  {
+    app: "Notes",
+    where: "Standup",
+    context: "Tuesday",
+    said: "kal tak migration ho jayega, then we test on staging before Friday",
+    lang: "Hinglish",
+  },
+];
+---
+
+<section class="frame hero-frame">
+  <div class="hero">
+    <Sky />
+    <div class="inner">
+      <Nav />
+
+      <div class="grid">
+        <div class="copy">
+          <h1>Talk. It types where your cursor is.</h1>
+          <div class="lede">
+            <p>
+              Hold right <kbd>⌥</kbd>, speak in English, Hindi or Hinglish, let go. Dictator writes it into any app
+              on your Mac, and no audio ever leaves it.
+            </p>
+            <div class="actions">
+              <a class="btn btn-dark" href={latestMacHref} data-download>
+                <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 1v9m0 0L4.5 6.5M8 10l3.5-3.5M2 13.5h12" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+                Download for Mac
+              </a>
+              <a class="btn btn-glass" href="#how">See how it works</a>
+            </div>
+            <p class="meta mono">v{latest.version} · macOS {latest.mac.minOS.replace(".0", "")}+ · {latest.mac.arch} · Free</p>
+          </div>
+        </div>
+
+        <div class="demo" data-scenes={JSON.stringify(scenes)}>
+          <div class="status mono">
+            <span class="dot-label"><i class="dot"></i><span data-state>Listening</span></span>
+            <span data-lang>Hinglish</span>
+          </div>
+          <div class="card">
+            <div class="chrome">
+              <span class="lights"><i></i><i></i><i></i></span>
+              <span class="mono app" data-app>Slack — #eng-backend</span>
+            </div>
+            <div class="thread">
+              <div class="bubble them">
+                <p data-context>{scenes[0].context}</p>
+                <time class="mono">9:31 AM</time>
+              </div>
+              <div class="bubble you" data-you>
+                <p><span data-said></span><i class="caret"></i></p>
+                <time class="mono">9:32 AM</time>
+              </div>
+            </div>
+            <div class="footer">
+              <div class="wave" aria-hidden="true">
+                {Array.from({ length: 22 }, (_, i) => <i style={`--i:${i}`} />)}
+              </div>
+              <span class="chip" data-chip>Hold ⌥</span>
+            </div>
+          </div>
+          <div class="badge"><img src="/icon.png" alt="" width="40" height="40" /></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<script>
+  type Scene = { app: string; where: string; context: string; said: string; lang: string };
+
+  const demo = document.querySelector<HTMLElement>(".demo");
+  if (demo) {
+    const scenes: Scene[] = JSON.parse(demo.dataset.scenes || "[]");
+    const $ = (sel: string) => demo.querySelector<HTMLElement>(sel)!;
+    const state = $("[data-state]");
+    const lang = $("[data-lang]");
+    const app = $("[data-app]");
+    const context = $("[data-context]");
+    const said = $("[data-said]");
+    const you = $("[data-you]");
+    const chip = $("[data-chip]");
+    const reduced = matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+    async function play(scene: Scene) {
+      app.textContent = `${scene.app} — ${scene.where}`;
+      context.textContent = scene.context;
+      lang.textContent = scene.lang;
+      said.textContent = "";
+      you.classList.remove("shown");
+
+      demo!.dataset.phase = "listening";
+      state.textContent = "Listening…";
+      chip.textContent = "Holding ⌥";
+      await wait(reduced ? 600 : 2600);
+
+      demo!.dataset.phase = "working";
+      state.textContent = "Transcribing";
+      chip.textContent = "Released";
+      await wait(reduced ? 200 : 700);
+
+      demo!.dataset.phase = "pasted";
+      state.textContent = "On device";
+      chip.textContent = "Pasted ⏎";
+      you.classList.add("shown");
+      if (reduced) {
+        said.textContent = scene.said;
+      } else {
+        // the paste is instant; the reveal is only paced so the eye can follow
+        for (let i = 1; i <= scene.said.length; i += 3) {
+          said.textContent = scene.said.slice(0, i);
+          await wait(14);
+        }
+        said.textContent = scene.said;
+      }
+      await wait(reduced ? 4000 : 3400);
+    }
+
+    (async () => {
+      for (let i = 0; ; i = (i + 1) % scenes.length) await play(scenes[i]);
+    })();
+  }
+</script>
+
+<style>
+  .hero-frame {
+    padding: var(--frame);
+  }
+
+  .hero {
+    position: relative;
+    border-radius: var(--radius-xl);
+    overflow: hidden;
+    min-height: min(920px, 100svh);
+    color: #fff;
+    isolation: isolate;
+  }
+
+  .inner {
+    position: relative;
+    z-index: 2;
+    height: 100%;
+    min-height: inherit;
+    display: flex;
+    flex-direction: column;
+    padding: clamp(18px, 2.6vw, 36px) clamp(18px, 3vw, 44px) clamp(24px, 3.4vw, 48px);
+  }
+
+  .grid {
+    flex: 1;
+    display: grid;
+    grid-template-columns: minmax(0, 1.25fr) minmax(0, 0.75fr);
+    gap: 32px;
+    align-items: end;
+    margin-top: clamp(40px, 7vw, 96px);
+  }
+
+  .copy {
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    gap: 48px;
+    height: 100%;
+  }
+
+  h1 {
+    font-size: clamp(52px, 8.6vw, 132px);
+    letter-spacing: -0.055em;
+    line-height: 0.9;
+    max-width: 10.5ch;
+    text-shadow: 0 2px 30px rgba(60, 80, 90, 0.18);
+  }
+
+  .lede {
+    display: grid;
+    gap: 28px;
+    max-width: 520px;
+  }
+
+  .lede > p:first-child {
+    font-size: clamp(18px, 1.7vw, 23px);
+    line-height: 1.35;
+    letter-spacing: -0.01em;
+  }
+
+  kbd {
+    font-family: inherit;
+    padding: 0 6px;
+    border-radius: 6px;
+    background: rgba(255, 255, 255, 0.24);
+    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.35);
+  }
+
+  .actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+
+  .meta {
+    font-size: 12px;
+    color: rgba(255, 255, 255, 0.82);
+  }
+
+  /* ---- demo card ---- */
+
+  .demo {
+    position: relative;
+    justify-self: end;
+    width: min(100%, 440px);
+    padding-bottom: 56px;
+  }
+
+  .status {
+    display: flex;
+    justify-content: space-between;
+    font-size: 12px;
+    color: rgba(255, 255, 255, 0.9);
+    padding: 0 6px 12px;
+  }
+
+  .dot-label {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: #fff;
+  }
+
+  .demo[data-phase="listening"] .dot {
+    background: #ff8f7a;
+    box-shadow: 0 0 0 0 rgba(255, 143, 122, 0.7);
+    animation: ping 1.2s ease-out infinite;
+  }
+
+  @keyframes ping {
+    to {
+      box-shadow: 0 0 0 9px rgba(255, 143, 122, 0);
+    }
+  }
+
+  .card {
+    background: #fff;
+    color: #14211d;
+    border-radius: 26px;
+    padding: 14px;
+    box-shadow: 0 30px 60px -30px rgba(20, 40, 36, 0.55);
+  }
+
+  .chrome {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 4px 6px 14px;
+  }
+
+  .lights {
+    display: inline-flex;
+    gap: 6px;
+  }
+
+  .lights i {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: #e4ebe8;
+  }
+
+  .app {
+    font-size: 11px;
+    color: #7c8c87;
+  }
+
+  .thread {
+    display: grid;
+    gap: 14px;
+    min-height: 150px;
+    align-content: start;
+  }
+
+  .bubble {
+    position: relative;
+    max-width: 84%;
+    padding: 12px 16px;
+    border-radius: 16px;
+    font-size: 15px;
+    line-height: 1.35;
+  }
+
+  .bubble time {
+    position: absolute;
+    top: 6px;
+    font-size: 9px;
+    color: #9aa8a3;
+  }
+
+  .them {
+    background: #edf2f0;
+  }
+
+  .them time {
+    left: calc(100% + 8px);
+    white-space: nowrap;
+  }
+
+  .you {
+    justify-self: end;
+    background: linear-gradient(160deg, #a5cfc1, #86b9a8);
+    color: #fff;
+    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.35);
+    opacity: 0;
+    translate: 0 8px;
+    transition: opacity 0.3s ease, translate 0.3s ease;
+  }
+
+  .you.shown {
+    opacity: 1;
+    translate: 0 0;
+  }
+
+  .you time {
+    right: calc(100% + 8px);
+    white-space: nowrap;
+  }
+
+  .caret {
+    display: inline-block;
+    width: 2px;
+    height: 1.05em;
+    margin-left: 2px;
+    vertical-align: -0.15em;
+    background: var(--cursor);
+    box-shadow: 0 0 8px var(--cursor);
+    animation: blink 1s steps(1) infinite;
+  }
+
+  @keyframes blink {
+    50% {
+      opacity: 0;
+    }
+  }
+
+  .footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-top: 16px;
+    padding: 10px 10px 10px 16px;
+    border-radius: 14px;
+    background: #14211d;
+  }
+
+  .wave {
+    display: flex;
+    align-items: center;
+    gap: 3px;
+    height: 22px;
+  }
+
+  .wave i {
+    width: 3px;
+    height: 4px;
+    border-radius: 2px;
+    background: rgba(255, 255, 255, 0.35);
+    transition: height 0.3s ease;
+  }
+
+  .demo[data-phase="listening"] .wave i {
+    background: #fff;
+    animation: level 0.9s ease-in-out infinite alternate;
+    animation-delay: calc(var(--i) * -73ms);
+  }
+
+  @keyframes level {
+    0% {
+      height: 4px;
+    }
+    40% {
+      height: 18px;
+    }
+    70% {
+      height: 9px;
+    }
+    100% {
+      height: 22px;
+    }
+  }
+
+  .footer .chip {
+    background: rgba(255, 255, 255, 0.1);
+    color: #dbe7e3;
+  }
+
+  .demo[data-phase="pasted"] .footer .chip {
+    background: var(--cursor);
+    color: #0f2a25;
+  }
+
+  .badge {
+    position: absolute;
+    right: 0;
+    bottom: 0;
+    padding: 6px;
+    border-radius: 14px;
+    background: rgba(255, 255, 255, 0.28);
+    -webkit-backdrop-filter: blur(12px);
+    backdrop-filter: blur(12px);
+    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.35);
+  }
+
+  .badge img {
+    border-radius: 10px;
+  }
+
+  @media (max-width: 960px) {
+    .grid {
+      grid-template-columns: 1fr;
+      align-items: start;
+    }
+
+    .demo {
+      justify-self: stretch;
+      width: 100%;
+    }
+
+    .hero {
+      min-height: 0;
+    }
+  }
+</style>

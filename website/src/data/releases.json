@@ -1,0 +1,58 @@
+{
+  "repo": "cc-vb/dictator",
+  "latest": "0.1.8",
+  "releases": [
+    {
+      "version": "0.1.8",
+      "date": "2026-10-09T13:23:13Z",
+      "notes": "Dictator 0.1.8 for Apple silicon, macOS 14 or newer.",
+      "mac": {
+        "file": "Dictator-0.1.8.dmg",
+        "url": "https://github.com/cc-vb/dictator/releases/download/v0.1.8/Dictator-0.1.8.dmg",
+        "size": 33341952,
+        "sha256": "65672683ab6ac3ae7300b1b32756571cc264c75010fe3d4e2a3acf4f1d54808c",
+        "minOS": "14.0",
+        "arch": "Apple silicon"
+      }
+    },
+    {
+      "version": "0.1.7",
+      "date": "2026-10-09T12:51:34Z",
+      "notes": "Dictator 0.1.7 for Apple silicon, macOS 14 or newer.",
+      "mac": {
+        "file": "Dictator-0.1.7.dmg",
+        "url": "https://github.com/cc-vb/dictator/releases/download/v0.1.7/Dictator-0.1.7.dmg",
+        "size": 34283056,
+        "sha256": "2277963ceca93171572bdf2037e5f3c39c0a009a1bb672d33757296943888dc6",
+        "minOS": "14.0",
+        "arch": "Apple silicon"
+      }
+    },
+    {
+      "version": "0.1.6",
+      "date": "2026-10-09T12:15:28Z",
+      "notes": "Dictator 0.1.6 for Apple silicon Macs, macOS 14 or newer.",
+      "mac": {
+        "file": "Dictator-0.1.6.dmg",
+        "url": "https://github.com/cc-vb/dictator/releases/download/v0.1.6/Dictator-0.1.6.dmg",
+        "size": 34451598,
+        "sha256": "07f2ff73eae10d85a5c6823e9c396b09e49b39d33fd5c0880f60f040c442b47e",
+        "minOS": "14.0",
+        "arch": "Apple silicon"
+      }
+    },
+    {
+      "version": "0.1.0",
+      "date": "2026-10-08T13:46:02Z",
+      "notes": "Dictator 0.1.0, a preview, for Apple silicon Macs on macOS 14 or newer.",
+      "mac": {
+        "file": "Dictator-0.1.0.dmg",
+        "url": "https://github.com/cc-vb/dictator/releases/download/v0.1.0/Dictator-0.1.0.dmg",
+        "size": 25295165,
+        "sha256": "70cccb15402e98b76741eda651df0f6365e6a0ec5ef24ec66514e2aacb0df5c6",
+        "minOS": "14.0",
+        "arch": "Apple silicon"
+      }
+    }
+  ]
+}

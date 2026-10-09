@@ -1,0 +1,72 @@
+---
+import Nav from "./Nav.astro";
+
+interface Props {
+  eyebrow: string;
+  title: string;
+  intro: string;
+}
+
+const { eyebrow, title, intro } = Astro.props;
+---
+
+<section class="frame">
+  <div class="head">
+    <div class="sky" aria-hidden="true"></div>
+    <div class="inner">
+      <Nav />
+      <div class="copy">
+        <span class="eyebrow">{eyebrow}</span>
+        <h1>{title}</h1>
+        <p>{intro}</p>
+        <slot />
+      </div>
+    </div>
+  </div>
+</section>
+
+<style>
+  .head {
+    position: relative;
+    border-radius: var(--radius-xl);
+    overflow: hidden;
+    color: #fff;
+    isolation: isolate;
+  }
+
+  .sky {
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    background:
+      radial-gradient(50% 40% at 78% 22%, rgba(255, 180, 150, 0.8), transparent 70%),
+      radial-gradient(40% 30% at 30% 70%, rgba(255, 215, 205, 0.55), transparent 70%),
+      linear-gradient(180deg, #6f9fb4 0%, #b7b3bd 50%, #8cbdb0 100%);
+  }
+
+  .inner {
+    padding: clamp(18px, 2.6vw, 36px) clamp(18px, 3vw, 44px) clamp(40px, 6vw, 80px);
+  }
+
+  .copy {
+    display: grid;
+    gap: 22px;
+    max-width: 760px;
+    margin-top: clamp(56px, 9vw, 120px);
+  }
+
+  .eyebrow {
+    color: #fff;
+  }
+
+  h1 {
+    font-size: clamp(48px, 7.4vw, 108px);
+    letter-spacing: -0.055em;
+  }
+
+  p {
+    font-size: clamp(18px, 1.6vw, 22px);
+    max-width: 52ch;
+    color: rgba(255, 255, 255, 0.92);
+  }
+</style>

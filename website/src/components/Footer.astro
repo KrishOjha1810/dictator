@@ -1,0 +1,89 @@
+---
+import { latest, latestMacHref } from "../lib/releases";
+
+const year = new Date().getFullYear();
+---
+
+<footer class="foot">
+  <div class="cta">
+    <h2>Stop typing what you could just say.</h2>
+    <a class="btn btn-dark" href={latestMacHref} data-download>Download for Mac</a>
+  </div>
+  <div class="row">
+    <a class="brand" href="/">
+      <img src="/icon.png" alt="" width="28" height="28" />
+      Dictator
+    </a>
+    <nav class="mono" aria-label="Footer">
+      <a href="/download">Install guide</a>
+      <a href="/releases">Releases</a>
+      <a href="/#faq">FAQ</a>
+    </nav>
+    <p class="mono">v{latest.version} · © {year}</p>
+  </div>
+</footer>
+
+<style>
+  .foot {
+    display: grid;
+    gap: clamp(40px, 6vw, 80px);
+    padding: clamp(48px, 7vw, 96px) clamp(8px, 2vw, 24px) 8px;
+    color: #fff;
+  }
+
+  .cta {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: end;
+    justify-content: space-between;
+    gap: 28px;
+  }
+
+  .cta h2 {
+    font-size: clamp(40px, 6vw, 88px);
+    max-width: 12ch;
+  }
+
+  .row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 18px;
+    padding-top: 22px;
+    border-top: 1px solid rgba(255, 255, 255, 0.3);
+  }
+
+  .brand {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 20px;
+    letter-spacing: -0.04em;
+    text-decoration: none;
+  }
+
+  .brand img {
+    border-radius: 7px;
+  }
+
+  nav {
+    display: flex;
+    gap: 22px;
+    font-size: 12px;
+  }
+
+  nav a {
+    text-decoration: none;
+    opacity: 0.85;
+  }
+
+  nav a:hover {
+    opacity: 1;
+  }
+
+  p.mono {
+    font-size: 11px;
+    opacity: 0.75;
+  }
+</style>

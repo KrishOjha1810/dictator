@@ -1,0 +1,273 @@
+@import "@fontsource-variable/inter-tight";
+@import "@fontsource/ibm-plex-mono/400.css";
+@import "@fontsource/ibm-plex-mono/500.css";
+
+/* ---------- tokens ---------- */
+
+:root {
+  --font-display: "Inter Tight Variable", "Inter Tight", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, monospace;
+
+  /* the backdrop: sage at the top, powder blue at the bottom */
+  --sage: #6e9f93;
+  --sage-deep: #4f8174;
+  --powder: #a3c2d4;
+
+  --mint-50: #eef4f1;
+  --mint-100: #e3eeea;
+  --mint-200: #cfe2db;
+  --mint-400: #9cc8b8;
+  --mint-500: #7fb3a2;
+  --mint-600: #5e9686;
+  --mint-700: #3f7465;
+
+  --peach: #f3bba4;
+  --rose: #e8a097;
+  --violet: #6e4ff0;
+  --cursor: #8ff3e3;
+
+  --ink: #14211d;
+  --ink-soft: #2a3a35;
+  --text: #0e1311;
+  --muted: #5b6b66;
+  --faint: #8b9a95;
+
+  --panel: #f4f4f2;
+  --card: #ffffff;
+  --line: rgba(20, 33, 29, 0.08);
+
+  --radius-xl: 32px;
+  --radius-lg: 24px;
+  --radius-md: 16px;
+  --radius-sm: 10px;
+
+  --gutter: clamp(16px, 3vw, 40px);
+  --frame: clamp(10px, 1.4vw, 18px);
+  --max: 1440px;
+
+  --shadow-card: 0 1px 2px rgba(20, 33, 29, 0.06), 0 12px 32px -12px rgba(20, 33, 29, 0.18);
+
+  /* One light theme for everyone: the design is a daylight sky. */
+  color-scheme: light;
+}
+
+/* ---------- base ---------- */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+  scroll-behavior: smooth;
+}
+
+body {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 17px;
+  line-height: 1.5;
+  color: var(--text);
+  background: linear-gradient(180deg, var(--sage) 0%, var(--sage) 30%, var(--powder) 100%) fixed;
+  background-color: var(--sage);
+  -webkit-font-smoothing: antialiased;
+  overflow-x: hidden;
+}
+
+img,
+svg {
+  display: block;
+  max-width: 100%;
+}
+
+a {
+  color: inherit;
+}
+
+h1,
+h2,
+h3,
+h4 {
+  margin: 0;
+  font-weight: 500;
+  letter-spacing: -0.045em;
+  line-height: 0.95;
+}
+
+p {
+  margin: 0;
+}
+
+:focus-visible {
+  outline: 2px solid var(--violet);
+  outline-offset: 3px;
+  border-radius: 6px;
+}
+
+.mono {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+/* ---------- layout ---------- */
+
+.page {
+  max-width: var(--max);
+  margin: 0 auto;
+  padding: var(--gutter);
+  display: grid;
+  gap: var(--gutter);
+}
+
+/* the framed panels: a white rim around a rounded inner surface */
+.frame {
+  border-radius: calc(var(--radius-xl) + var(--frame));
+  padding: var(--frame);
+  background: rgba(255, 255, 255, 0.55);
+  box-shadow: 0 30px 80px -40px rgba(20, 50, 44, 0.45);
+}
+
+.panel {
+  border-radius: var(--radius-xl);
+  background: var(--panel);
+  padding: clamp(40px, 7vw, 112px) clamp(20px, 5vw, 72px);
+  overflow: hidden;
+}
+
+.section-head {
+  text-align: center;
+  max-width: 820px;
+  margin: 0 auto clamp(36px, 5vw, 64px);
+  display: grid;
+  gap: 20px;
+  justify-items: center;
+}
+
+.section-head h2 {
+  font-size: clamp(40px, 6.4vw, 84px);
+}
+
+.section-head p {
+  font-size: clamp(17px, 1.5vw, 20px);
+  color: var(--muted);
+  max-width: 520px;
+}
+
+.eyebrow {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--mint-600);
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.eyebrow::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+/* ---------- buttons ---------- */
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  min-height: 52px;
+  padding: 0 26px;
+  border-radius: var(--radius-sm);
+  font-family: var(--font-mono);
+  font-size: 14px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  text-decoration: none;
+  border: 0;
+  cursor: pointer;
+  transition: transform 0.2s ease, background-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.btn:hover {
+  transform: translateY(-1px);
+}
+
+.btn-dark {
+  background: #14211d;
+  color: #f4f7f5;
+  box-shadow: 0 10px 24px -10px rgba(10, 20, 17, 0.6);
+}
+
+.btn-dark:hover {
+  background: #1f312b;
+}
+
+.btn-glass {
+  background: rgba(255, 255, 255, 0.22);
+  color: #fff;
+  -webkit-backdrop-filter: blur(14px);
+  backdrop-filter: blur(14px);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.28);
+}
+
+.btn-glass:hover {
+  background: rgba(255, 255, 255, 0.32);
+}
+
+.btn-soft {
+  background: var(--mint-100);
+  color: var(--mint-700);
+}
+
+.btn-soft:hover {
+  background: var(--mint-200);
+}
+
+.btn[aria-disabled="true"] {
+  pointer-events: none;
+  background: var(--mint-50);
+  color: var(--faint);
+  box-shadow: none;
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 10px;
+  border-radius: 7px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  background: var(--mint-100);
+  color: var(--mint-600);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+}
