@@ -5,8 +5,9 @@
 // in Swift would be a second thing to keep right, and the Python one is the
 // one with tests.
 //
-// DICTATOR_FAKE=1 swaps both for canned files in native/app/Fixtures, so the
-// windows can be worked on without a model, a hotkey or a permission.
+// DICTATOR_FAKE=1 swaps both for canned files (native/app/Fixtures, shipped in
+// the bundle's Resources), so the windows can be worked on without a model, a
+// hotkey or a permission.
 
 import AppKit
 import Foundation
@@ -59,14 +60,19 @@ let stateDir: URL = {
     return home.appendingPathComponent(".dictator")
 }()
 
-/// Where the canned files are. An explicit DICTATOR_FIXTURES, then a copy in
-/// the bundle, then the source tree this binary was compiled from, which is
-/// the usual case: build with tools/build_app.sh and run the result.
+/// Where the canned files are: an explicit DICTATOR_FIXTURES, else the copy
+/// tools/build_dmg.sh puts in the bundle (Contents/Resources/Fixtures).
+///
+/// There used to be a third fallback, the source tree this binary was
+/// compiled from (#filePath). In a release that path is the maintainer's
+/// Desktop, so fake mode on anybody's Mac made macOS ask for Desktop access
+/// on behalf of a folder that is not theirs. A bare binary from
+/// tools/build_app.sh now needs DICTATOR_FIXTURES=native/app/Fixtures.
 let fixturesDir: URL = {
-    if let f = env["DICTATOR_FIXTURES"], !f.isEmpty { return URL(fileURLWithPath: f) }
-    if let r = Bundle.main.resourceURL?.appendingPathComponent("Fixtures"),
-       FileManager.default.fileExists(atPath: r.path) { return r }
-    return URL(fileURLWithPath: #filePath).deletingLastPathComponent()
+    if let f = env["DICTATOR_FIXTURES"], !f.isEmpty {
+        return URL(fileURLWithPath: (f as NSString).expandingTildeInPath)
+    }
+    return (Bundle.main.resourceURL ?? URL(fileURLWithPath: Bundle.main.bundlePath))
         .appendingPathComponent("Fixtures")
 }()
 
@@ -148,7 +154,12 @@ enum CLI {
     /// A command whose output is for a person: `doctor`, `format`. Returned
     /// as text, shown as text.
     static func text(_ args: [String]) -> String {
-        if fake { return "(fake mode) dictator " + args.joined(separator: " ") }
+        if fake {
+            // `format in` reads Fixtures/format-in.txt, and so on.
+            let f = fixturesDir.appendingPathComponent(args.joined(separator: "-") + ".txt")
+            return (try? String(contentsOf: f, encoding: .utf8))
+                ?? "(fake mode) dictator " + args.joined(separator: " ")
+        }
         let r = runCLI(args)
         return String(data: r.out, encoding: .utf8) ?? ""
     }
@@ -244,6 +255,49 @@ struct Status: Equatable {
         default: return .systemGray
         }
     }
+}
+
+// ---------------------------------------------------------------------------
+// last.json
+
+/// The last thing said, as the loop wrote it after the hold (core.write_last):
+/// the text, how long from letting go of the key to the text being delivered,
+/// which engine answered, the app, whether it was pasted, and when. The "Try
+/// it" card shows this instead of waiting for a paste into its own box, and
+/// Home shows the time-to-paste.
+struct Last: Equatable {
+    var text = ""
+    var ms: Int? = nil
+    var engine = ""
+    var app = ""
+    var pasted = false
+    var at: Double = 0
+
+    static func read() -> Last? {
+        let url = (fake ? fixturesDir : stateDir).appendingPathComponent("last.json")
+        guard let d = try? Data(contentsOf: url),
+              let o = try? JSONSerialization.jsonObject(with: d) as? [String: Any]
+        else { return nil }
+        return Last(text: o["text"] as? String ?? "",
+                    ms: (o["ms"] as? NSNumber)?.intValue,
+                    engine: o["engine"] as? String ?? "",
+                    app: o["app"] as? String ?? "",
+                    pasted: o["pasted"] as? Bool ?? false,
+                    at: (o["at"] as? NSNumber)?.doubleValue ?? 0)
+    }
+}
+
+/// "1.2 s" or "640 ms": how long a person waited.
+func waited(_ ms: Int) -> String {
+    ms >= 1000 ? String(format: "%.1f s", Double(ms) / 1000) : "\(ms) ms"
+}
+
+/// "whisper" and "parakeet" are engine names, not something to show.
+func engineTitle(_ e: String) -> String {
+    let l = e.lowercased()
+    if l.contains("parakeet") { return "English engine" }
+    if l.contains("whisper") || l.contains("turbo") || l.contains("large") { return "Hinglish engine" }
+    return e
 }
 
 /// "ggml-large-v3-turbo.bin" is a file name, not something to put in a menu.
@@ -384,6 +438,11 @@ func logHandle() -> FileHandle? {
 // The few things the app remembers itself. Everything else is the CLI's.
 
 enum Prefs {
+    /// Fake mode keeps its own preferences, so clicking through the cards
+    /// with canned data never changes the real app's key or onboarding.
+    static let store: UserDefaults = fake
+        ? (UserDefaults(suiteName: "com.dictator.dictation.fake") ?? .standard) : .standard
+
     static let keys = ["fn", "rightcmd", "rightopt", "leftcmd"]
     static let keyNames = ["fn": "fn", "rightcmd": "Right ⌘",
                            "rightopt": "Right ⌥", "leftcmd": "Left ⌘"]
@@ -392,14 +451,21 @@ enum Prefs {
     /// bin/dictator, because it is passed straight to `dictate`.
     static var key: String {
         get {
-            let k = UserDefaults.standard.string(forKey: "key") ?? "fn"
+            let k = store.string(forKey: "key") ?? "fn"
             return keys.contains(k) ? k : "fn"
         }
-        set { UserDefaults.standard.set(newValue, forKey: "key") }
+        set { store.set(newValue, forKey: "key") }
+    }
+
+    /// A Dock icon and an app menu, so the app can be quit and force quit
+    /// like any other. On by default; off makes it a menu bar item only.
+    static var showInDock: Bool {
+        get { store.object(forKey: "showInDock") as? Bool ?? true }
+        set { store.set(newValue, forKey: "showInDock") }
     }
 
     static var onboarded: Bool {
-        get { UserDefaults.standard.bool(forKey: "onboarded") }
-        set { UserDefaults.standard.set(newValue, forKey: "onboarded") }
+        get { store.bool(forKey: "onboarded") }
+        set { store.set(newValue, forKey: "onboarded") }
     }
 }

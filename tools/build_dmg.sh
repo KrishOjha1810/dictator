@@ -200,7 +200,13 @@ plutil -remove DictatorLog "$C/Info.plist" 2>/dev/null || true
 if [ -f "$ROOT/native/app/AppIcon.icns" ]; then
     cp "$ROOT/native/app/AppIcon.icns" "$C/Resources/AppIcon.icns"
     plutil -replace CFBundleIconFile -string AppIcon "$C/Info.plist"
+else
+    echo "  WARNING: native/app/AppIcon.icns missing; run: swift tools/make_icon.swift native/app/AppIcon.icns" >&2
 fi
+# The canned data DICTATOR_FAKE=1 draws from. Inside the bundle, so fake mode
+# never reaches for the source tree, which on a user's Mac is not there and on
+# the maintainer's is on the Desktop, behind a privacy prompt.
+cp -R "$ROOT/native/app/Fixtures" "$C/Resources/Fixtures"
 plutil -lint "$C/Info.plist" >/dev/null
 
 # --- 5. sign, inside out -----------------------------------------------------

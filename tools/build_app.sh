@@ -7,7 +7,16 @@
 # it are tools/build_dmg.sh's job, not this one's.
 #
 # Run the result with DICTATOR_FAKE=1 to see the windows against the canned
-# data in native/app/Fixtures, without starting dictation.
+# data, without starting dictation. A bare binary needs
+# DICTATOR_FIXTURES=native/app/Fixtures; inside a bundle they are in
+# Contents/Resources/Fixtures. In fake mode only, for looking at one screen:
+#   DICTATOR_SHOW=home|words|snippets|style|review|meetings|settings|help|move
+#   DICTATOR_ONBOARDING=1 DICTATOR_CARD=0..5
+#   DICTATOR_SNAPSHOT=out.png   draw the front window into a PNG, then quit
+#                               (needs no Screen Recording permission)
+#
+# The app icon is drawn by tools/make_icon.swift into native/app/AppIcon.icns,
+# which tools/build_dmg.sh copies into the bundle.
 #
 # Plain swiftc from the Command Line Tools has no SwiftUI macro plugin, so the
 # views avoid @State (a macro in the macOS 27 SDK); see the top of Hub.swift.

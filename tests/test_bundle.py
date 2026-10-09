@@ -590,6 +590,27 @@ def test_the_apps_fixtures_have_the_clis_shape(tmp_path, name, args):
         assert set(fixture["items"][0]) == set(views._row({}))
 
 
+def test_the_last_result_fixture_has_the_loops_shape():
+    """The "Try it" card and Home's time-to-paste read last.json, and fake
+    mode reads Fixtures/last.json instead. Same rule as the other fixtures:
+    the keys the loop writes, no more and no fewer."""
+    assert core.write_last("yaar ye test kar ke dekho", 640, "whisper", "Terminal", True)
+    written = json.loads(core.LAST_FILE.read_text())
+    fixture = json.loads((REPO / "native" / "app" / "Fixtures"
+                          / "last.json").read_text())
+    assert set(fixture) == set(written)
+
+
+def test_the_fixtures_ship_inside_the_app():
+    """Fake mode reads its fixtures from the bundle. It used to fall back to
+    the source path compiled into the binary, the maintainer's Desktop, which
+    made macOS ask a user for Desktop access."""
+    script = (REPO / "tools" / "build_dmg.sh").read_text()
+    assert 'native/app/Fixtures" "$C/Resources/Fixtures"' in script
+    swift = "".join(f.read_text() for f in (REPO / "native" / "app").glob("*.swift"))
+    assert "fileURLWithPath: #filePath" not in swift
+
+
 def test_status_inside_the_app_does_not_ask_launchd(tmp_path):
     """The app's loop is its own child and its login item is SMAppService's,
     so launchd knows nothing about either. Running comes from the loop's pid

@@ -40,7 +40,10 @@ is the thing being worked on.
 (Apple silicon, macOS 14 or newer, about 24 MB). Every version, with its
 SHA256, is on the [releases page](https://github.com/KrishOjha1810/dictator/releases).
 
-1. Open `Dictator.dmg` and drag Dictator into Applications.
+1. Open `Dictator.dmg` and drag Dictator into Applications. Open it from
+   Applications, not from the disk image window: macOS stops a copy run from
+   the disk image after a few seconds. If you do open that one, it offers to
+   move itself to Applications.
 2. Open Dictator. macOS stops it, because Dictator is free and not paid into
    Apple's developer programme. Press **Done**, not Move to Trash.
 3. Open **System Settings → Privacy & Security**, scroll down, and press
