@@ -24,24 +24,52 @@ def _cli():
     return m
 
 
-def test_no_file_means_top_and_always_shown():
-    assert orbnative.settings() == {"position": "top", "hide_idle": False}
+DEFAULT = {"position": "top", "idle": "hover",
+           "controls": ["dictate", "notetaker", "scratchpad"],
+           "shortcuts": {"notetaker": True, "scratchpad": True}, "hide_idle": False}
+
+
+def test_no_file_means_top_shown_on_hover_with_every_button():
+    assert orbnative.settings() == DEFAULT
 
 
 def test_a_broken_file_reads_as_the_defaults():
     """A file someone broke by hand must not stop the pill from starting."""
-    for junk in ("{not json", "[1, 2]", '{"position": "middle", "hide_idle": "yes"}'):
+    for junk in ("{not json", "[1, 2]",
+                 '{"position": "middle", "hide_idle": "yes", "idle": "sometimes",'
+                 ' "controls": "all", "shortcuts": {"notetaker": "yes"}}'):
         orbnative.SETTINGS.write_text(junk)
-        assert orbnative.settings() == {"position": "top", "hide_idle": False}
+        assert orbnative.settings() == DEFAULT
 
 
-def test_save_keeps_the_other_setting_and_unknown_keys():
+def test_a_file_from_before_the_three_choices_keeps_its_meaning():
+    """hide_idle on meant hidden while idle, and still does. Off was the
+    faint pill; it now reads as the new default, shown on hover."""
+    orbnative.SETTINGS.write_text(json.dumps({"position": "left", "hide_idle": True}))
+    assert orbnative.settings()["idle"] == "hide"
+    orbnative.SETTINGS.write_text(json.dumps({"position": "left", "hide_idle": False}))
+    assert orbnative.settings()["idle"] == "hover"
+
+
+def test_save_keeps_the_other_settings_and_unknown_keys():
     orbnative.SETTINGS.write_text(json.dumps({"hide_idle": True, "later": 1}))
-    assert orbnative.save(position="bottom-right") == {
-        "position": "bottom-right", "hide_idle": True}
+    got = orbnative.save(position="bottom-right")
+    assert got["position"] == "bottom-right" and got["idle"] == "hide"
     raw = json.loads(orbnative.SETTINGS.read_text())
-    assert raw["later"] == 1
+    assert raw["later"] == 1 and raw["hide_idle"] is True
     assert not orbnative.SETTINGS.with_name("indicator.json.tmp").exists()
+
+
+def test_controls_and_shortcuts():
+    got = orbnative.save(controls=["scratchpad", "dictate"])
+    assert got["controls"] == ["dictate", "scratchpad"]       # canonical order
+    got = orbnative.save(shortcuts={"notetaker": False})
+    assert got["shortcuts"] == {"notetaker": False, "scratchpad": True}
+    assert orbnative.save(controls=[])["controls"] == []
+    for bad in ({"controls": ["dance"]}, {"shortcuts": {"dictate": True}},
+                {"shortcuts": {"notetaker": "off"}}, {"idle": "sometimes"}):
+        with pytest.raises(ValueError):
+            orbnative.save(**bad)
 
 
 def test_save_refuses_a_place_that_does_not_exist():
@@ -73,9 +101,10 @@ def test_the_eight_names_match_the_swift_helper():
 def test_the_helper_is_told_which_state_directory_to_use(tmp_path):
     """It used to read a hardcoded ~/.dictator, so a loop started with
     DICTATOR_STATE elsewhere had a pill watching some other mic.lock."""
-    argv, env = orbnative.command("/x/dictator-orb")
+    argv, env = orbnative.command("/x/dictator-orb", "rightcmd")
     assert argv == ["/x/dictator-orb"]
     assert env["DICTATOR_STATE"] == str(core.STATE_DIR) == str(tmp_path)
+    assert env["DICTATOR_KEY"] == "rightcmd"
 
 
 def test_show_starts_the_helper_with_that_environment(monkeypatch, tmp_path):
@@ -104,11 +133,26 @@ def test_cli_sets_and_reports(capsys):
     assert cli.main(["dictator", "indicator", "hide-idle", "on"]) == 0
     capsys.readouterr()
     assert cli.main(["dictator", "indicator", "--json"]) == 0
-    assert json.loads(capsys.readouterr().out) == {"position": "left", "hide_idle": True}
+    got = json.loads(capsys.readouterr().out)
+    assert got["position"] == "left" and got["idle"] == "hide" and got["hide_idle"]
+    assert cli.main(["dictator", "indicator", "idle", "always"]) == 0
+    assert cli.main(["dictator", "indicator", "controls", "dictate,scratchpad"]) == 0
+    assert cli.main(["dictator", "indicator", "shortcut", "scratchpad", "off"]) == 0
+    capsys.readouterr()
+    assert cli.main(["dictator", "indicator", "--json"]) == 0
+    got = json.loads(capsys.readouterr().out)
+    assert got["idle"] == "always" and not got["hide_idle"]
+    assert got["controls"] == ["dictate", "scratchpad"]
+    assert got["shortcuts"] == {"notetaker": True, "scratchpad": False}
+    assert cli.main(["dictator", "indicator", "controls", "none"]) == 0
+    assert orbnative.settings()["controls"] == []
 
 
 def test_cli_refuses_nonsense_without_writing(capsys):
     cli = _cli()
     assert cli.main(["dictator", "indicator", "position", "middle"]) == 2
     assert cli.main(["dictator", "indicator", "hide-idle", "maybe"]) == 2
+    assert cli.main(["dictator", "indicator", "idle", "maybe"]) == 2
+    assert cli.main(["dictator", "indicator", "controls", "jazz"]) == 2
+    assert cli.main(["dictator", "indicator", "shortcut", "dictate", "on"]) == 2
     assert not orbnative.SETTINGS.exists()
