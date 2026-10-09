@@ -259,6 +259,14 @@ if [ -z "${DICTATOR_APP_DIR:-}" ]; then
     bash "$ROOT/tools/build_app.sh" "$APPBIN"
 fi
 cp "$APPBIN/Dictator" "$C/MacOS/Dictator"
+# Sparkle, the updater, linked by build_app.sh. The app loads it from
+# ../Frameworks; an app that links it and lacks it does not start at all.
+if otool -L "$C/MacOS/Dictator" | grep -q Sparkle.framework; then
+    [ -d "$APPBIN/Sparkle.framework" ] \
+        || { echo "the app links Sparkle but $APPBIN has no Sparkle.framework" >&2; exit 1; }
+    rm -rf "$C/Frameworks/Sparkle.framework"
+    ditto "$APPBIN/Sparkle.framework" "$C/Frameworks/Sparkle.framework"
+fi
 
 # --- 4. Info.plist -----------------------------------------------------------
 step "Info.plist ($VERSION, build $BUILD_NUMBER)"
@@ -319,6 +327,20 @@ for a in "$C"/Helpers/*.app; do
     [ -d "$a" ] || continue
     sign "$a"; echo "  $(basename "$a")"
 done
+
+# Sparkle, inside out as its documentation asks: the two XPC services (the
+# downloader keeps its entitlements), the Autoupdate tool, the Updater app,
+# then the framework. Same identity as everything else, so the installer it
+# runs is trusted exactly as far as the app is.
+SP="$C/Frameworks/Sparkle.framework/Versions/B"
+if [ -d "$SP" ]; then
+    sign "$SP/XPCServices/Installer.xpc"
+    sign --preserve-metadata=entitlements "$SP/XPCServices/Downloader.xpc"
+    sign "$SP/Autoupdate"
+    sign "$SP/Updater.app"
+    sign "$C/Frameworks/Sparkle.framework"
+    echo "  Sparkle.framework"
+fi
 
 # The app last. Never --deep here: it signs in whatever order it finds things
 # and is deprecated for signing. It is only right for verifying.
