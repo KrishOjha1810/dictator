@@ -1,0 +1,606 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Dictator, glass</title>
+<style>
+/* The glass is the grille.
+   The app icon is a microphone whose grille is lines of text. Every
+   translucent surface here is ruled with fine horizontal lines, which is both
+   the identity and the thing that keeps a blurred panel readable over a white
+   page: the rules hold their own texture whatever is behind them. */
+:root {
+  --ink:      #0B0A18;
+  --ink-2:    #121124;
+  --surface:  #1B1A31;
+  --text:     #ECEAF6;
+  --dim:      #ACA8C6;
+  --faint:    #8682A3;
+  --violet:   #B3A2FF;
+  --violet-d: #5631C9;
+  --live:     #3FE0CF;
+  --glow:     #8CFFEB;
+  --warn:     #F2A649;
+  --bad:      #FF7A6E;
+  --rounded: ui-rounded, "SF Pro Rounded", -apple-system, system-ui, sans-serif;
+  --sans: -apple-system, system-ui, "Segoe UI", sans-serif;
+  --mono: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+* { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body {
+  margin: 0;
+  background: var(--ink);
+  color: var(--text);
+  font-family: var(--sans);
+  font-size: 15px;
+  line-height: 1.55;
+}
+.wrap { max-width: 1180px; margin: 0 auto; padding: 0 20px 96px; }
+
+h1, h2, h3 { font-family: var(--rounded); letter-spacing: -0.4px; margin: 0; }
+h1 { font-size: clamp(30px, 5vw, 46px); font-weight: 700; line-height: 1.1; }
+h2 { font-size: clamp(22px, 3.4vw, 30px); font-weight: 700; }
+h3 { font-size: 17px; font-weight: 650; letter-spacing: -0.2px; }
+p { margin: 0; }
+.lede { color: var(--dim); font-size: 17px; max-width: 62ch; }
+.note { color: var(--faint); font-size: 13.5px; }
+
+header { padding: 72px 0 40px; }
+section { padding-top: 72px; border-top: 1px solid rgba(255,255,255,0.07); margin-top: 72px; }
+section:first-of-type { border-top: 0; margin-top: 0; }
+.head { max-width: 68ch; margin-bottom: 28px; display: flex; flex-direction: column; gap: 10px; }
+
+/* ---- the grille ---- */
+.grille {
+  background-image: repeating-linear-gradient(
+    to bottom,
+    rgba(255,255,255,0.085) 0px,
+    rgba(255,255,255,0.085) 1px,
+    rgba(255,255,255,0) 1px,
+    rgba(255,255,255,0) 4px);
+}
+
+/* ---- the one material ---- */
+.glass {
+  background: rgba(12, 11, 26, 0.52);
+  backdrop-filter: blur(26px) saturate(180%);
+  -webkit-backdrop-filter: blur(26px) saturate(180%);
+  border: 1px solid rgba(255,255,255,0.16);
+  box-shadow: 0 1px 0 rgba(255,255,255,0.22) inset, 0 12px 40px rgba(0,0,0,0.42);
+}
+
+/* ---- controls ---- */
+.tabs { display: flex; flex-wrap: wrap; gap: 8px; }
+.tab {
+  font: 500 13px var(--sans);
+  padding: 9px 15px; min-height: 40px;
+  border-radius: 999px; cursor: pointer;
+  background: rgba(255,255,255,0.05);
+  border: 1px solid rgba(255,255,255,0.12);
+  color: var(--dim);
+  transition: background 140ms ease, border-color 140ms ease, color 140ms ease;
+}
+.tab:hover { background: rgba(255,255,255,0.09); color: var(--text); }
+.tab[aria-pressed="true"] {
+  background: rgba(179,162,255,0.20);
+  border-color: rgba(179,162,255,0.55);
+  color: var(--text);
+}
+:focus-visible { outline: 2px solid var(--glow); outline-offset: 3px; }
+
+/* ---- the stage ---- */
+.stage {
+  position: relative; height: 420px; margin-top: 20px;
+  border-radius: 16px; overflow: hidden;
+  border: 1px solid rgba(255,255,255,0.10);
+}
+.backdrop { position: absolute; inset: 0; }
+.bd-editor { background: #0d1117; }
+.bd-doc    { background: #ffffff; }
+.bd-photo  { background: radial-gradient(120% 90% at 18% 12%, #ffd166 0%, #ef476f 38%, #7b2cbf 68%, #1b1035 100%); }
+.bd-chat   { background: #1a1d21; }
+.content { position: absolute; inset: 0; padding: 32px 38px; }
+.code { font-family: var(--mono); font-size: 13.5px; line-height: 2.05; color: #8b949e; }
+.k { color: #ff7b72; } .f { color: #d2a8ff; } .n { color: #79c0ff; } .c { color: #6e7681; }
+.docline { height: 11px; background: #e6e6ea; border-radius: 3px; margin-bottom: 15px; }
+
+.pillwrap { position: absolute; left: 50%; top: 56%; transform: translate(-50%, -50%); }
+.pill {
+  display: flex; align-items: center; gap: 12px;
+  padding: 11px 18px; border-radius: 999px;
+}
+.pill .label {
+  font-size: 13.5px; font-weight: 500; white-space: nowrap;
+  color: rgba(255,255,255,0.92);
+  text-shadow: 0 1px 3px rgba(0,0,0,0.55);
+}
+.core {
+  width: 9px; height: 9px; border-radius: 999px; flex-shrink: 0;
+  background: var(--live); box-shadow: 0 0 10px rgba(63,224,207,0.85);
+}
+.bars { display: flex; align-items: center; gap: 3px; height: 22px; }
+.bar {
+  width: 3px; height: 22px; border-radius: 2px; background: var(--live);
+  transform-origin: center; animation: bar 900ms ease-in-out infinite;
+}
+.bar:nth-child(2) { animation-duration: 640ms; animation-delay: 80ms; }
+.bar:nth-child(3) { animation-duration: 1080ms; animation-delay: 160ms; background: var(--glow); }
+.bar:nth-child(4) { animation-duration: 760ms; animation-delay: 40ms; }
+.bar:nth-child(5) { animation-duration: 980ms; animation-delay: 220ms; }
+@keyframes bar { 0%, 100% { transform: scaleY(0.30); } 50% { transform: scaleY(1); } }
+
+.dots { display: flex; align-items: center; gap: 5px; height: 22px; }
+.dot { width: 6px; height: 6px; border-radius: 999px; background: var(--violet); animation: think 1400ms ease-in-out infinite; }
+.dot:nth-child(2) { animation-delay: 180ms; }
+.dot:nth-child(3) { animation-delay: 360ms; }
+@keyframes think { 0%, 80%, 100% { opacity: 0.25; } 40% { opacity: 1; } }
+
+.endcap {
+  width: 26px; height: 26px; border-radius: 999px; flex-shrink: 0;
+  font-size: 13px; line-height: 1; cursor: pointer;
+  border: 1px solid rgba(255,255,255,0.22);
+  background: rgba(255,255,255,0.06);
+  color: var(--text);
+}
+.endcap.ok { border-color: rgba(63,224,207,0.55); background: rgba(63,224,207,0.16); color: var(--glow); }
+
+.absent {
+  font-size: 13px; color: rgba(255,255,255,0.5);
+  background: rgba(10,9,24,0.55);
+  backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+  padding: 7px 14px; border-radius: 999px;
+  border: 1px solid rgba(255,255,255,0.10);
+  text-shadow: 0 1px 3px rgba(0,0,0,0.6);
+}
+
+.why { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 26px; margin-top: 24px; }
+.why h3 { margin-bottom: 5px; }
+.why p { font-size: 13.5px; color: var(--faint); }
+
+/* ---- three directions ---- */
+.cols { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 26px; }
+.col { display: flex; flex-direction: column; gap: 13px; min-width: 0; }
+.swatchpair { display: flex; flex-direction: column; gap: 12px; }
+.swatch { position: relative; height: 128px; border-radius: 12px; overflow: hidden; display: flex; align-items: center; justify-content: center; }
+.verdict { font-size: 13px; }
+.frosted {
+  background: rgba(255,255,255,0.58);
+  backdrop-filter: blur(22px); -webkit-backdrop-filter: blur(22px);
+  border: 1px solid rgba(255,255,255,0.85);
+  box-shadow: 0 8px 28px rgba(0,0,0,0.10);
+}
+.frosted .label { color: #6f6f7a; text-shadow: none; }
+.solid { background: #17161f; box-shadow: 0 10px 30px rgba(0,0,0,0.30); }
+.solid .label { color: #e8e8ee; text-shadow: none; }
+.minibars { display: flex; align-items: center; gap: 3px; height: 18px; }
+.minibars span { width: 3px; border-radius: 2px; background: var(--live); }
+
+/* ---- hub ---- */
+.hubshell { position: relative; border-radius: 16px; overflow: hidden; border: 1px solid rgba(255,255,255,0.10); }
+.hubdesk { position: absolute; inset: 0; background: radial-gradient(130% 110% at 75% 10%, #2b1c5e 0%, #170f33 48%, #0a0718 100%); }
+.hub { position: relative; display: grid; grid-template-columns: 200px minmax(0,1fr); min-height: 460px; }
+.rail { padding: 18px 12px; border-right: 1px solid rgba(255,255,255,0.09); display: flex; flex-direction: column; gap: 3px; }
+.railitem { display: flex; align-items: center; gap: 10px; padding: 9px 11px; border-radius: 9px; font-size: 13.5px; color: var(--dim); }
+.railitem.on { background: rgba(255,255,255,0.11); color: var(--text); }
+.hubmain { padding: 26px 30px; display: flex; flex-direction: column; gap: 20px; }
+.stat { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 14px; }
+.card { border-radius: 13px; padding: 16px 18px; background: rgba(255,255,255,0.055); border: 1px solid rgba(255,255,255,0.10); }
+.big { font-family: var(--rounded); font-size: 29px; font-weight: 700; letter-spacing: -0.5px; }
+.cap { font-size: 12.5px; color: var(--faint); margin-top: 2px; }
+.row { display: flex; align-items: baseline; gap: 12px; padding: 11px 0; border-bottom: 1px solid rgba(255,255,255,0.065); font-size: 14px; }
+.row:last-child { border-bottom: 0; }
+.when { font-size: 12px; color: var(--faint); flex-shrink: 0; width: 56px; font-variant-numeric: tabular-nums; }
+
+/* ---- palette ---- */
+.twoup { display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr); gap: 26px; align-items: start; }
+.palshell { position: relative; height: 400px; border-radius: 16px; overflow: hidden; border: 1px solid rgba(255,255,255,0.10); background: #0d1117; }
+.pal { position: absolute; left: 50%; top: 46%; transform: translate(-50%, -50%); width: min(520px, 86%); border-radius: 15px; overflow: hidden; }
+.palinput { display: flex; align-items: center; gap: 11px; padding: 15px 18px; border-bottom: 1px solid rgba(255,255,255,0.10); }
+.caret { width: 2px; height: 17px; background: var(--glow); }
+.palrow { display: flex; align-items: center; gap: 11px; padding: 10px 18px; font-size: 13.5px; color: var(--dim); }
+.palrow.on { background: rgba(179,162,255,0.16); color: var(--text); }
+.kbd { margin-left: auto; font: 11.5px var(--mono); color: var(--faint); border: 1px solid rgba(255,255,255,0.14); border-radius: 5px; padding: 2px 6px; }
+.menubar { border-radius: 14px; overflow: hidden; }
+.mb-head { padding: 15px 17px 13px; border-bottom: 1px solid rgba(255,255,255,0.10); }
+.mb-row { display: flex; align-items: center; gap: 10px; padding: 9px 17px; font-size: 13.5px; color: var(--dim); }
+
+/* ---- tokens ---- */
+.tokens { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 14px; }
+.tok { border-radius: 11px; padding: 13px 14px; border: 1px solid rgba(255,255,255,0.10); background: rgba(255,255,255,0.04); }
+.chip { height: 34px; border-radius: 7px; margin-bottom: 9px; }
+.tokname { font-size: 13px; font-weight: 600; }
+.tokval { font: 11.5px var(--mono); color: var(--faint); }
+
+.rules { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 22px; }
+.rule { border-left: 2px solid rgba(179,162,255,0.45); padding-left: 16px; }
+.rule h3 { margin-bottom: 4px; }
+.rule p { font-size: 13.5px; color: var(--faint); }
+
+@media (max-width: 880px) {
+  .why, .cols, .stat, .rules { grid-template-columns: 1fr; }
+  .twoup { grid-template-columns: 1fr; }
+  .hub { grid-template-columns: 1fr; }
+  .rail { flex-direction: row; overflow-x: auto; border-right: 0; border-bottom: 1px solid rgba(255,255,255,0.09); }
+  .stage { height: 340px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .bar, .dot { animation: none; }
+  .bar { transform: scaleY(0.72); }
+  .tab { transition: none; }
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <h1>The glass is the grille</h1>
+  <p class="lede" style="margin-top: 14px">A transparent look for Dictator, drawn around the one thing the interface
+  must never get wrong: whether the microphone is open. Every surface here is
+  ruled with fine horizontal lines, because the icon is a microphone whose
+  grille is lines of text, and because ruled lines are what keep a blurred
+  panel legible over somebody else's white document.</p>
+</header>
+
+<section>
+  <div class="head">
+    <h2>The pill sits on somebody else's screen</h2>
+    <p class="note">Nothing behind it was designed by us. Change the backdrop and the state.
+    The only look that means the microphone is open has to stay the only look
+    that means it, over a white page as much as over a photograph.</p>
+  </div>
+
+  <div class="tabs" role="group" aria-label="Pill state" id="states">
+    <button class="tab" type="button" data-state="listening" aria-pressed="true">Listening</button>
+    <button class="tab" type="button" data-state="hands" aria-pressed="false">Hands free</button>
+    <button class="tab" type="button" data-state="thinking" aria-pressed="false">Thinking</button>
+    <button class="tab" type="button" data-state="idle" aria-pressed="false">Idle</button>
+  </div>
+
+  <div class="tabs" style="margin-top: 10px" role="group" aria-label="Backdrop" id="backs">
+    <button class="tab" type="button" data-back="editor" aria-pressed="true">Code editor</button>
+    <button class="tab" type="button" data-back="doc" aria-pressed="false">White document</button>
+    <button class="tab" type="button" data-back="photo" aria-pressed="false">Photo wallpaper</button>
+    <button class="tab" type="button" data-back="chat" aria-pressed="false">Chat thread</button>
+  </div>
+
+  <div class="stage">
+    <div class="backdrop bd-editor" id="backdrop"></div>
+
+    <div class="content code" data-content="editor">
+      <div><span class="k">def</span> <span class="f">audio_ctx_for</span>(secs):</div>
+      <div style="padding-left: 28px" class="c"># measured: trimming under six seconds is worse AND slower</div>
+      <div style="padding-left: 28px"><span class="k">if</span> secs &lt; WORTH_TRIMMING:</div>
+      <div style="padding-left: 56px"><span class="k">return</span> <span class="n">0</span></div>
+      <div style="padding-left: 28px"><span class="k">return</span> <span class="f">ceil</span>(secs * FRAMES_PER_SECOND)</div>
+    </div>
+
+    <div class="content" data-content="doc" hidden style="padding: 42px 60px; color: #1f2328">
+      <div style="font-size: 25px; font-weight: 700; margin-bottom: 18px; color: #111">Handover notes</div>
+      <div class="docline" style="width: 78%"></div>
+      <div class="docline" style="width: 92%"></div>
+      <div class="docline" style="width: 64%"></div>
+      <div class="docline" style="width: 85%; margin-bottom: 0"></div>
+    </div>
+
+    <div class="content" data-content="photo" hidden></div>
+
+    <div class="content" data-content="chat" hidden style="display: flex; flex-direction: column; gap: 15px; color: #d1d2d3; font-size: 14.5px">
+      <div style="display: flex; gap: 12px">
+        <div style="width: 34px; height: 34px; border-radius: 8px; background: #4a154b; flex-shrink: 0"></div>
+        <div><div style="font-weight: 700; color: #fff">Reviewer</div><div>can you paste the latency numbers from the sweep</div></div>
+      </div>
+      <div style="display: flex; gap: 12px">
+        <div style="width: 34px; height: 34px; border-radius: 8px; background: #2d7d6d; flex-shrink: 0"></div>
+        <div><div style="font-weight: 700; color: #fff">You</div><div>one second</div></div>
+      </div>
+    </div>
+
+    <div class="pillwrap">
+      <div class="pill glass grille" id="pill">
+        <button class="endcap" type="button" aria-label="Cancel this dictation" id="cancel" hidden>&#215;</button>
+        <span class="core" id="core"></span>
+        <div class="bars" id="bars"><span class="bar"></span><span class="bar"></span><span class="bar"></span><span class="bar"></span><span class="bar"></span></div>
+        <div class="dots" id="dots" hidden><span class="dot"></span><span class="dot"></span><span class="dot"></span></div>
+        <span class="label" id="label">Listening</span>
+        <button class="endcap ok" type="button" aria-label="Finish and paste" id="finish" hidden>&#10003;</button>
+      </div>
+      <div class="absent" id="absent" hidden>No pill. The microphone is closed.</div>
+    </div>
+  </div>
+
+  <div class="why">
+    <div>
+      <h3 style="color: var(--live)">Motion carries the promise</h3>
+      <p>A hue behind glass takes on whatever is under it. Movement does not. The
+      bars move only while the microphone is genuinely open, and nothing else in
+      the app animates, so movement anywhere means one thing.</p>
+    </div>
+    <div>
+      <h3 style="color: var(--violet)">The rules keep it readable</h3>
+      <p>Plain frosted glass goes white over a white page and the panel stops
+      being a panel. The grille holds its texture at a fixed opacity, so the
+      object keeps its edges on every backdrop.</p>
+    </div>
+    <div>
+      <h3>It appears where you are</h3>
+      <p>At the caret, on the display holding keyboard focus. The market leader
+      pins its pill to the bottom of one screen, which is why somebody wrote a
+      separate utility to move it.</p>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="head">
+    <h2>Three directions, on the two backdrops that break them</h2>
+    <p class="note">A white page and a saturated photograph. Both are ordinary things to be
+    dictating over, and both are where a look decided on a dark mockup falls apart.</p>
+  </div>
+
+  <div class="cols">
+    <div class="col">
+      <div>
+        <h3 style="color: var(--bad)">Frosted card</h3>
+        <p class="note">White glass, hairline border, soft shadow. Where most glass concepts land.</p>
+      </div>
+      <div class="swatchpair">
+        <div class="swatch" style="background: #fff">
+          <div class="content" style="padding: 18px 22px">
+            <div class="docline" style="width: 70%; margin-bottom: 12px"></div>
+            <div class="docline" style="width: 88%; margin-bottom: 12px"></div>
+            <div class="docline" style="width: 55%; margin-bottom: 0"></div>
+          </div>
+          <div class="pill frosted" style="position: relative"><span class="core" style="box-shadow: none"></span><span class="label">Listening</span></div>
+        </div>
+        <div class="swatch bd-photo">
+          <div class="pill frosted"><span class="core" style="box-shadow: none"></span><span class="label">Listening</span></div>
+        </div>
+      </div>
+      <p class="verdict" style="color: var(--bad)">On white it stops being an object. One small teal dot is all that is
+      left, and a dot is not enough to carry a promise about a microphone.</p>
+    </div>
+
+    <div class="col">
+      <div>
+        <h3 style="color: var(--warn)">Solid lozenge</h3>
+        <p class="note">Opaque dark pill. What the market leader ships, and it never fails to be seen.</p>
+      </div>
+      <div class="swatchpair">
+        <div class="swatch" style="background: #fff">
+          <div class="content" style="padding: 18px 22px">
+            <div class="docline" style="width: 70%; margin-bottom: 12px"></div>
+            <div class="docline" style="width: 88%; margin-bottom: 12px"></div>
+            <div class="docline" style="width: 55%; margin-bottom: 0"></div>
+          </div>
+          <div class="pill solid" style="position: relative"><span class="core" style="box-shadow: none"></span><span class="label">Listening</span></div>
+        </div>
+        <div class="swatch bd-photo">
+          <div class="pill solid"><span class="core" style="box-shadow: none"></span><span class="label">Listening</span></div>
+        </div>
+      </div>
+      <p class="verdict" style="color: var(--warn)">Always legible, and always a hole punched in what you were reading.
+      It is also somebody else's shape: people already know this one as another app.</p>
+    </div>
+
+    <div class="col">
+      <div>
+        <h3 style="color: var(--live)">Grille glass</h3>
+        <p class="note">Dark translucency ruled with fine lines, taken from the grille in the icon.</p>
+      </div>
+      <div class="swatchpair">
+        <div class="swatch" style="background: #fff">
+          <div class="content" style="padding: 18px 22px">
+            <div class="docline" style="width: 70%; margin-bottom: 12px"></div>
+            <div class="docline" style="width: 88%; margin-bottom: 12px"></div>
+            <div class="docline" style="width: 55%; margin-bottom: 0"></div>
+          </div>
+          <div class="pill glass grille" style="position: relative">
+            <span class="core"></span>
+            <div class="minibars"><span style="height: 8px"></span><span style="height: 16px"></span><span style="height: 11px; background: var(--glow)"></span><span style="height: 18px"></span></div>
+            <span class="label">Listening</span>
+          </div>
+        </div>
+        <div class="swatch bd-photo">
+          <div class="pill glass grille">
+            <span class="core"></span>
+            <div class="minibars"><span style="height: 8px"></span><span style="height: 16px"></span><span style="height: 11px; background: var(--glow)"></span><span style="height: 18px"></span></div>
+            <span class="label">Listening</span>
+          </div>
+        </div>
+      </div>
+      <p class="verdict" style="color: var(--live)">The backdrop still shows through and the panel still has edges,
+      because the rules and the dark tint hold whatever is behind them. The same
+      object on both.</p>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="head">
+    <h2>The Hub, on the desktop rather than over it</h2>
+    <p class="note">A window you opened on purpose can be calmer than a pill that arrives
+    uninvited. Same material, more of it, and the only moving thing is gone.</p>
+  </div>
+
+  <div class="hubshell">
+    <div class="hubdesk"></div>
+    <div class="hub glass grille" style="border: 0; box-shadow: none; border-radius: 0">
+      <nav class="rail" aria-label="Sections">
+        <div class="railitem on">Home</div>
+        <div class="railitem">Words you taught it</div>
+        <div class="railitem">History</div>
+        <div class="railitem">Meetings</div>
+        <div class="railitem">Settings</div>
+      </nav>
+      <div class="hubmain">
+        <div>
+          <h3 style="font-size: 20px">Today</h3>
+          <p class="note" style="margin-top: 3px">Everything below was worked out on this Mac. No audio left it.</p>
+        </div>
+        <div class="stat">
+          <div class="card"><div class="big" style="color: var(--live)">2,480</div><div class="cap">words spoken</div></div>
+          <div class="card"><div class="big">41 min</div><div class="cap">saved against typing</div></div>
+          <div class="card"><div class="big" style="color: var(--violet)">1.9 s</div><div class="cap">median hold to paste</div></div>
+        </div>
+        <div class="card" style="padding: 6px 18px 10px">
+          <div class="row"><span class="when">14:02</span><span>kya ye function thoda slow lag raha hai, can you check the loop</span></div>
+          <div class="row"><span class="when">13:48</span><span>push the branch and tell Mayank to look at the dmg job</span></div>
+          <div class="row"><span class="when">13:31</span><span>yaar iska latency abhi bhi kharab hai, model load hi 60 percent hai</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="head">
+    <h2>The palette and the menu bar</h2>
+    <p class="note">The palette lands over your editor, so it takes the pill's material. The
+    menu bar item is the one place the app is allowed to be small and dull.</p>
+  </div>
+
+  <div class="twoup">
+    <div class="palshell">
+      <div class="content code">
+        <div><span class="k">async def</span> <span class="f">transcribe</span>(wav, ours=<span class="k">False</span>):</div>
+        <div style="padding-left: 28px" class="c"># ours=False: never delete the caller's file</div>
+        <div style="padding-left: 28px"><span class="k">if</span> ours <span class="k">and</span> capturing():</div>
+      </div>
+      <div class="pal glass grille">
+        <div class="palinput">
+          <span class="label" style="color: rgba(255,255,255,0.55)">tea</span><span class="caret"></span>
+        </div>
+        <div class="palrow on">Teach it a word<span class="kbd">return</span></div>
+        <div class="palrow">Team notes from the last meeting</div>
+        <div class="palrow">Read the last paste back to me</div>
+        <div class="palrow" style="padding-bottom: 14px">Clear what it learned today</div>
+      </div>
+    </div>
+
+    <div class="menubar glass grille">
+      <div class="mb-head">
+        <div style="display: flex; align-items: center; gap: 9px">
+          <span class="core"></span>
+          <strong style="font-size: 14px">Listening on right option</strong>
+        </div>
+        <p class="note" style="margin-top: 5px; font-size: 12.5px">Hold it anywhere. Double tap for hands free.</p>
+      </div>
+      <div class="mb-row">Open the Hub<span class="kbd">&#8984;&#8679;D</span></div>
+      <div class="mb-row">Command palette<span class="kbd">&#8984;K</span></div>
+      <div class="mb-row">Pause until I say so</div>
+      <div class="mb-row" style="padding-bottom: 14px">Quit</div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="head">
+    <h2>What the material is made of</h2>
+    <p class="note">One blur, one tint, one rule pattern, used at three sizes. The brand colours
+    are the ones already in <code style="font-family: var(--mono); font-size: 13px">Theme.swift</code>, not new ones.</p>
+  </div>
+
+  <div class="tokens">
+    <div class="tok"><div class="chip" style="background: #3FE0CF"></div><div class="tokname">Live</div><div class="tokval">#3FE0CF</div></div>
+    <div class="tok"><div class="chip" style="background: #8CFFEB"></div><div class="tokname">Cursor glow</div><div class="tokval">#8CFFEB</div></div>
+    <div class="tok"><div class="chip" style="background: #B3A2FF"></div><div class="tokname">Accent</div><div class="tokval">#B3A2FF</div></div>
+    <div class="tok"><div class="chip" style="background: #121124"></div><div class="tokname">Ink</div><div class="tokval">#121124</div></div>
+    <div class="tok"><div class="chip glass grille" style="box-shadow: none"></div><div class="tokname">Glass</div><div class="tokval">52% ink, blur 26</div></div>
+    <div class="tok"><div class="chip grille" style="background-color: rgba(255,255,255,0.05)"></div><div class="tokname">Grille</div><div class="tokval">1px every 4px, 8.5%</div></div>
+  </div>
+
+  <div class="rules" style="margin-top: 34px">
+    <div class="rule">
+      <h3>Translucency is for chrome, never for the signal</h3>
+      <p>The teal core keeps its own full opacity and never sits behind the blur.
+      Everything that is only a container may be see-through; the one element
+      that answers "is the microphone open" may not.</p>
+    </div>
+    <div class="rule">
+      <h3>One moving thing in the whole app</h3>
+      <p>The bars. No hover transitions on cards, no entrances, no shimmer. If
+      something moves, the microphone is open, and that sentence has to stay
+      true for the look to be worth anything.</p>
+    </div>
+    <div class="rule">
+      <h3>It has to fall back to macOS 14</h3>
+      <p>The native Liquid Glass material is macOS 26 and later. Below that the
+      same surfaces use an <code style="font-family: var(--mono); font-size: 12.5px">NSVisualEffectView</code>
+      with the hudWindow material and the grille drawn on top, which is the part
+      that carries the identity anyway.</p>
+    </div>
+    <div class="rule">
+      <h3>Text keeps its contrast, not its transparency</h3>
+      <p>Labels sit at 92% white with a soft dark shadow rather than at a lower
+      alpha. Transparent type over an unknown backdrop is the fastest way to
+      make a window that cannot be read at noon.</p>
+    </div>
+  </div>
+</section>
+
+</div>
+
+<script>
+(function () {
+  "use strict";
+
+  var pill = document.getElementById('pill');
+  var core = document.getElementById('core');
+  var bars = document.getElementById('bars');
+  var dots = document.getElementById('dots');
+  var label = document.getElementById('label');
+  var cancel = document.getElementById('cancel');
+  var finish = document.getElementById('finish');
+  var absent = document.getElementById('absent');
+  var backdrop = document.getElementById('backdrop');
+
+  function press(group, attr, value) {
+    var buttons = group.querySelectorAll('.tab');
+    for (var i = 0; i < buttons.length; i++) {
+      buttons[i].setAttribute('aria-pressed', String(buttons[i].dataset[attr] === value));
+    }
+  }
+
+  function setState(mode) {
+    var live = mode === 'listening' || mode === 'hands';
+    pill.hidden = mode === 'idle';
+    absent.hidden = mode !== 'idle';
+    core.hidden = !live;
+    bars.hidden = !live;
+    dots.hidden = mode !== 'thinking';
+    cancel.hidden = mode !== 'hands';
+    finish.hidden = mode !== 'hands';
+    label.textContent = mode === 'hands' ? 'Hands free'
+      : (mode === 'thinking' ? 'Working it out' : 'Listening');
+    press(document.getElementById('states'), 'state', mode);
+  }
+
+  function setBackdrop(name) {
+    backdrop.className = 'backdrop bd-' + name;
+    var panes = document.querySelectorAll('.stage .content[data-content]');
+    for (var i = 0; i < panes.length; i++) {
+      panes[i].hidden = panes[i].dataset.content !== name;
+    }
+    press(document.getElementById('backs'), 'back', name);
+  }
+
+  document.getElementById('states').addEventListener('click', function (e) {
+    var b = e.target.closest('.tab');
+    if (b) { setState(b.dataset.state); }
+  });
+
+  document.getElementById('backs').addEventListener('click', function (e) {
+    var b = e.target.closest('.tab');
+    if (b) { setBackdrop(b.dataset.back); }
+  });
+
+  setState('listening');
+  setBackdrop('editor');
+}());
+</script>
+</body>
+</html>
