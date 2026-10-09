@@ -24,6 +24,7 @@ struct HubView: View {
                 case .home: HomePage()
                 case .words: WordsPage()
                 case .snippets: SnippetsPage()
+                case .scratchpad: ScratchpadPage()
                 case .style: StylePage()
                 case .review: Placeholder(page: .review,
                     blurb: "What it may have got wrong today, and whether it was right.",
@@ -861,6 +862,16 @@ struct HelpPage: View {
                     "Hold \(Prefs.keyNames[model.key] ?? model.key), say what you mean, and "
                     + "let go. The words are typed where your cursor is.")
                 Rectangle().fill(Theme.hairline).frame(height: 1)
+                tip("hands.and.sparkles", "Hands free",
+                    "Double-tap \(Prefs.keyNames[model.key] ?? model.key) and talk as long as you "
+                    + "like, up to two minutes. Press it once to finish and paste, or Escape to "
+                    + "throw it away. The pill shows a cross and a check while it listens.")
+                Rectangle().fill(Theme.hairline).frame(height: 1)
+                tip("capsule", "The pill",
+                    "It appears while the microphone is open. Move the pointer to its place to "
+                    + "see its buttons: dictate, the Notetaker (⌥M) and the Scratchpad (⌥S). "
+                    + "Drag it to any edge or corner.")
+                Rectangle().fill(Theme.hairline).frame(height: 1)
                 tip("character.bubble", "Hindi and English together",
                     "Set the language to Hinglish in Settings if you mix the two. English "
                     + "first is quicker if you mostly speak English.")
@@ -874,6 +885,7 @@ struct HelpPage: View {
                     + "run the diagnostics in Settings, Advanced.")
             }
             .card(padding: 0)
+            if model.key == "fn" { GlobeKeyNote() }
             HStack(spacing: Theme.s2) {
                 Button("Open Accessibility settings") {
                     NSWorkspace.shared.open(URL(string:

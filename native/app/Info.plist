@@ -15,6 +15,15 @@
        sets the policy at launch: accessory for a headless repo install, and
        when Show in Dock is off. -->
   <key>CFBundleIconFile</key><string>AppIcon</string>
+  <!-- dictator://scratchpad and dictator://notetaker: how the pill's buttons
+       reach the app. The pill opens them in the copy that holds app.lock. -->
+  <key>CFBundleURLTypes</key>
+  <array>
+    <dict>
+      <key>CFBundleURLName</key><string>com.dictator.dictation</string>
+      <key>CFBundleURLSchemes</key><array><string>dictator</string></array>
+    </dict>
+  </array>
   <key>LSMinimumSystemVersion</key><string>14.0</string>
   <!-- These strings ARE the permission dialog. macOS shows them verbatim, so
        they have to answer "why does this want that" in one sentence. -->

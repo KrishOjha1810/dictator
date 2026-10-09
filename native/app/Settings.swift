@@ -15,7 +15,9 @@ final class SettingsState: ObservableObject {
     @Published var erased = ""
     @Published var dock = Prefs.showInDock
     @Published var position = "top"
-    @Published var hideIdle = false
+    @Published var idle = "hover"
+    @Published var controls: [String] = ["dictate", "notetaker", "scratchpad"]
+    @Published var shortcuts: [String: Bool] = ["notetaker": true, "scratchpad": true]
 }
 
 /// The eight places the pill can sit, as `dictator indicator` names them
@@ -53,9 +55,12 @@ struct SettingsPage: View {
     private func loadIndicator() {
         CLI.load({ CLI.json(["indicator"]) }) { o in
             guard let d = o as? [String: Any] else { return }
-            if let p = d["position"] as? String,
-               indicatorPositions.contains(where: { $0.0 == p }) { st.position = p }
-            if let h = d["hide_idle"] as? Bool { st.hideIdle = h }
+            var f = IndicatorFile()
+            f.apply(d)
+            st.position = f.position
+            st.idle = f.idle
+            st.controls = f.controls
+            st.shortcuts = f.shortcuts
         }
     }
 
@@ -64,7 +69,28 @@ struct SettingsPage: View {
     private func setIndicator(_ args: [String]) {
         CLI.load({ CLI.act(["indicator"] + args) }) { ok in
             if ok && !fake { loadIndicator() }
+            Hotkeys.shared.refreshIfChanged()
         }
+    }
+
+    private func setControl(_ c: String, _ on: Bool) {
+        var now = st.controls.filter { $0 != c }
+        if on { now.append(c) }
+        st.controls = ["dictate", "notetaker", "scratchpad"].filter { now.contains($0) }
+        setIndicator(["controls", st.controls.isEmpty ? "none" : st.controls.joined(separator: ",")])
+    }
+
+    private func controlToggle(_ c: String) -> some View {
+        Toggle("", isOn: Binding(get: { st.controls.contains(c) }, set: { setControl(c, $0) }))
+            .toggleStyle(.switch).labelsHidden().controlSize(.small)
+    }
+
+    private func shortcutToggle(_ k: String) -> some View {
+        Toggle("", isOn: Binding(get: { st.shortcuts[k] ?? true }, set: { on in
+            st.shortcuts[k] = on
+            setIndicator(["shortcut", k, on ? "on" : "off"])
+        }))
+        .toggleStyle(.switch).labelsHidden()
     }
 
     // -----------------------------------------------------------------------
@@ -113,14 +139,45 @@ struct SettingsPage: View {
                 .labelsHidden().fixedSize()
             }
             Hairline()
-            SettingRow("Hide when not dictating",
-                       "Off: a small grey pill stays on screen. It turns dark with moving bars "
-                       + "only while the microphone is open.") {
-                Toggle("", isOn: Binding(get: { st.hideIdle }, set: { on in
-                    st.hideIdle = on
-                    setIndicator(["hide-idle", on ? "on" : "off"])
-                }))
-                .toggleStyle(.switch).labelsHidden()
+            SettingRow("When not dictating",
+                       "While the microphone is open the pill always shows, dark with moving "
+                       + "bars. Show on hover: nothing until the pointer comes to its place, "
+                       + "then the pill and its buttons.") {
+                Picker("", selection: Binding(get: { st.idle }, set: { v in
+                    st.idle = v
+                    setIndicator(["idle", v])
+                })) {
+                    Text("Show on hover").tag("hover")
+                    Text("Always show").tag("always")
+                    Text("Hide").tag("hide")
+                }
+                .labelsHidden().fixedSize()
+            }
+            Hairline()
+            SettingRow("Buttons on hover",
+                       "Click the pill to dictate hands free; the record button starts the "
+                       + "Notetaker; the pencil opens the Scratchpad.") {
+                VStack(alignment: .trailing, spacing: 6) {
+                    ForEach([("dictate", "Dictate"), ("notetaker", "Notetaker"),
+                             ("scratchpad", "Scratchpad")], id: \.0) { c in
+                        HStack(spacing: Theme.s2) {
+                            Text(c.1).font(.system(size: 12)).fixedSize()
+                            controlToggle(c.0)
+                        }
+                    }
+                }
+                .foregroundColor(Theme.secondary)
+                .disabled(st.idle == "hide")
+            }
+            Hairline()
+            SettingRow("Notetaker shortcut",
+                       "⌥M starts or stops recording a meeting, from any app.") {
+                shortcutToggle("notetaker")
+            }
+            Hairline()
+            SettingRow("Scratchpad shortcut",
+                       "⌥S opens the Scratchpad, ready to dictate into.") {
+                shortcutToggle("scratchpad")
             }
             Hairline()
             SettingRow("Show in Dock", "Off: only the menu bar item, and quit from there.") {

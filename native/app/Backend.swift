@@ -464,6 +464,12 @@ enum Prefs {
         set { store.set(newValue, forKey: "showInDock") }
     }
 
+    /// The Notetaker's one-time consent question was answered yes.
+    static var meetingConsent: Bool {
+        get { store.bool(forKey: "meetingConsent") }
+        set { store.set(newValue, forKey: "meetingConsent") }
+    }
+
     static var onboarded: Bool {
         get { store.bool(forKey: "onboarded") }
         set { store.set(newValue, forKey: "onboarded") }

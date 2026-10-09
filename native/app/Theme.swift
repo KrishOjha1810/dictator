@@ -267,3 +267,39 @@ func copyToPasteboard(_ s: String) {
     NSPasteboard.general.clearContents()
     NSPasteboard.general.setString(s, forType: .string)
 }
+
+/// macOS acts on a quick tap of fn (Globe) itself: the emoji picker, the
+/// input source, or Apple's dictation. Dictator's double tap is two such
+/// taps, and the key listener only listens, so it cannot stop macOS from
+/// acting on them. The fix is one setting, and this says which.
+struct GlobeKeyNote: View {
+    var compact = false
+
+    static let line = "A quick tap of fn (🌐) also makes macOS open the emoji picker or switch "
+        + "input. Set System Settings, Keyboard, “Press 🌐 key to” to “Do Nothing”."
+
+    var body: some View {
+        HStack(alignment: .center, spacing: Theme.s3) {
+            Image(systemName: "globe").font(.system(size: compact ? 13 : 15, weight: .medium))
+                .foregroundColor(Theme.warn)
+            Text(Self.line)
+                .font(.system(size: compact ? 12 : 13))
+                .foregroundColor(Theme.text)
+                .fixedSize(horizontal: false, vertical: true)
+            Spacer(minLength: Theme.s2)
+            Button("Open Keyboard Settings") { openKeyboardSettings() }
+                .buttonStyle(QuietButton())
+        }
+        .padding(.horizontal, Theme.s3)
+        .padding(.vertical, compact ? Theme.s2 : Theme.s3)
+        .background(RoundedRectangle(cornerRadius: Theme.smallRadius, style: .continuous)
+            .fill(Theme.warn.opacity(0.07)))
+        .overlay(RoundedRectangle(cornerRadius: Theme.smallRadius, style: .continuous)
+            .strokeBorder(Theme.warn.opacity(0.30), lineWidth: 1))
+    }
+}
+
+func openKeyboardSettings() {
+    if fake { NSLog("dictator (fake): would open Keyboard settings"); return }
+    NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.Keyboard-Settings.extension")!)
+}

@@ -10,18 +10,20 @@ import AppKit
 import SwiftUI
 
 enum Page: String, CaseIterable, Identifiable {
-    case home = "Home", words = "Words", snippets = "Snippets", style = "Style"
+    case home = "Home", words = "Words", snippets = "Snippets", scratchpad = "Scratchpad"
+    case style = "Style"
     case review = "Review", meetings = "Meetings", settings = "Settings", help = "Help"
     var id: String { rawValue }
 
     /// The pages in the top of the sidebar; Settings and Help sit at the bottom.
-    static let main: [Page] = [.home, .words, .snippets, .style, .review, .meetings]
+    static let main: [Page] = [.home, .words, .snippets, .scratchpad, .style, .review, .meetings]
 
     var symbol: String {
         switch self {
         case .home: return "house"
         case .words: return "character.book.closed"
         case .snippets: return "text.badge.plus"
+        case .scratchpad: return "note.text"
         case .style: return "textformat"
         case .review: return "checkmark.seal"
         case .meetings: return "person.2"
@@ -174,11 +176,23 @@ final class UI: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWindowDelegat
         timer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in
             self?.model.refresh()
             self?.drawIcon()
+            Hotkeys.shared.refreshIfChanged()
         }
+
+        // The pill's Notetaker and Scratchpad buttons find the app by this
+        // lock, and Option-M and Option-S are registered here (Shortcuts.swift).
+        AppLock.hold()
+        Hotkeys.shared.actions = [
+            .notetaker: { Notetaker.shared.toggle() },
+            .scratchpad: { [weak self] in self?.showScratchpad(nil) },
+        ]
+        Hotkeys.shared.refreshIfChanged()
 
         let first = !Prefs.onboarded || env["DICTATOR_ONBOARDING"] == "1"
         if !fake { begin(prompt: !first) }
-        if fake, let p = env["DICTATOR_SHOW"].flatMap({ Page(rawValue: $0.capitalized) }) {
+        if fake, env["DICTATOR_SHOW"] == "scratchpad-window" {
+            showScratchpad(nil)
+        } else if fake, let p = env["DICTATOR_SHOW"].flatMap({ Page(rawValue: $0.capitalized) }) {
             // For screenshots of one page: DICTATOR_SHOW=words, settings, ...
             showHub(p)
         } else if first {
@@ -211,7 +225,22 @@ final class UI: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWindowDelegat
     }
 
     func applicationWillTerminate(_ note: Notification) {
+        NotesStore.shared.flush()
         Supervisor.shared.stopAndWait()
+    }
+
+    /// dictator://scratchpad and dictator://notetaker, from the pill's
+    /// buttons (native/orb.swift). The pill opens the Notetaker one without
+    /// bringing the app forward; the consent question brings it forward
+    /// itself, the first time only.
+    func application(_ application: NSApplication, open urls: [URL]) {
+        for u in urls where u.scheme == "dictator" {
+            switch u.host ?? "" {
+            case "scratchpad": showScratchpad(nil)
+            case "notetaker": Notetaker.shared.toggle()
+            default: NSLog("dictator: unknown link \(u)")
+            }
+        }
     }
 
     /// Closing the last window leaves the app running; it is the key, not
@@ -433,6 +462,10 @@ final class UI: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWindowDelegat
         menu.addItem(.separator())
 
         add(menu, "Open Dictator…", #selector(openHub))
+        add(menu, "Scratchpad", #selector(openScratchpad),
+            key: IndicatorFile.read().shortcuts["scratchpad"] ?? true ? "s" : "", mods: .option)
+        add(menu, "Start or Stop Notetaker", #selector(toggleNotetaker),
+            key: IndicatorFile.read().shortcuts["notetaker"] ?? true ? "m" : "", mods: .option)
         let lang = NSMenuItem(title: "Language", action: nil, keyEquivalent: "")
         let sub = NSMenu()
         for (code, title) in [("english", "Auto (English first)"), ("hinglish", "Hinglish")] {
@@ -470,13 +503,17 @@ final class UI: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWindowDelegat
         add(menu, "Quit Dictator", #selector(quit), key: "q")
     }
 
-    private func add(_ menu: NSMenu, _ title: String, _ sel: Selector, key: String = "") {
+    private func add(_ menu: NSMenu, _ title: String, _ sel: Selector, key: String = "",
+                     mods: NSEvent.ModifierFlags = .command) {
         let i = NSMenuItem(title: title, action: sel, keyEquivalent: key)
+        i.keyEquivalentModifierMask = mods
         i.target = self
         menu.addItem(i)
     }
 
     @objc func openHub() { showHub(.home) }
+    @objc func openScratchpad() { showScratchpad(nil) }
+    @objc func toggleNotetaker() { Notetaker.shared.toggle() }
     @objc func quitRival() { model.quitRival() }
     @objc func changeKey() { showHub(.settings) }
     @objc func openSettings() { showHub(.settings) }
@@ -514,12 +551,16 @@ final class UI: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWindowDelegat
 
     func show<V: View>(_ id: String, _ title: String, _ size: NSSize, min: NSSize? = nil,
                        _ view: () -> V) -> NSWindow {
+        // A snapshot run draws the window into a PNG and quits. It must not
+        // take the keyboard: a key pressed meanwhile by the person at the Mac
+        // would land in this window instead of where they were typing.
+        let quiet = fake && env["DICTATOR_SNAPSHOT"] != nil
         if let w = windows[id] {
             w.collectionBehavior = [.moveToActiveSpace, .fullScreenAuxiliary]
             if w.isMiniaturized { w.deminiaturize(nil) }
-            w.makeKeyAndOrderFront(nil)
+            if !quiet { w.makeKeyAndOrderFront(nil) }
             w.orderFrontRegardless()
-            NSApp.activate(ignoringOtherApps: true)
+            if !quiet { NSApp.activate(ignoringOtherApps: true) }
             return w
         }
         var style: NSWindow.StyleMask = [.titled, .closable, .miniaturizable, .fullSizeContentView]
@@ -546,12 +587,12 @@ final class UI: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWindowDelegat
         // first launch looks like nothing happened at all.
         w.collectionBehavior = [.moveToActiveSpace, .fullScreenAuxiliary]
         windows[id] = w
-        w.makeKeyAndOrderFront(nil)
+        if !quiet { w.makeKeyAndOrderFront(nil) }
         // In front even when activation is refused (macOS 14 lets the
         // frontmost app decline a steal); it becomes key on the first click.
         w.orderFrontRegardless()
         // With no Dock icon the app does not come to the front on its own.
-        NSApp.activate(ignoringOtherApps: true)
+        if !quiet { NSApp.activate(ignoringOtherApps: true) }
         return w
     }
 
@@ -560,6 +601,16 @@ final class UI: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWindowDelegat
         _ = show("hub", "Dictator", Theme.hubSize, min: NSSize(width: 820, height: 560)) {
             HubView()
         }
+    }
+
+    /// The Scratchpad window, on a note or a new one, with the cursor in it
+    /// so whatever is dictated next lands there.
+    func showScratchpad(_ id: String?) {
+        let store = NotesStore.shared
+        let w = show("scratchpad", "Scratchpad", NSSize(width: 760, height: 520),
+                     min: NSSize(width: 640, height: 420)) { ScratchpadView() }
+        if !store.loaded { store.load { store.open(id) } } else { store.open(id) }
+        if !(fake && env["DICTATOR_SNAPSHOT"] != nil) { w.makeKeyAndOrderFront(nil) }
     }
 
     func showOnboarding() {
@@ -572,6 +623,10 @@ final class UI: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWindowDelegat
     /// Closed half way: notifications speak again, and the cards come back on
     /// the next launch because `onboarded` was never set.
     func windowWillClose(_ note: Notification) {
+        if let w = note.object as? NSWindow, windows["scratchpad"] === w {
+            NotesStore.shared.flush()
+            return
+        }
         guard let w = note.object as? NSWindow, windows["onboarding"] === w else { return }
         onboarding = false
         windows["onboarding"] = nil

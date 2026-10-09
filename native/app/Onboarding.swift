@@ -263,7 +263,8 @@ struct OnboardingView: View {
     private var yourKey: some View {
         VStack(spacing: Theme.s5) {
             header("command", "Choose your key",
-                   "Hold it to talk, let go to stop. Pick one, then press it once to check.")
+                   "Hold it to talk, let go to stop; double-tap it to talk hands free. "
+                   + "Pick one, then press it once to check.")
             HStack(spacing: Theme.s3) {
                 ForEach(Prefs.keys, id: \.self) { k in keyTile(k) }
             }
@@ -275,6 +276,7 @@ struct OnboardingView: View {
                     .foregroundColor(Theme.secondary)
                     .frame(height: 32)
             }
+            if st.key == "fn" { GlobeKeyNote(compact: true) }
         }
         .background(KeyWatcher(key: st.key) { st.keySeen = true }.id(st.key))
     }
