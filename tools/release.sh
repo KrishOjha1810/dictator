@@ -29,13 +29,26 @@ VERSION="${1:?usage: tools/release.sh VERSION [notes.md]}"
 NOTES="${2:-}"
 REPO="${DICTATOR_REPO:-cc-vb/dictator}"
 KEYDIR="${DICTATOR_RELEASE_DIR:-$HOME/.dictator-release}"
-SPARKLE="$ROOT/build/cache/sparkle/bin"
 DMG="$ROOT/build/Dictator-$VERSION.dmg"
 FEED="$ROOT/build/appcast.xml"
 
 cd "$ROOT"
 if [ -n "$(git status --porcelain --untracked-files=no)" ]; then
     echo "uncommitted changes; commit first so the release is a real commit" >&2
+    exit 1
+fi
+# Only from a release branch: the list is RELEASE_BRANCHES in
+# .github/workflows/release.yml, so a tag pushed by hand and a release made
+# here follow the same rule (the feature branch while it is tested, later
+# only main).
+ALLOWED="$(sed -n 's/^  RELEASE_BRANCHES: "\(.*\)"/\1/p' .github/workflows/release.yml)"
+BRANCH="$(git rev-parse --abbrev-ref HEAD)"
+case " $ALLOWED " in
+    *" $BRANCH "*) ;;
+    *) echo "releases come from: $ALLOWED (this is $BRANCH)" >&2; exit 1 ;;
+esac
+if [ "$(git rev-parse HEAD)" != "$(git rev-parse "origin/$BRANCH" 2>/dev/null)" ]; then
+    echo "push $BRANCH first: the release must be a commit that is on GitHub" >&2
     exit 1
 fi
 if [ -z "${GH_TOKEN:-}" ] && [ -f .env ]; then
@@ -49,30 +62,9 @@ export GH_TOKEN
 ID="$(tools/release_cert.sh unlock)"
 trap 'tools/release_cert.sh lock' EXIT
 DICTATOR_SIGN_ID="$ID" tools/build_dmg.sh "$VERSION"
-BUILD="$(plutil -extract CFBundleVersion raw build/stage/Dictator.app/Contents/Info.plist)"
 
-# 2. the update signature
-SIG_LINE="$("$SPARKLE/sign_update" --ed-key-file "$KEYDIR/sparkle_ed25519.key" "$DMG")"
-
-# 3. the feed: one item, the release this run makes
-URL="https://github.com/$REPO/releases/download/v$VERSION/Dictator-$VERSION.dmg"
-cat > "$FEED" <<EOF
-<?xml version="1.0" encoding="utf-8"?>
-<rss version="2.0" xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle">
-  <channel>
-    <title>Dictator</title>
-    <item>
-      <title>Dictator $VERSION</title>
-      <pubDate>$(LC_ALL=C date -u '+%a, %d %b %Y %H:%M:%S +0000')</pubDate>
-      <sparkle:version>$BUILD</sparkle:version>
-      <sparkle:shortVersionString>$VERSION</sparkle:shortVersionString>
-      <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
-      <link>https://github.com/$REPO/releases/tag/v$VERSION</link>
-      <enclosure url="$URL" type="application/octet-stream" $SIG_LINE />
-    </item>
-  </channel>
-</rss>
-EOF
+# 2 and 3. the update signature and the feed, shared with the CI release job
+tools/appcast.sh "$VERSION" "$REPO" "$KEYDIR/sparkle_ed25519.key"
 
 # 4. publish
 cp "$DMG" build/Dictator.dmg

@@ -8,7 +8,8 @@
 # calls the scripts and keeps no build logic of its own.
 #
 # Signing: with the repository secrets DICTATOR_P12_BASE64 and
-# DICTATOR_P12_PASSWORD set, the one self-signed release certificate is
+# DICTATOR_P12_PASSWORD set (and DICTATOR_SPARKLE_ED_KEY, which signs the
+# update feed tools/appcast.sh writes), the one self-signed release certificate is
 # imported into a throwaway keychain and used. Without them the app is signed
 # ad-hoc, which is fine for checking the build and wrong for a release: a new
 # identity per build means every user's Microphone and Accessibility grants
@@ -29,6 +30,10 @@ on:
   workflow_dispatch:
 
 env:
+  # Which branches a v* tag may point into. While the app is tested from the
+  # feature branch, releases come from it; once it is merged, this becomes
+  # just "main" and a tag anywhere else is refused.
+  RELEASE_BRANCHES: "feat/dmg-app main"
   # whisper.cpp tag the native build compiles. The cache key follows it, so
   # bumping it here is all a rebuild takes.
   # build_native.sh checks the tag's commit too, and only v1.9.1 is pinned.
@@ -93,6 +98,12 @@ jobs:
         run: |
           if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
             echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+            ok=""
+            for b in $RELEASE_BRANCHES; do
+              git merge-base --is-ancestor "$GITHUB_SHA" "origin/$b" 2>/dev/null && ok="$b"
+            done
+            [ -n "$ok" ] || { echo "::error::$GITHUB_REF_NAME is not on any of: $RELEASE_BRANCHES"; exit 1; }
+            echo "Releasing from $ok"
           else
             echo "version=0.0.0-${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
           fi
@@ -119,7 +130,12 @@ jobs:
         env:
           P12: ${{ secrets.DICTATOR_P12_BASE64 }}
           P12_PASSWORD: ${{ secrets.DICTATOR_P12_PASSWORD }}
+          ED_KEY: ${{ secrets.DICTATOR_SPARKLE_ED_KEY }}
         run: |
+          if [[ "$GITHUB_REF" == refs/tags/v* ]] && [ -z "$ED_KEY" ]; then
+            echo "::error::No DICTATOR_SPARKLE_ED_KEY in secrets; a release without a signed update feed would break updates"
+            exit 1
+          fi
           if [ -z "$P12" ]; then
             if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
               echo "::error::No release certificate in secrets; refusing to publish an ad-hoc signed release"
@@ -163,6 +179,33 @@ jobs:
         run: |
           if [ -n "${KC:-}" ]; then security delete-keychain "$KC" || true; fi
 
+      # tools/release.sh on the maintainer's Mac creates the tag and the whole
+      # release itself, and pushing that tag runs this job too. If the release
+      # already carries its feed, it is complete: replacing its files with
+      # this build's would only open a window where the feed and the .dmg
+      # disagree.
+      - name: Already published?
+        id: done
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh release view "$GITHUB_REF_NAME" --json assets --jq '.assets[].name' 2>/dev/null \
+               | grep -qx appcast.xml; then
+            echo "Release $GITHUB_REF_NAME already has its feed; not publishing again"
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Sign the update and write the feed
+        if: startsWith(github.ref, 'refs/tags/v') && steps.done.outputs.skip != 'true'
+        env:
+          ED_KEY: ${{ secrets.DICTATOR_SPARKLE_ED_KEY }}
+        run: |
+          KEYFILE="$RUNNER_TEMP/sparkle.key"
+          ( umask 077; printf '%s' "$ED_KEY" > "$KEYFILE" )
+          tools/appcast.sh "${{ steps.v.outputs.version }}" "$GITHUB_REPOSITORY" "$KEYFILE"
+          rm -f "$KEYFILE"
+
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7
         with:
           name: Dictator-${{ steps.v.outputs.version }}
@@ -171,14 +214,18 @@ jobs:
             build/Dictator-*.dmg.sha256
 
       - name: Release notes
-        if: startsWith(github.ref, 'refs/tags/v')
+        if: startsWith(github.ref, 'refs/tags/v') && steps.done.outputs.skip != 'true'
         run: |
           {
             echo "Dictator ${{ steps.v.outputs.version }} for Apple silicon, macOS 14 or newer."
             echo
+            echo "Drag it to Applications, eject the disk image, open it from Applications."
             echo "macOS blocks it on first open, because it is not paid into Apple's"
             echo "developer programme. Open System Settings, Privacy & Security, and"
-            echo "press Open Anyway, once."
+            echo "press Open Anyway, once. If your key is fn, set System Settings,"
+            echo "Keyboard, Press the Globe key to: Do Nothing."
+            echo
+            echo "Installed copies update themselves from here (Dictator, Check for Updates)."
             echo
             echo '```'
             cat build/Dictator-*.dmg.sha256
@@ -189,10 +236,12 @@ jobs:
           cp build/Dictator-*.dmg build/Dictator.dmg
 
       - uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64  # v3
-        if: startsWith(github.ref, 'refs/tags/v')
+        if: startsWith(github.ref, 'refs/tags/v') && steps.done.outputs.skip != 'true'
         with:
+          make_latest: true
           files: |
             build/Dictator.dmg
             build/Dictator-*.dmg
             build/Dictator-*.dmg.sha256
+            build/appcast.xml
           body_path: build/notes.md
