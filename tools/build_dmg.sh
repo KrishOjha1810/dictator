@@ -372,9 +372,14 @@ rm -f "$DMG"
 # `diskutil image create`. It still works; switch when it stops.
 hdiutil create -quiet -volname "Dictator" -srcfolder "$STAGE" -ov \
     -format UDZO -imagekey zlib-level=9 "$DMG"
-if [ "$SIGN_ID" != "-" ]; then
-    sign "$DMG"
-fi
+# The disk image itself is deliberately NOT signed. Signed with the release
+# certificate, which no Mac but ours trusts, a downloaded .dmg is refused
+# outright ("Dictator.dmg Not Opened"), before the app inside is ever looked
+# at; unsigned, it mounts, and Gatekeeper judges the app, which gets the one
+# Open Anyway it is meant to. Measured on macOS 27.0.1 with the same app in
+# both images (9 October 2026). The app inside stays signed: that is what
+# keeps permissions across updates. Updates are protected separately, by the
+# Sparkle signature over the whole file (tools/appcast.sh).
 SHA="$(shasum -a 256 "$DMG" | awk '{print $1}')"
 echo "$SHA  $(basename "$DMG")" > "$DMG.sha256"
 
