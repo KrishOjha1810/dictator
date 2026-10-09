@@ -295,8 +295,10 @@ seen and where, then the fix. Done in this order.
 - [x] Hub like Wispr Flow's: sidebar with icons, Home with stats and history
       by day with copy, Words, Snippets, Style per app
 - [x] Onboarding redesigned, with the Try it card showing the live result
-- [ ] The bar: a pill with a live waveform, keeping "visible only when our
-      microphone is open"
+- [x] The bar: a pill with a live waveform, keeping "visible only when our
+      microphone is open". Done in Round 3: the waveform look is still drawn
+      only when our microphone is open; an idle pill is now shown between
+      holds.
 - [ ] Better than the reference: time-to-paste shown per sentence, a local
       only badge, a Hinglish switch, and fixing a word in history teaches it.
       Done: the badge, the Hinglish question in onboarding, and time-to-paste
@@ -306,3 +308,63 @@ seen and where, then the fix. Done in this order.
 ### Then
 
 - [ ] Rebuild as 0.1.2, install on this Mac, test, then release
+
+---
+
+## Round 3: the indicator, and two apps on one key (2026-10-09)
+
+### The indicator becomes a movable pill, like Wispr Flow's Flow Bar
+
+- [x] Always on screen while dictation runs: a small, faint grey pill when
+      idle (no waveform, no animation), a dark pill with moving bars while
+      listening, three pulsing dots while the words are worked out
+      (`native/orb.swift`).
+- [x] Listening is still drawn if and only if our microphone is open
+      (CoreAudio presence AND the mic.lock flock; hud.json only sets how
+      loud). When our mic is hot the look is listening whatever hud.json
+      says, so the idle pill can never stand in for listening. The header
+      comment says what the idle pill does and does not mean.
+- [x] Drag to move. While dragging, the eight places on the screen under the
+      pointer show as translucent slots, the nearest highlighted; on release
+      it snaps there in 0.18 s. Top centre (default, under the notch or menu
+      bar), bottom centre (above the Dock), left and right edge centres, four
+      corners, all inside the visible frame. Multiple displays: the slots
+      follow the pointer's screen.
+- [x] Never takes focus: a non-activating panel the size of the pill that
+      never becomes key; the slot overlay ignores the mouse.
+- [x] Kept in `indicator.json` in the state directory
+      (`{"position", "hide_idle"}`), read on start and watched, so a change
+      moves the running pill. Restored on the focused screen at launch.
+- [x] `dictator indicator [position P | hide-idle on|off] [--json]`, and in
+      the app, Settings > General: "Indicator position" (eight places) and
+      "Hide when not dictating" (default off, which is the old behaviour).
+- [x] The helper is given `DICTATOR_STATE` by `orbnative.py`. It used to read
+      a hardcoded ~/.dictator, so a loop pointed elsewhere had an orb
+      watching another mic.lock.
+- [x] `DICTATOR_ORB_SNAPSHOT=DIR dictator-orb` draws every look and the drop
+      targets on a made-up screen into PNGs (build/screens/orb-*.png), with no
+      window, no microphone and no state.
+- [ ] Not checked by hand yet: a real drag on this Mac, and on two displays.
+      The shell has no Screen Recording, and the real app was not touched.
+
+### Two dictation apps on fn
+
+- [x] Wispr Flow also holds fn, so both apps pasted the same dictation. The
+      app now looks for known dictation apps (Wispr Flow
+      `com.electron.wispr-flow`, read from its Info.plist; Superwhisper,
+      MacWhisper, Aqua Voice, Willow by identifier or name) at launch, when
+      the menu opens, and when any app starts or quits
+      (`native/app/Rivals.swift`).
+- [x] While our key is fn: a banner at the top of Home and a line in the menu,
+      "Wispr Flow is also running and listens to fn, so both will type. Quit
+      it, or change Dictator's key.", with "Quit Wispr Flow" and "Change
+      key". Nothing is quit without the click; fake mode never quits.
+- [ ] The identifiers for Superwhisper and MacWhisper are from memory, and
+      Aqua Voice and Willow match by name only; check them against the real
+      apps.
+
+### Then
+
+- [x] Built: `tools/build_native.sh`, `tools/build_app.sh`,
+      `tools/build_dmg.sh 0.1.3` (ad-hoc).
+- [ ] Install 0.1.3 on this Mac and try the drag and the warning for real.
