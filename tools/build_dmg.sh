@@ -4,8 +4,7 @@
 #
 #   tools/build_dmg.sh [VERSION]  ->  build/Dictator-<VERSION>.dmg
 #
-# The order follows docs/implementation.md, "Build, sign, package", and the
-# order matters for one reason: signing. A signature covers the bytes of
+# The order of the steps matters for one reason: signing. A signature covers the bytes of
 # everything nested inside, so the innermost code is signed first and the app
 # last. Anything changed after its parent was signed breaks the parent.
 #
