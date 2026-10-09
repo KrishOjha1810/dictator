@@ -156,3 +156,21 @@ def test_cli_refuses_nonsense_without_writing(capsys):
     assert cli.main(["dictator", "indicator", "controls", "jazz"]) == 2
     assert cli.main(["dictator", "indicator", "shortcut", "dictate", "on"]) == 2
     assert not orbnative.SETTINGS.exists()
+
+
+def test_only_top_and_bottom_centre_lie_flat():
+    """At the side edges and in all four corners the pill and its buttons
+    stand up; only the two centres of the top and bottom lie flat."""
+    src = Path(orbnative.SRC).read_text()
+    assert ("var orientation: Orientation { (self == .top || self == .bottom) "
+            "? .horizontal : .vertical }") in src
+
+
+def test_the_pill_and_the_loop_agree_on_the_control_channel():
+    """The helper sends to the socket and checks the lock control.py uses."""
+    from dictator import control
+    src = Path(orbnative.SRC).read_text()
+    assert f'"{control.SOCK_NAME}"' in src
+    assert f'"{control.SOCK_NAME}.lock"' in src
+    for word in control.COMMANDS:
+        assert f'tellLoop("{word}")' in src

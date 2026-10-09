@@ -415,18 +415,17 @@ def test_the_orb_chooses_its_screen_on_every_hold():
     wrong one for the rest of the session, and somebody with a laptop on a
     desk moves between displays all day.
 
-    The pill now stays on screen between holds, so it is not re-shown per
-    hold any more: the screen is picked again where a hold begins, the move
-    from any other look to listening, and a window that is rebuilt is still
-    placed."""
+    The screen is picked again where a hold begins, the move from any other
+    look to listening, and a window that is rebuilt is still placed."""
     src = (Path(__file__).resolve().parent.parent
            / "native" / "orb.swift").read_text()
-    show = src[src.index("private func show()"):]
-    show = show[:show.index("private func hide()")]
-    assert "place(" in show, "the window is rebuilt but never re-placed"
-    start = src[src.index("private func set(_ look: Look)"):]
-    start = start[:start.index("\n    }\n") + 6]
-    assert "look == .listening" in start and "pickScreen()" in start, \
+    show = src[src.index("private func show(_ f: NSRect"):]
+    show = show[:show.index("private func hide(")]
+    assert "makeWindow()" in show and "win.setFrame(f" in show, \
+        "the window is rebuilt but never re-placed"
+    ev = src[src.index("private func evaluate()"):]
+    ev = ev[:ev.index("private func apply(")]
+    assert "newLook == .listening" in ev and "pickScreen()" in ev, \
         "a hold no longer brings the pill to the screen being worked on"
 
 
