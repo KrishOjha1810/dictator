@@ -264,7 +264,12 @@ let app = NSApplication.shared
 // one, with a Dock icon and an app menu (Show in Dock can turn that off; see
 // UI.applyDockPolicy). Set before run() so a headless repo install, which has
 // no windows and no menu bar item, never flashes a Dock icon.
-app.setActivationPolicy(showsUI && Prefs.showInDock ? .regular : .accessory)
+//
+// A fake-mode snapshot run (DICTATOR_SNAPSHOT) is prohibited from being
+// activated at all, so it can never take the keyboard from the person at the
+// Mac, even when macOS hands activation on as another app quits.
+app.setActivationPolicy(snapshotRun ? .prohibited
+                        : showsUI && Prefs.showInDock ? .regular : .accessory)
 
 /// NSApplication holds its delegate weakly. Held here, at file scope, for the
 /// life of the process. As a local inside the `if` below, the optimiser was

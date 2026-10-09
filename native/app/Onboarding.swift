@@ -40,6 +40,7 @@ struct OnboardingView: View {
 
     var body: some View {
         VStack(spacing: 0) {
+            VStack(spacing: 0) {
             progress
                 .padding(.top, 22)
 
@@ -55,6 +56,24 @@ struct OnboardingView: View {
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .padding(.horizontal, 56)
+            }
+            // The first card is the brand moment: the icon's gradient, full
+            // bleed, with the grille's lines drifting off the corner.
+            .background(Group {
+                if st.card == 0 {
+                    ZStack {
+                        Theme.brand
+                        VStack(alignment: .leading, spacing: 18) {
+                            ForEach([260.0, 340, 200, 300, 230], id: \.self) { w in
+                                Capsule().fill(Color.white.opacity(0.06)).frame(width: w, height: 14)
+                            }
+                        }
+                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomLeading)
+                        .offset(x: -60, y: 30)
+                    }
+                    .clipped()
+                }
+            })
 
             footer
                 .padding(.horizontal, Theme.s5)
@@ -74,7 +93,8 @@ struct OnboardingView: View {
         HStack(spacing: 6) {
             ForEach(0..<count, id: \.self) { i in
                 Capsule()
-                    .fill(i <= st.card ? Theme.accent : Theme.border)
+                    .fill(st.card == 0 ? Color.white.opacity(i == 0 ? 0.95 : 0.3)
+                          : i == st.card ? Theme.live : i < st.card ? Theme.accent : Theme.border)
                     .frame(width: i == st.card ? 22 : 14, height: 5)
             }
         }
@@ -152,13 +172,16 @@ struct OnboardingView: View {
     private func header(_ symbol: String, _ title: String, _ line: String) -> some View {
         VStack(spacing: Theme.s3) {
             Image(systemName: symbol)
-                .font(.system(size: 24, weight: .medium))
-                .foregroundColor(Theme.accent)
+                .font(.system(size: 24, weight: .semibold))
+                .foregroundColor(.white)
                 .frame(width: 56, height: 56)
                 .background(RoundedRectangle(cornerRadius: 16, style: .continuous)
-                    .fill(Theme.accentSoft))
+                    .fill(Theme.brand))
+                .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .strokeBorder(Color.white.opacity(0.18), lineWidth: 1))
+                .shadow(color: Color(nsColor: Palette.gradViolet).opacity(0.3), radius: 8, y: 3)
                 .padding(.bottom, Theme.s1)
-            Text(title).font(.system(size: 26, weight: .semibold)).foregroundColor(Theme.text)
+            Text(title).font(.display(26)).foregroundColor(Theme.text)
                 .multilineTextAlignment(.center)
             Text(line).font(.system(size: 15)).foregroundColor(Theme.secondary)
                 .multilineTextAlignment(.center)
@@ -195,16 +218,25 @@ struct OnboardingView: View {
 
     private var welcome: some View {
         VStack(spacing: Theme.s4) {
-            Image(nsImage: NSApp.applicationIconImage)
-                .resizable().frame(width: 96, height: 96)
-            Text("Talk, and it types").font(.system(size: 30, weight: .semibold))
-                .foregroundColor(Theme.text)
-            Text("Hold a key, say what you mean, and the words land at your cursor "
-                 + "in any app.")
-                .font(.system(size: 15)).foregroundColor(Theme.secondary)
-                .multilineTextAlignment(.center).frame(maxWidth: 420)
-            Pill(text: "Everything stays on this Mac", symbol: "lock.fill")
-                .padding(.top, Theme.s1)
+            BrandMark(size: 96)
+                .shadow(color: .black.opacity(0.3), radius: 16, y: 8)
+                .padding(.bottom, Theme.s2)
+            Text("Talk, and it types").font(.display(34))
+                .foregroundColor(.white)
+            Text("Hold a key, say what you mean, in English or Hinglish, and the words "
+                 + "land at your cursor in any app.")
+                .font(.system(size: 15, weight: .medium)).foregroundColor(.white.opacity(0.85))
+                .multilineTextAlignment(.center).frame(maxWidth: 430)
+                .fixedSize(horizontal: false, vertical: true)
+            HStack(spacing: 6) {
+                Image(systemName: "lock.fill").font(.system(size: 10, weight: .bold))
+                Text("Everything stays on this Mac").font(.system(size: 12, weight: .semibold))
+            }
+            .foregroundColor(.white)
+            .padding(.horizontal, 12).padding(.vertical, 6)
+            .background(Capsule().fill(Color.black.opacity(0.2)))
+            .overlay(Capsule().strokeBorder(Theme.cursorGlow.opacity(0.6), lineWidth: 1))
+            .padding(.top, Theme.s1)
         }
     }
 
@@ -371,7 +403,7 @@ struct OnboardingView: View {
                         Text("ready").font(.system(size: 12)).foregroundColor(Theme.secondary)
                         Spacer()
                     } else {
-                        ProgressView(value: m.progress).tint(Theme.accent)
+                        BrandProgress(value: m.progress)
                             .frame(width: 180)
                         Text("\(Int((m.progress * 100).rounded()))%")
                             .font(.system(size: 12).monospacedDigit())
@@ -432,9 +464,9 @@ struct Listening: View {
             let phase = (sin(t.date.timeIntervalSinceReferenceDate * 3) + 1) / 2
             HStack(spacing: Theme.s3) {
                 ZStack {
-                    Circle().fill(Theme.accent.opacity(0.18))
+                    Circle().fill(Theme.live.opacity(0.22))
                         .frame(width: 14 + 10 * phase, height: 14 + 10 * phase)
-                    Circle().fill(Theme.accent).frame(width: 10, height: 10)
+                    Circle().fill(Theme.live).frame(width: 10, height: 10)
                 }
                 .frame(width: 26, height: 26)
                 Text("Listening… hold \(key) and speak")

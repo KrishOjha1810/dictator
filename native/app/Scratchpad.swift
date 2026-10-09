@@ -147,8 +147,9 @@ struct ScratchpadView: View {
     var body: some View {
         HStack(spacing: 0) {
             VStack(alignment: .leading, spacing: Theme.s3) {
-                HStack {
-                    Text("Scratchpad").font(.system(size: 15, weight: .semibold))
+                HStack(spacing: Theme.s2) {
+                    BrandMark(size: 20)
+                    Text("Scratchpad").font(.display(15, .bold))
                         .foregroundColor(Theme.text)
                     Spacer()
                     Button { store.open(nil) } label: { Image(systemName: "square.and.pencil") }
@@ -167,8 +168,8 @@ struct ScratchpadView: View {
                     }
                 }
                 Spacer(minLength: 0)
-                Label("On this Mac only", systemImage: "lock.fill")
-                    .font(.system(size: 11, weight: .medium)).foregroundColor(Theme.tertiary)
+                Label("Saved on this Mac only", systemImage: "lock.fill")
+                    .font(.system(size: 11, weight: .medium)).foregroundColor(Theme.live)
             }
             .padding(.horizontal, Theme.s3)
             .padding(.top, 44)
@@ -235,7 +236,7 @@ struct NoteListRow: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .onHover { hover.on = $0 }
+        .onHover { hover.on = $0 && !snapshotRun }
     }
 
     private var preview: String {
@@ -276,8 +277,9 @@ struct NoteEditor: NSViewRepresentable {
         tv.isRichText = false
         tv.allowsUndo = true
         tv.font = .systemFont(ofSize: 15)
-        tv.textColor = NSColor(srgbRed: 0.122, green: 0.114, blue: 0.102, alpha: 1)
-        tv.insertionPointColor = Theme.nsAccent
+        tv.textColor = Palette.text
+        // The icon's teal cursor, where the next words will land.
+        tv.insertionPointColor = Palette.live
         tv.drawsBackground = false
         tv.textContainerInset = NSSize(width: 6, height: 12)
         tv.isVerticallyResizable = true
@@ -313,7 +315,7 @@ final class PlaceholderTextView: NSTextView {
         guard string.isEmpty, !placeholder.isEmpty else { return }
         NSAttributedString(string: placeholder, attributes: [
             .font: NSFont.systemFont(ofSize: 15),
-            .foregroundColor: NSColor(srgbRed: 0.635, green: 0.616, blue: 0.588, alpha: 1)])
+            .foregroundColor: Palette.tertiary])
             .draw(at: NSPoint(x: textContainerInset.width + 5, y: textContainerInset.height))
     }
 }
@@ -338,12 +340,12 @@ struct ScratchpadPage: View {
             if !store.loaded {
                 Loading()
             } else if store.notes.isEmpty {
-                EmptyState(symbol: "note.text", title: "No notes yet",
+                EmptyState(art: .lines(0), title: "No notes yet",
                            line: "Press ⌥S, or the pencil on the pill, and talk. "
                                + "What you say lands in the note.")
                     .card()
             } else if store.shown.isEmpty {
-                EmptyState(symbol: "magnifyingglass", title: "No matches",
+                EmptyState(art: .search, title: "No matches",
                            line: "No note contains “\(store.query)”.").card()
             } else {
                 RowsCard(store.shown) { n in NotePageRow(note: n) }
@@ -393,7 +395,7 @@ struct NotePageRow: View {
         .padding(.horizontal, Theme.s4)
         .padding(.vertical, Theme.s3)
         .contentShape(Rectangle())
-        .onHover { st.hover = $0 }
+        .onHover { st.hover = $0 && !snapshotRun }
         .onTapGesture(count: 2) { (NSApp.delegate as? UI)?.showScratchpad(note.id) }
     }
 

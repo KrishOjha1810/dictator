@@ -42,6 +42,10 @@ enum Mode {
 /// written, so it is safe to run while a real install is dictating.
 let fake = env["DICTATOR_FAKE"] == "1"
 
+/// A fake-mode run that draws its window into a PNG and quits. It must never
+/// be activated or take the keyboard (see main.swift and AppWindow).
+let snapshotRun = fake && env["DICTATOR_SNAPSHOT"] != nil
+
 /// Whether to show anything at all. A repo install had no menu bar item and
 /// no windows before this, and someone who installed from source and rebuilt
 /// should not find a menu bar item they never asked for. DICTATOR_UI=1 turns it

@@ -18,7 +18,6 @@ struct HubView: View {
     var body: some View {
         HStack(spacing: 0) {
             Sidebar()
-            Rectangle().fill(Theme.border).frame(width: 1)
             Group {
                 switch model.page {
                 case .home: HomePage()
@@ -34,8 +33,9 @@ struct HubView: View {
                 case .meetings: Placeholder(page: .meetings,
                     blurb: "Record a meeting on this Mac and keep its notes.",
                     title: "Meetings are coming to the app",
-                    line: "Until then, start a capture from a terminal.",
-                    command: "dictator capture")
+                    line: "Start one with ⌥M or the record button on the pill. A stopped "
+                        + "meeting's notes are in a terminal for now.",
+                    command: "dictator meeting show")
                 case .settings: SettingsPage()
                 case .help: HelpPage()
                 }
@@ -45,45 +45,88 @@ struct HubView: View {
         }
         .frame(minWidth: 820, minHeight: 560)
         .background(Theme.background)
+        .overlay(Group { if model.paletteOpen { CommandPalette() } })
         .ignoresSafeArea()
     }
 }
 
 // ---------------------------------------------------------------------------
-// Sidebar
+// Sidebar: an ink rail with the mark, the palette, and the pages in groups.
 
 struct Sidebar: View {
     @EnvironmentObject var model: AppModel
 
+    /// What each group is for, in the order a day goes: say things, teach
+    /// it, keep things.
+    static let groups: [(String, [Page])] = [
+        ("", [.home]),
+        ("Teach", [.words, .snippets, .style]),
+        ("Keep", [.scratchpad, .meetings, .review]),
+    ]
+
     var body: some View {
         VStack(alignment: .leading, spacing: 2) {
-            HStack(spacing: Theme.s2) {
-                Image(nsImage: NSApp.applicationIconImage)
-                    .resizable().frame(width: 24, height: 24)
-                Text("Dictator").font(.system(size: 15, weight: .semibold))
-                    .foregroundColor(Theme.text)
+            HStack(spacing: 10) {
+                BrandMark(size: 26)
+                Text("Dictator").font(.display(16, .bold))
+                    .foregroundColor(Theme.railText)
             }
-            .padding(.horizontal, Theme.s2)
-            .padding(.bottom, Theme.s4)
+            .padding(.horizontal, 6)
+            .padding(.bottom, Theme.s3)
 
-            ForEach(Page.main) { SidebarItem(page: $0) }
+            Button { model.paletteOpen = true } label: {
+                HStack(spacing: Theme.s2) {
+                    Image(systemName: "magnifyingglass").font(.system(size: 11, weight: .semibold))
+                    Text("Search or jump").font(.system(size: 12.5))
+                    Spacer()
+                    Text("⌘K").font(.system(size: 11, weight: .semibold, design: .rounded))
+                        .padding(.horizontal, 5).padding(.vertical, 1)
+                        .background(RoundedRectangle(cornerRadius: 4).fill(Color.white.opacity(0.08)))
+                }
+                .foregroundColor(Theme.railSecondary)
+                .padding(.horizontal, 10)
+                .frame(height: 30)
+                .background(RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .fill(Color.white.opacity(0.06)))
+                .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .strokeBorder(Color.white.opacity(0.08), lineWidth: 1))
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .padding(.bottom, Theme.s3)
+
+            ForEach(Self.groups, id: \.0) { title, pages in
+                if !title.isEmpty {
+                    Text(title).font(.system(size: 11.5, weight: .semibold))
+                        .foregroundColor(Theme.railSecondary.opacity(0.8))
+                        .padding(.leading, 10)
+                        .padding(.top, Theme.s3)
+                        .padding(.bottom, 2)
+                }
+                ForEach(pages) { SidebarItem(page: $0) }
+            }
             Spacer()
             ForEach([Page.settings, .help]) { SidebarItem(page: $0) }
 
-            VStack(alignment: .leading, spacing: Theme.s2) {
+            VStack(alignment: .leading, spacing: 6) {
                 StatusLine()
-                Pill(text: "On this Mac only", symbol: "lock.fill")
-                    .help("Speech is turned into text here. Nothing you say is uploaded.")
+                HStack(spacing: 5) {
+                    Image(systemName: "lock.fill").font(.system(size: 9, weight: .bold))
+                    Text("Local only, on this Mac")
+                        .font(.system(size: 11, weight: .medium))
+                }
+                .foregroundColor(Color(nsColor: Palette.cursorGlow).opacity(0.85))
+                .help("Speech is turned into text here. Nothing you say is uploaded.")
             }
-            .padding(.horizontal, Theme.s2)
-            .padding(.top, Theme.s4)
+            .padding(.horizontal, 10)
+            .padding(.top, Theme.s3)
         }
         .padding(.horizontal, Theme.s3)
-        .padding(.top, 52)   // under the traffic lights
+        .padding(.top, 50)   // under the traffic lights
         .padding(.bottom, Theme.s4)
-        .frame(width: 212)
+        .frame(width: 216)
         .frame(maxHeight: .infinity)
-        .background(Theme.sidebar)
+        .background(Theme.rail)
     }
 }
 
@@ -97,25 +140,30 @@ struct SidebarItem: View {
         Button { model.page = page } label: {
             HStack(spacing: 10) {
                 Image(systemName: page.symbol)
-                    .font(.system(size: 13, weight: .medium))
-                    .foregroundColor(on ? Theme.accent : Theme.secondary)
+                    .font(.system(size: 12.5, weight: .medium))
+                    .foregroundColor(on ? Theme.railText : Theme.railSecondary)
                     .frame(width: 18)
                 Text(page.rawValue)
                     .font(.system(size: 13, weight: on ? .semibold : .regular))
-                    .foregroundColor(on ? Theme.text : Theme.text.opacity(0.85))
+                    .foregroundColor(on ? Theme.railText : Theme.railText.opacity(0.82))
                 Spacer()
             }
             .padding(.horizontal, 10)
             .frame(height: 30)
-            .background(RoundedRectangle(cornerRadius: 7, style: .continuous)
-                .fill(on ? Theme.card : (hover.on ? Theme.border.opacity(0.5) : .clear))
-                .shadow(color: .black.opacity(on ? 0.05 : 0), radius: 2, x: 0, y: 1))
-            .overlay(RoundedRectangle(cornerRadius: 7, style: .continuous)
-                .strokeBorder(on ? Theme.border : .clear, lineWidth: 1))
+            .background(RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .fill(on ? Theme.railSelected : (hover.on ? Theme.railHover : .clear)))
+            // The selected page carries the icon's cursor: a teal bar.
+            .overlay(alignment: .leading) {
+                if on {
+                    Capsule().fill(Theme.cursorGlow).frame(width: 3, height: 16)
+                        .shadow(color: Theme.cursorGlow.opacity(0.7), radius: 3)
+                        .offset(x: -1)
+                }
+            }
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .onHover { hover.on = $0 }
+        .onHover { hover.on = $0 && !snapshotRun }
     }
 }
 
@@ -127,7 +175,7 @@ struct StatusLine: View {
         let s = model.shown
         HStack(spacing: 6) {
             Circle().fill(Color(nsColor: s.color)).frame(width: 7, height: 7)
-            Text(detail(s)).font(.system(size: 12)).foregroundColor(Theme.secondary)
+            Text(detail(s)).font(.system(size: 12)).foregroundColor(Theme.railSecondary)
                 .lineLimit(1)
         }
     }
@@ -225,7 +273,7 @@ struct Placeholder: View {
         PageScroll {
             PageHeader(page.rawValue, blurb)
             VStack(spacing: Theme.s4) {
-                EmptyState(symbol: page.symbol, title: title, line: line)
+                EmptyState(art: page == .meetings ? .mic : .lines(2), title: title, line: line)
                     .padding(.bottom, -Theme.s5)
                 HStack(spacing: Theme.s2) {
                     Text(command).font(.system(size: 13, design: .monospaced))
@@ -239,7 +287,7 @@ struct Placeholder: View {
                 .padding(.leading, Theme.s3)
                 .padding(.trailing, Theme.s1)
                 .padding(.vertical, Theme.s1)
-                .background(RoundedRectangle(cornerRadius: Theme.smallRadius).fill(Theme.background))
+                .background(RoundedRectangle(cornerRadius: Theme.smallRadius).fill(Theme.sunken))
                 .overlay(RoundedRectangle(cornerRadius: Theme.smallRadius)
                     .strokeBorder(Theme.border))
                 .padding(.bottom, Theme.s6)
@@ -251,7 +299,8 @@ struct Placeholder: View {
 }
 
 // ---------------------------------------------------------------------------
-// Home: greeting, stats, then history by day, with search.
+// Home: today. A hero with the brand gradient and the time saved, the
+// numbers, the privacy promise, then history by day, with search.
 
 struct Said: Identifiable {
     var id: String
@@ -259,15 +308,40 @@ struct Said: Identifiable {
     var text: String
     var app: String
     var engine: String
+    /// "en", "hi" or "" as history stores it.
+    var lang: String
+    /// Seconds of speech, 0 when not known.
+    var secs: Double
 }
 
 final class HomeState: ObservableObject {
     @Published var words: Int?
     @Published var wpm: Double?
     @Published var streak: Int?
+    @Published var saved: Int?
+    @Published var todayWords: Int?
+    @Published var todaySaved: Int?
     @Published var said: [Said] = []
     @Published var loaded = false
     @Published var query = ""
+}
+
+/// "3 h 12 min", "14 min", "45 s".
+func duration(_ secs: Int) -> String {
+    if secs >= 3600 { return "\(secs / 3600) h \((secs % 3600) / 60) min" }
+    if secs >= 60 { return "\(secs / 60) min" }
+    return "\(secs) s"
+}
+
+/// What a history row was said in, from its language and engine.
+func spokenIn(lang: String, engine: String) -> String? {
+    let l = lang.lowercased()
+    if l.hasPrefix("hi") || l == "hinglish" { return "Hinglish" }
+    if l.hasPrefix("en") { return "English" }
+    let e = engineTitle(engine)
+    if e == "Hinglish engine" { return "Hinglish" }
+    if e == "English engine" { return "English" }
+    return nil
 }
 
 struct HomePage: View {
@@ -277,32 +351,18 @@ struct HomePage: View {
     var body: some View {
         PageScroll {
             if let r = model.clash { RivalBanner(running: r) }
-            HStack(alignment: .top) {
-                VStack(alignment: .leading, spacing: Theme.s2) {
-                    Text(greeting).font(.pageTitle).foregroundColor(Theme.text)
-                    HStack(spacing: 6) {
-                        Text("Hold").foregroundColor(Theme.secondary)
-                        KeyCap(label: Prefs.keyNames[model.key] ?? model.key)
-                        Text("and talk in any app. Let go, and the words land at your cursor.")
-                            .foregroundColor(Theme.secondary)
-                    }
-                    .font(.body14)
-                }
-                Spacer()
-            }
-
+            hero
             HStack(spacing: Theme.s3) {
-                stat("text.word.spacing", st.words.map { $0.formatted() } ?? "–", "words dictated")
-                stat("speedometer", st.wpm.map { "\(Int($0.rounded()))" } ?? "–", "words per minute")
-                stat("flame", st.streak.map { "\($0)" } ?? "–",
-                     "day streak")
-                stat("bolt", model.last?.ms.map(waited) ?? "–", "last time to paste")
+                stat("text.word.spacing", st.words.map { $0.formatted() } ?? "–", "words, all time")
+                stat("hourglass", st.saved.map(duration) ?? "–", "saved against typing")
+                stat("speedometer", st.wpm.map { "\(Int($0.rounded()))" } ?? "–", "words a minute")
+                stat("flame", st.streak.map { "\($0)" } ?? "–", "day streak")
             }
+            PrivacyPromise()
 
             VStack(alignment: .leading, spacing: Theme.s3) {
                 HStack {
-                    Text("History").font(.system(size: 17, weight: .semibold))
-                        .foregroundColor(Theme.text)
+                    Text("History").font(.sectionTitle).foregroundColor(Theme.text)
                     Spacer()
                     SearchField(prompt: "Search what you said", text: $st.query)
                         .frame(width: 260)
@@ -310,22 +370,18 @@ struct HomePage: View {
                 if !st.loaded {
                     Loading()
                 } else if st.said.isEmpty {
-                    EmptyState(symbol: "waveform", title: "Nothing yet",
+                    EmptyState(art: .mic, title: "Nothing yet",
                                line: "Hold \(Prefs.keyNames[model.key] ?? model.key) and talk in "
                                    + "any app. What you say shows up here.")
                         .card()
                 } else if days.isEmpty {
-                    EmptyState(symbol: "magnifyingglass", title: "No matches",
+                    EmptyState(art: .search, title: "No matches",
                                line: "Nothing you said recently contains “\(st.query)”.")
                         .card()
                 } else {
                     ForEach(days, id: \.0) { day, rows in
                         VStack(alignment: .leading, spacing: Theme.s2) {
-                            Text(day.uppercased())
-                                .font(.system(size: 11, weight: .semibold))
-                                .kerning(0.6)
-                                .foregroundColor(Theme.tertiary)
-                                .padding(.leading, Theme.s1)
+                            SectionLabel(day)
                             RowsCard(rows) { r in HistoryRow(said: r, ms: ms(for: r)) }
                         }
                     }
@@ -333,9 +389,71 @@ struct HomePage: View {
             }
         }
         .onAppear {
+            if let q = model.takeSeed(.home) { st.query = q }
             load()
             model.checkRivals()
         }
+    }
+
+    /// The brand moment: the gradient, today's words, and the time they saved.
+    private var hero: some View {
+        let key = Prefs.keyNames[model.key] ?? model.key
+        return HStack(alignment: .center, spacing: Theme.s5) {
+            VStack(alignment: .leading, spacing: Theme.s2) {
+                Text(greeting).font(.display(30, .bold)).foregroundColor(.white)
+                HStack(spacing: 6) {
+                    Text("Hold")
+                    Text(key).font(.system(size: 12, weight: .bold, design: .rounded))
+                        .padding(.horizontal, 7).frame(minHeight: 22)
+                        .background(RoundedRectangle(cornerRadius: 6, style: .continuous)
+                            .fill(Color.white.opacity(0.18)))
+                        .overlay(RoundedRectangle(cornerRadius: 6, style: .continuous)
+                            .strokeBorder(Color.white.opacity(0.35), lineWidth: 1))
+                    Text("and talk. Double-tap it to go hands free.")
+                }
+                .font(.system(size: 14, weight: .medium))
+                .foregroundColor(.white.opacity(0.88))
+                HStack(spacing: Theme.s2) {
+                    heroChip("text.cursor", st.todayWords.map { "\($0.formatted()) words today" }
+                             ?? "No words yet today")
+                    if let ms = model.last?.ms {
+                        heroChip("bolt.fill", "last pasted in \(waited(ms))")
+                    }
+                }
+                .padding(.top, Theme.s2)
+            }
+            Spacer(minLength: 0)
+            VStack(alignment: .trailing, spacing: 2) {
+                HStack(alignment: .firstTextBaseline, spacing: 6) {
+                    Text(st.todaySaved.map(duration) ?? "0 s")
+                        .font(.display(40, .bold))
+                        .foregroundColor(.white)
+                        .lineLimit(1).minimumScaleFactor(0.6)
+                    Capsule().fill(Theme.cursorGlow).frame(width: 4, height: 34)
+                        .shadow(color: Theme.cursorGlow.opacity(0.9), radius: 6)
+                }
+                Text("saved today against typing")
+                    .font(.system(size: 12.5, weight: .medium)).foregroundColor(.white.opacity(0.8))
+                Text("at 40 words a minute")
+                    .font(.system(size: 11)).foregroundColor(.white.opacity(0.6))
+            }
+        }
+        .padding(.horizontal, Theme.s5 + 4)
+        .padding(.vertical, Theme.s5)
+        .background(RoundedRectangle(cornerRadius: Theme.heroRadius, style: .continuous)
+            .fill(Theme.brand))
+        .overlay(RoundedRectangle(cornerRadius: Theme.heroRadius, style: .continuous)
+            .strokeBorder(Color.white.opacity(0.14), lineWidth: 1))
+    }
+
+    private func heroChip(_ symbol: String, _ s: String) -> some View {
+        HStack(spacing: 5) {
+            Image(systemName: symbol).font(.system(size: 10, weight: .bold))
+            Text(s).font(.system(size: 12, weight: .semibold))
+        }
+        .foregroundColor(.white)
+        .padding(.horizontal, 10).padding(.vertical, 5)
+        .background(Capsule().fill(Color.black.opacity(0.18)))
     }
 
     private var greeting: String {
@@ -344,14 +462,12 @@ struct HomePage: View {
     }
 
     private func stat(_ symbol: String, _ big: String, _ small: String) -> some View {
-        VStack(alignment: .leading, spacing: Theme.s2) {
+        VStack(alignment: .leading, spacing: 6) {
             Image(systemName: symbol)
-                .font(.system(size: 12, weight: .semibold))
+                .font(.system(size: 11, weight: .semibold))
                 .foregroundColor(Theme.accent)
-                .frame(width: 26, height: 26)
-                .background(Circle().fill(Theme.accentSoft))
             Text(big).font(.statNumber).foregroundColor(Theme.text)
-                .lineLimit(1).minimumScaleFactor(0.7)
+                .lineLimit(1).minimumScaleFactor(0.6)
             Text(small).font(.caption12).foregroundColor(Theme.secondary)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -390,28 +506,38 @@ struct HomePage: View {
     private func load() {
         CLI.load({ (CLI.json(["stats"]), CLI.json(["history", "200"])) }) { stats, hist in
             if let s = stats as? [String: Any] {
-                st.words = (s["words"] as? NSNumber)?.intValue
+                let int: (String) -> Int? = { (s[$0] as? NSNumber)?.intValue }
+                st.words = int("words")
                 st.wpm = (s["wpm"] as? NSNumber)?.doubleValue
-                st.streak = (s["streak_days"] as? NSNumber)?.intValue
+                st.streak = int("streak_days")
+                st.saved = int("saved_secs")
+                st.todayWords = int("today_words")
+                st.todaySaved = int("today_saved_secs")
             }
-            var rows = records(hist, under: ["history", "items", "rows"], nameKey: "id")
-                .enumerated().map { i, r in
-                    Said(id: "\(r["id"] ?? i)",
-                         at: Date(timeIntervalSince1970: (r["at"] as? NSNumber)?.doubleValue ?? 0),
-                         text: str(r, "kept", "text", "shown", "heard"),
-                         app: str(r, "app"), engine: str(r, "engine"))
-                }
-            // The canned history is from one fixed week. Moved so its newest
-            // row is a few minutes ago, so fake mode shows Today and Yesterday
-            // the way a real day does.
-            if fake, let newest = rows.map(\.at).max() {
-                let shift = Date().addingTimeInterval(-300).timeIntervalSince(newest)
-                rows = rows.map { var r = $0; r.at = r.at.addingTimeInterval(shift); return r }
-            }
-            st.said = rows
+            st.said = loadSaid(hist)
             st.loaded = true
         }
     }
+}
+
+/// History rows as `dictator history --json` prints them.
+func loadSaid(_ hist: Any?) -> [Said] {
+    var rows = records(hist, under: ["history", "items", "rows"], nameKey: "id")
+        .enumerated().map { i, r in
+            Said(id: "\(r["id"] ?? i)",
+                 at: Date(timeIntervalSince1970: (r["at"] as? NSNumber)?.doubleValue ?? 0),
+                 text: str(r, "kept", "text", "shown", "heard"),
+                 app: str(r, "app"), engine: str(r, "engine"), lang: str(r, "lang"),
+                 secs: (r["secs"] as? NSNumber)?.doubleValue ?? 0)
+        }
+    // The canned history is from one fixed week. Moved so its newest row is a
+    // few minutes ago, so fake mode shows Today and Yesterday the way a real
+    // day does.
+    if fake, let newest = rows.map(\.at).max() {
+        let shift = Date().addingTimeInterval(-300).timeIntervalSince(newest)
+        rows = rows.map { var r = $0; r.at = r.at.addingTimeInterval(shift); return r }
+    }
+    return rows
 }
 
 final class RowState: ObservableObject {
@@ -436,9 +562,12 @@ struct HistoryRow: View {
                     .textSelection(.enabled)
                     .fixedSize(horizontal: false, vertical: true)
                 HStack(spacing: Theme.s3) {
+                    if let l = spokenIn(lang: said.lang, engine: said.engine) {
+                        Pill(text: l, tint: l == "Hinglish" ? Theme.live : Theme.accent)
+                    }
                     if !said.app.isEmpty { meta("macwindow", said.app) }
-                    if !said.engine.isEmpty { meta("waveform", engineTitle(said.engine)) }
-                    if let ms = ms { meta("bolt", "pasted in \(waited(ms))") }
+                    if said.secs > 0 { meta("waveform", String(format: "%.1f s spoken", said.secs)) }
+                    if let ms = ms { meta("bolt.fill", "pasted in \(waited(ms))", Theme.live) }
                 }
             }
             Spacer(minLength: Theme.s2)
@@ -456,17 +585,17 @@ struct HistoryRow: View {
         }
         .padding(.horizontal, Theme.s4)
         .padding(.vertical, Theme.s3)
-        .background(st.hover ? Theme.background.opacity(0.7) : Color.clear)
+        .background(st.hover ? Theme.raised.opacity(0.6) : Color.clear)
         .contentShape(Rectangle())
-        .onHover { st.hover = $0 }
+        .onHover { st.hover = $0 && !snapshotRun }
     }
 
-    private func meta(_ symbol: String, _ text: String) -> some View {
+    private func meta(_ symbol: String, _ text: String, _ tint: Color = Theme.tertiary) -> some View {
         HStack(spacing: 4) {
             Image(systemName: symbol).font(.system(size: 10))
             Text(text).font(.caption12)
         }
-        .foregroundColor(Theme.tertiary)
+        .foregroundColor(tint)
     }
 }
 
@@ -489,6 +618,7 @@ final class WordsState: ObservableObject {
 }
 
 struct WordsPage: View {
+    @EnvironmentObject var model: AppModel
     @StateObject private var st = WordsState()
 
     var body: some View {
@@ -507,18 +637,21 @@ struct WordsPage: View {
             if !st.loaded {
                 Loading()
             } else if st.words.isEmpty {
-                EmptyState(symbol: "character.book.closed", title: "No words yet",
+                EmptyState(art: .lines(1), title: "No words yet",
                            line: "Add a name it keeps getting wrong, and it will spell it "
                                + "your way from the next sentence on.")
                     .card()
             } else if shown.isEmpty {
-                EmptyState(symbol: "magnifyingglass", title: "No matches",
+                EmptyState(art: .search, title: "No matches",
                            line: "No word contains “\(st.query)”.").card()
             } else {
                 RowsCard(shown) { w in WordRow(word: w) { remove(w) } }
             }
         }
-        .onAppear(perform: load)
+        .onAppear {
+            if let q = model.takeSeed(.words) { st.query = q }
+            load()
+        }
     }
 
     private var shown: [Word] {
@@ -591,7 +724,7 @@ struct WordRow: View {
         .padding(.horizontal, Theme.s4)
         .padding(.vertical, Theme.s3)
         .contentShape(Rectangle())
-        .onHover { st.hover = $0 }
+        .onHover { st.hover = $0 && !snapshotRun }
     }
 }
 
@@ -611,6 +744,7 @@ final class SnippetsState: ObservableObject {
 }
 
 struct SnippetsPage: View {
+    @EnvironmentObject var model: AppModel
     @StateObject private var st = SnippetsState()
 
     var body: some View {
@@ -630,18 +764,21 @@ struct SnippetsPage: View {
             if !st.loaded {
                 Loading()
             } else if st.snips.isEmpty {
-                EmptyState(symbol: "text.badge.plus", title: "No snippets yet",
+                EmptyState(art: .lines(3), title: "No snippets yet",
                            line: "Add one for anything you type often: an address, a "
                                + "sign-off, a standup template.")
                     .card()
             } else if shown.isEmpty {
-                EmptyState(symbol: "magnifyingglass", title: "No matches",
+                EmptyState(art: .search, title: "No matches",
                            line: "No snippet contains “\(st.query)”.").card()
             } else {
                 RowsCard(shown) { s in SnipRow(snip: s) { remove(s) } }
             }
         }
-        .onAppear(perform: load)
+        .onAppear {
+            if let q = model.takeSeed(.snippets) { st.query = q }
+            load()
+        }
     }
 
     private var shown: [Snip] {
@@ -706,7 +843,7 @@ struct SnipRow: View {
         .padding(.horizontal, Theme.s4)
         .padding(.vertical, Theme.s3)
         .contentShape(Rectangle())
-        .onHover { st.hover = $0 }
+        .onHover { st.hover = $0 && !snapshotRun }
     }
 }
 
@@ -766,7 +903,7 @@ struct StylePage: View {
                             }
                             Spacer()
                             Toggle("", isOn: Binding(get: { r.on }, set: { set(r.name, $0) }))
-                                .toggleStyle(.switch).labelsHidden().tint(Theme.accent)
+                                .toggleStyle(BrandSwitch()).labelsHidden().tint(Theme.accentFill)
                                 .controlSize(.small)
                         }
                         .padding(.horizontal, Theme.s4)
@@ -776,7 +913,7 @@ struct StylePage: View {
                 VStack(alignment: .leading, spacing: Theme.s2) {
                     section("Per app")
                     if st.apps.isEmpty {
-                        EmptyState(symbol: "square.grid.2x2", title: "Same rules in every app",
+                        EmptyState(art: .lines(2), title: "Same rules in every app",
                                    line: "To change one app only, run in a terminal: "
                                        + "dictator format in Slack lists on")
                             .card()
@@ -810,10 +947,7 @@ struct StylePage: View {
         .onAppear(perform: load)
     }
 
-    private func section(_ s: String) -> some View {
-        Text(s.uppercased()).font(.system(size: 11, weight: .semibold)).kerning(0.6)
-            .foregroundColor(Theme.tertiary).padding(.leading, Theme.s1)
-    }
+    private func section(_ s: String) -> some View { SectionLabel(s) }
 
     private func load() {
         CLI.load({ (CLI.text(["format"]), CLI.text(["format", "in"])) }) { g, a in

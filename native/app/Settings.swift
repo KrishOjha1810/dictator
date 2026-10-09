@@ -18,6 +18,7 @@ final class SettingsState: ObservableObject {
     @Published var idle = "hover"
     @Published var controls: [String] = ["dictate", "notetaker", "scratchpad"]
     @Published var shortcuts: [String: Bool] = ["notetaker": true, "scratchpad": true]
+    @Published var autoUpdate = Updater.shared.automaticallyChecks
 }
 
 /// The eight places the pill can sit, as `dictator indicator` names them
@@ -35,15 +36,17 @@ struct SettingsPage: View {
 
     var body: some View {
         PageScroll {
-            PageHeader("Settings", "Your key, language, and where your words are kept.")
+            PageHeader("Settings", "Your key, language, look, and where your words are kept.")
             general
+            appearance
             language
             microphone
             privacy
             advanced
+            updates
             about
         }
-        .tint(Theme.accent)
+        .tint(Theme.accentFill)
         .onAppear {
             model.loadLanguage()
             loadIndicator()
@@ -82,7 +85,7 @@ struct SettingsPage: View {
 
     private func controlToggle(_ c: String) -> some View {
         Toggle("", isOn: Binding(get: { st.controls.contains(c) }, set: { setControl(c, $0) }))
-            .toggleStyle(.switch).labelsHidden().controlSize(.small)
+            .toggleStyle(BrandSwitch()).labelsHidden().controlSize(.small)
     }
 
     private func shortcutToggle(_ k: String) -> some View {
@@ -90,7 +93,7 @@ struct SettingsPage: View {
             st.shortcuts[k] = on
             setIndicator(["shortcut", k, on ? "on" : "off"])
         }))
-        .toggleStyle(.switch).labelsHidden()
+        .toggleStyle(BrandSwitch()).labelsHidden()
     }
 
     // -----------------------------------------------------------------------
@@ -119,7 +122,7 @@ struct SettingsPage: View {
                         }
                         st.atLogin = SMAppService.mainApp.status == .enabled
                     }))
-                    .toggleStyle(.switch).labelsHidden()
+                    .toggleStyle(BrandSwitch()).labelsHidden()
                 }
             } else {
                 SettingRow("Start at login", "Set from a terminal in a repo install.") {
@@ -186,7 +189,41 @@ struct SettingsPage: View {
                     st.dock = on
                     (NSApp.delegate as? UI)?.applyDockPolicy()
                 }))
-                .toggleStyle(.switch).labelsHidden()
+                .toggleStyle(BrandSwitch()).labelsHidden()
+            }
+        }
+    }
+
+    private var appearance: some View {
+        SettingsGroup("Appearance") {
+            SettingRow("Look", "System follows your Mac, light by day and dark at night if "
+                       + "you have it set that way.") {
+                HStack(spacing: Theme.s2) {
+                    ForEach(Appearance.allCases, id: \.self) { a in
+                        AppearanceChoice(look: a, on: model.appearance == a) {
+                            model.setAppearance(a)
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private var updates: some View {
+        SettingsGroup("Updates") {
+            SettingRow("Version \(Updater.shared.version)",
+                       "Dictator looks for a newer version and asks before installing it.") {
+                Button("Check now") { Updater.shared.checkForUpdates() }
+                    .buttonStyle(QuietButton())
+                    .disabled(!Updater.shared.canCheck)
+            }
+            Hairline()
+            SettingRow("Automatically check for updates", "Look for a new version in the background.") {
+                Toggle("", isOn: Binding(get: { st.autoUpdate }, set: { on in
+                    Updater.shared.automaticallyChecks = on
+                    st.autoUpdate = Updater.shared.automaticallyChecks
+                }))
+                .toggleStyle(BrandSwitch()).labelsHidden()
             }
         }
     }
@@ -215,7 +252,7 @@ struct SettingsPage: View {
                             .foregroundColor(Theme.good)
                     } else {
                         HStack(spacing: Theme.s2) {
-                            ProgressView(value: m.progress).frame(width: 140)
+                            BrandProgress(value: m.progress).frame(width: 140)
                             Text("\(Int((m.progress * 100).rounded()))%")
                                 .font(.system(size: 12).monospacedDigit())
                                 .foregroundColor(Theme.secondary)
@@ -250,6 +287,9 @@ struct SettingsPage: View {
 
     private var privacy: some View {
         SettingsGroup("Privacy") {
+            PrivacyPromise(compact: true)
+                .padding(Theme.s3)
+            Hairline()
             SettingRow("History is kept in", "On this Mac only. Nothing you say is uploaded.") {
                 Button(stateDir.path.replacingOccurrences(of: home.path, with: "~")) {
                     NSWorkspace.shared.activateFileViewerSelecting([stateDir])
@@ -351,10 +391,61 @@ struct SettingsGroup<Content: View>: View {
     }
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.s2) {
-            Text(title.uppercased()).font(.system(size: 11, weight: .semibold)).kerning(0.6)
-                .foregroundColor(Theme.tertiary).padding(.leading, Theme.s1)
+            SectionLabel(title)
             VStack(spacing: 0) { content }.card(padding: 0)
         }
+    }
+}
+
+/// A small drawing of the window in each look, to pick from.
+struct AppearanceChoice: View {
+    var look: Appearance
+    var on: Bool
+    var pick: () -> Void
+
+    var body: some View {
+        Button(action: pick) {
+            VStack(spacing: 5) {
+                ZStack {
+                    switch look {
+                    case .light: thumb(dark: false)
+                    case .dark: thumb(dark: true)
+                    case .system:
+                        HStack(spacing: 0) {
+                            thumb(dark: false).frame(width: 30, alignment: .leading).clipped()
+                            thumb(dark: true).frame(width: 30, alignment: .trailing).clipped()
+                        }
+                    }
+                }
+                .frame(width: 60, height: 40)
+                .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
+                .overlay(RoundedRectangle(cornerRadius: 7, style: .continuous)
+                    .strokeBorder(on ? Theme.accent : Theme.border, lineWidth: on ? 2 : 1))
+                Text(look.title).font(.system(size: 11.5, weight: on ? .semibold : .regular))
+                    .foregroundColor(on ? Theme.text : Theme.secondary)
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+    }
+
+    /// The rail, a page, and two lines of text.
+    private func thumb(dark: Bool) -> some View {
+        HStack(spacing: 0) {
+            Color(nsColor: dark ? hex(0x0B0A18) : hex(0x1C1A45)).frame(width: 14)
+            ZStack(alignment: .topLeading) {
+                Color(nsColor: dark ? hex(0x121124) : hex(0xF5F4FA))
+                VStack(alignment: .leading, spacing: 4) {
+                    RoundedRectangle(cornerRadius: 2).fill(Theme.brand).frame(width: 34, height: 9)
+                    Capsule().fill(dark ? Color.white.opacity(0.5) : Color.black.opacity(0.35))
+                        .frame(width: 26, height: 3)
+                    Capsule().fill(dark ? Color.white.opacity(0.3) : Color.black.opacity(0.2))
+                        .frame(width: 18, height: 3)
+                }
+                .padding(5)
+            }
+        }
+        .frame(width: 60, height: 40)
     }
 }
 

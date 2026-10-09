@@ -492,3 +492,110 @@ seen and where, then the fix. Done in this order.
       control on hover; Notetaker and Scratchpad need the app.
 - [ ] The Hub's Meetings page is still a placeholder; a stopped meeting's
       notes are only in `dictator meeting show`.
+
+## Round 5: dark mode, a Dictator look, ⌘K, update hooks (2026-10-09)
+
+### The look, from the icon
+
+- [x] Direction: the icon says "voice becomes text" (a microphone whose grille
+      is lines of text, indigo to violet to teal, a glowing teal cursor). So
+      indigo ink and violet are the brand, violet is the one accent for
+      controls and selection, and teal means live (the cursor, the status
+      line, time saved, "listening"). The full gradient is kept for three
+      brand moments: the mark, the Home hero, the onboarding welcome.
+- [x] Type: SF Pro Rounded for page titles, the hero and stats; SF Pro for
+      body text. Every stroke in the icon has a round cap, and the rounded
+      face keeps the app away from the serif display other dictation apps use.
+- [x] The brand mark is drawn in SwiftUI (`BrandMark`), so a bare build
+      without the icon file shows it too (it used to show a folder icon).
+- [x] Sidebar: an ink rail in both appearances, with the mark, a "Search or
+      jump ⌘K" field, pages grouped (Home; Teach: Words, Snippets, Style;
+      Keep: Scratchpad, Meetings, Review), and the selected page marked by a
+      teal cursor bar. Footer: status line and "Local only, on this Mac".
+- [x] Home is a today view: a gradient hero with the greeting, the key, today's
+      words, the last time to paste, and time saved today against typing at
+      40 words a minute; then words all time, time saved all time, words a
+      minute, day streak; the privacy promise; history rows tagged English or
+      Hinglish (from `lang`, else the engine), with seconds spoken and time to
+      paste where known.
+- [x] The privacy promise is a designed card ("Everything stays on this Mac",
+      the state directory, "Speech to text, offline", "Nothing uploaded") on
+      Home and at the top of Settings > Privacy.
+- [x] Empty states are drawn from the icon's motif (`LinesArt`: lines of text
+      in the violet-to-teal ink, the teal cursor; a mic for Meetings and an
+      empty history), not stock symbols.
+- [x] Onboarding: the welcome card is the gradient, full bleed, with the mark;
+      the other cards have gradient symbol tiles and a progress row where the
+      current step is teal. The "Try it" listening dot is teal.
+- [x] Capsule buttons, a brand switch (`BrandSwitch`, violet track) and a brand
+      progress bar replace AppKit's, which drew grey whenever the window was
+      not in front.
+- [x] Scratchpad window: the mark in its header, a teal insertion point,
+      colours that follow the appearance.
+
+### ⌘K
+
+- [x] A command palette over the Hub (`native/app/Palette.swift`): ⌘K in the
+      Window menu, or the field in the rail. Go to any page; New note;
+      dictate hands free into a new note (`dictator hands-free toggle`);
+      Notetaker; pause or resume; copy the last thing said; check for updates;
+      switch appearance; turn any style rule on or off (`dictator format`).
+      Typing two letters or more also searches history (copy), notes (open)
+      and words (open Words filtered). ↑↓, Return, Escape.
+
+### Dark mode
+
+- [x] Settings > Appearance: System, Light, Dark (default System), drawn as
+      three small window thumbnails. Kept in UserDefaults (`appearance`) and
+      applied at once with NSApp.appearance; the forced aqua on the app and
+      on every window is gone.
+- [x] Every colour in Theme.swift is a light/dark pair
+      (NSColor(name:dynamicProvider:)). Dark is designed, not inverted: ink
+      background #121124, cards #1B1A31, raised #25233F, borders 10% white,
+      hairlines 6% white, violet lightened to #B3A2FF for text and #6E4FF0
+      for fills, teal #3FE0CF. Body text contrast is 15:1, secondary about
+      7.6:1 and tertiary about 4.7:1 in dark (15, 6.4, 4.6 in light).
+- [x] The orb's hover labels were not changed: a 92% black fill, white text
+      and a light rim read on light and dark wallpapers alike.
+
+### Updates (hooks only)
+
+- [x] "Check for Updates…" after About in the app menu, and Settings >
+      Updates: the version, "Check now", "Automatically check for updates".
+      Both call `Updater.shared`. `native/app/UpdaterStub.swift` has the same
+      API and does nothing (it logs); delete it when Updater.swift lands.
+
+### Time saved
+
+- [x] `dictator stats --json` also prints `saved_secs`, `today_words` and
+      `today_saved_secs` (dictator/views.py): per timed row, the time to type
+      its words at 40 a minute minus the seconds spent saying them; never
+      below zero; null without a timed row. Tests in tests/test_bundle.py.
+
+### Checked
+
+- [x] `tools/build_app.sh build/appbin` with no warnings; `tools/build_dmg.sh
+      0.1.5` (ad-hoc) built and verified; the bundled CLI prints the new stats
+      keys.
+- [x] pytest: 775 passed, 5 skipped, 0 failed with the tree as it is now (the
+      16 jellyfish failures no longer show up).
+- [x] Snapshots of every screen in light and dark:
+      build/screens/round5-<screen>-<light|dark>.png (Hub pages, the full
+      Settings and Help pages, the palette empty and searching, the
+      Scratchpad window, onboarding cards 0 to 5).
+- [x] Snapshot runs can no longer be activated: the activation policy is
+      `.prohibited` and their windows cannot become key, so a key typed
+      meanwhile goes where the person was typing. (One run before this
+      change did become key; nothing was typed into it.) Fake-only helpers:
+      DICTATOR_APPEARANCE=light|dark, DICTATOR_PALETTE=<query>,
+      DICTATOR_HUB_SIZE=WxH.
+
+### Not done, or not checked by hand
+
+- [ ] Nothing was looked at in the real app with a mouse and keyboard: the ⌘K
+      keys, the switches, and switching appearance live were only drawn.
+- [ ] The rival banner, the "move to Applications" alert and the Notetaker
+      consent alert were not snapshotted (they follow NSApp.appearance).
+- [ ] The menu bar menu is the system's and follows the system appearance,
+      not the app's setting.
+- [ ] Meetings and Review are still placeholders.

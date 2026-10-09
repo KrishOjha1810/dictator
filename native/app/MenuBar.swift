@@ -50,6 +50,25 @@ final class AppModel: ObservableObject {
     /// Another dictation app that is running, if any (Rivals.swift). Checked
     /// at launch, when the menu opens, and when an app starts or quits.
     @Published var rival: Rivals.Running? = nil
+    /// The ⌘K palette is open over the Hub.
+    @Published var paletteOpen = false
+    @Published var paletteQuery = ""
+    /// A search to put into a page's field when it next appears, from the
+    /// palette ("search Words for kube").
+    @Published var seed: [Page: String] = [:]
+    @Published var appearance = Appearance.current
+
+    func setAppearance(_ a: Appearance) {
+        Appearance.set(a)
+        appearance = a
+    }
+
+    /// Take the search the palette left for `page`, once.
+    func takeSeed(_ page: Page) -> String? {
+        guard let q = seed[page] else { return nil }
+        seed[page] = nil
+        return q
+    }
 
     /// The warning applies only while our key is fn: on another key the two
     /// apps do not hear the same press.
@@ -141,9 +160,9 @@ final class UI: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWindowDelegat
     var timer: Timer?
 
     func applicationDidFinishLaunching(_ note: Notification) {
-        // Light, whatever the system is set to. The palette in Theme.swift
-        // is drawn for one appearance only.
-        NSApp.appearance = NSAppearance(named: .aqua)
+        // System, Light or Dark, from Settings > Appearance. Every colour in
+        // Theme.swift has both values, so the windows follow NSApp's.
+        Appearance.apply()
         applyDockPolicy()
         NSApp.mainMenu = mainMenu()
         if fake, let path = env["DICTATOR_SNAPSHOT"], !path.isEmpty { snapshot(to: path) }
@@ -194,7 +213,12 @@ final class UI: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWindowDelegat
             showScratchpad(nil)
         } else if fake, let p = env["DICTATOR_SHOW"].flatMap({ Page(rawValue: $0.capitalized) }) {
             // For screenshots of one page: DICTATOR_SHOW=words, settings, ...
+            // DICTATOR_PALETTE=query opens the palette over it.
             showHub(p)
+            if let q = env["DICTATOR_PALETTE"] {
+                model.paletteQuery = q
+                model.paletteOpen = true
+            }
         } else if first {
             showOnboarding()
         } else if NSApp.activationPolicy() == .regular {
@@ -261,6 +285,7 @@ final class UI: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWindowDelegat
     /// A regular app with a Dock icon, so it can be quit and force quit like
     /// any other; or, with Show in Dock off, a menu bar item only.
     func applyDockPolicy() {
+        if snapshotRun { return }
         let want: NSApplication.ActivationPolicy = Prefs.showInDock ? .regular : .accessory
         guard NSApp.activationPolicy() != want else { return }
         NSApp.setActivationPolicy(want)
@@ -291,6 +316,7 @@ final class UI: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWindowDelegat
         }
         _ = sub("Dictator", [
             i("About Dictator", #selector(about), target: self),
+            i("Check for Updates…", #selector(checkForUpdates), target: self),
             .separator(),
             i("Settings…", #selector(openSettings), ",", target: self),
             .separator(),
@@ -317,11 +343,21 @@ final class UI: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWindowDelegat
             i("Close", #selector(NSWindow.performClose(_:)), "w"),
             .separator(),
             i("Dictator", #selector(openHub), "0", target: self),
+            i("Search and Commands…", #selector(openPalette), "k", target: self),
         ])
         NSApp.windowsMenu = win
         let help = sub("Help", [i("Dictator Help", #selector(openHelp), "?", target: self)])
         NSApp.helpMenu = help
         return bar
+    }
+
+    @objc func checkForUpdates() { Updater.shared.checkForUpdates() }
+
+    /// ⌘K: the command palette over the Hub (Palette.swift), opening the
+    /// Hub first if it is not.
+    @objc func openPalette() {
+        if windows["hub"]?.isVisible != true { showHub(model.page) }
+        model.paletteOpen.toggle()
     }
 
     @objc func about() {
@@ -565,7 +601,7 @@ final class UI: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWindowDelegat
         }
         var style: NSWindow.StyleMask = [.titled, .closable, .miniaturizable, .fullSizeContentView]
         if min != nil { style.insert(.resizable) }
-        let w = NSWindow(contentRect: NSRect(origin: .zero, size: size),
+        let w = AppWindow(contentRect: NSRect(origin: .zero, size: size),
                          styleMask: style, backing: .buffered, defer: false)
         w.title = title
         // The content runs up under a clear title bar, the way modern Mac
@@ -573,12 +609,11 @@ final class UI: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWindowDelegat
         w.titlebarAppearsTransparent = true
         w.titleVisibility = .hidden
         w.isMovableByWindowBackground = true
-        w.backgroundColor = NSColor(srgbRed: 0.980, green: 0.973, blue: 0.961, alpha: 1)
-        w.appearance = NSAppearance(named: .aqua)
+        w.backgroundColor = Palette.background
         w.isReleasedWhenClosed = false
         w.delegate = self
         w.contentViewController = NSHostingController(
-            rootView: view().environmentObject(model))
+            rootView: view().environmentObject(model).snapshotActive(quiet))
         w.setContentSize(size)
         if let m = min { w.contentMinSize = m }
         w.center()
@@ -598,7 +633,12 @@ final class UI: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWindowDelegat
 
     func showHub(_ page: Page) {
         model.page = page
-        _ = show("hub", "Dictator", Theme.hubSize, min: NSSize(width: 820, height: 560)) {
+        // Fake mode only: DICTATOR_HUB_SIZE=980x1900 draws a long page whole
+        // for a snapshot.
+        var size = Theme.hubSize
+        if fake, let s = env["DICTATOR_HUB_SIZE"]?.split(separator: "x").compactMap({ Double($0) }),
+           s.count == 2 { size = NSSize(width: s[0], height: s[1]) }
+        _ = show("hub", "Dictator", size, min: NSSize(width: 820, height: 560)) {
             HubView()
         }
     }
@@ -638,5 +678,19 @@ final class UI: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWindowDelegat
         // Then the Hub, once, on Home. After this the app is the menu bar
         // item and the key.
         showHub(.home)
+    }
+}
+
+/// A window that, in fake mode only, may be taller than the screen, so a
+/// snapshot (DICTATOR_HUB_SIZE) can draw a long page whole. Otherwise exactly
+/// an NSWindow.
+final class AppWindow: NSWindow {
+    /// A snapshot run's window is never key, so a key pressed meanwhile goes
+    /// where the person was typing.
+    override var canBecomeKey: Bool { snapshotRun ? false : super.canBecomeKey }
+    override var canBecomeMain: Bool { snapshotRun ? false : super.canBecomeMain }
+
+    override func constrainFrameRect(_ r: NSRect, to screen: NSScreen?) -> NSRect {
+        fake && env["DICTATOR_HUB_SIZE"] != nil ? r : super.constrainFrameRect(r, to: screen)
     }
 }
