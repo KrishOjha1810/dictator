@@ -168,18 +168,18 @@ struct ScreenGeom {
 /// appeared.
 func pickScreen() -> NSScreen? {
     if let focused = NSScreen.main { return focused }
-    return screenUnderMouse()
-}
-
-func screenUnderMouse() -> NSScreen? {
-    let mouse = NSEvent.mouseLocation
-    if let under = NSScreen.screens.first(where: { NSMouseInRect(mouse, $0.frame, false) }) {
-        return under
-    }
+    // No focused window, which happens between apps. The pointer is the next
+    // best guess at where somebody is looking.
+    if let under = screenUnderMouse() { return under }
     if let notched = NSScreen.screens.first(where: { $0.notchRect != nil }) {
         return notched
     }
     return NSScreen.screens.first
+}
+
+func screenUnderMouse() -> NSScreen? {
+    let mouse = NSEvent.mouseLocation
+    return NSScreen.screens.first { NSMouseInRect(mouse, $0.frame, false) }
 }
 
 // ---------------------------------------------------------------- settings
@@ -897,7 +897,7 @@ final class App: NSObject, NSApplicationDelegate, PillDragDelegate {
     func dragMoved(origin: NSPoint, mouse: NSPoint) {
         win.setFrameOrigin(origin)
         guard let s = NSScreen.screens.first(where: { NSMouseInRect(mouse, $0.frame, false) })
-                ?? screenUnderMouse() else { return }
+                ?? pickScreen() else { return }
         let g = ScreenGeom(s)
         showTargets(on: s).highlight = g.nearest(to: NSPoint(x: win.frame.midX, y: win.frame.midY))
     }
@@ -905,7 +905,7 @@ final class App: NSObject, NSApplicationDelegate, PillDragDelegate {
     func dragEnded(mouse: NSPoint) {
         hideTargets()
         guard let s = NSScreen.screens.first(where: { NSMouseInRect(mouse, $0.frame, false) })
-                ?? screenUnderMouse() else { return }
+                ?? pickScreen() else { return }
         let g = ScreenGeom(s)
         let spot = g.nearest(to: NSPoint(x: win.frame.midX, y: win.frame.midY))
         settings.spot = spot
