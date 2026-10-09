@@ -14,7 +14,18 @@ final class SettingsState: ObservableObject {
     @Published var confirmErase = false
     @Published var erased = ""
     @Published var dock = Prefs.showInDock
+    @Published var position = "top"
+    @Published var hideIdle = false
 }
+
+/// The eight places the pill can sit, as `dictator indicator` names them
+/// (orbnative.POSITIONS, and `Spot` in native/orb.swift).
+let indicatorPositions: [(String, String)] = [
+    ("top", "Top centre"), ("bottom", "Bottom centre"),
+    ("left", "Left edge"), ("right", "Right edge"),
+    ("top-left", "Top left"), ("top-right", "Top right"),
+    ("bottom-left", "Bottom left"), ("bottom-right", "Bottom right"),
+]
 
 struct SettingsPage: View {
     @EnvironmentObject var model: AppModel
@@ -31,7 +42,29 @@ struct SettingsPage: View {
             about
         }
         .tint(Theme.accent)
-        .onAppear { model.loadLanguage() }
+        .onAppear {
+            model.loadLanguage()
+            loadIndicator()
+        }
+    }
+
+    /// Read back what indicator.json says, which a drag of the pill may have
+    /// changed since the page was last open.
+    private func loadIndicator() {
+        CLI.load({ CLI.json(["indicator"]) }) { o in
+            guard let d = o as? [String: Any] else { return }
+            if let p = d["position"] as? String,
+               indicatorPositions.contains(where: { $0.0 == p }) { st.position = p }
+            if let h = d["hide_idle"] as? Bool { st.hideIdle = h }
+        }
+    }
+
+    /// The running pill watches the file `dictator indicator` writes, so it
+    /// moves as soon as this returns; nothing is restarted.
+    private func setIndicator(_ args: [String]) {
+        CLI.load({ CLI.act(["indicator"] + args) }) { ok in
+            if ok && !fake { loadIndicator() }
+        }
     }
 
     // -----------------------------------------------------------------------
@@ -67,6 +100,27 @@ struct SettingsPage: View {
                     Text("dictator on / off").font(.system(size: 12, design: .monospaced))
                         .foregroundColor(Theme.secondary)
                 }
+            }
+            Hairline()
+            SettingRow("Indicator position",
+                       "Where the pill sits. You can also drag it; it snaps to the nearest place.") {
+                Picker("", selection: Binding(get: { st.position }, set: { p in
+                    st.position = p
+                    setIndicator(["position", p])
+                })) {
+                    ForEach(indicatorPositions, id: \.0) { Text($0.1).tag($0.0) }
+                }
+                .labelsHidden().fixedSize()
+            }
+            Hairline()
+            SettingRow("Hide when not dictating",
+                       "Off: a small grey pill stays on screen. It turns dark with moving bars "
+                       + "only while the microphone is open.") {
+                Toggle("", isOn: Binding(get: { st.hideIdle }, set: { on in
+                    st.hideIdle = on
+                    setIndicator(["hide-idle", on ? "on" : "off"])
+                }))
+                .toggleStyle(.switch).labelsHidden()
             }
             Hairline()
             SettingRow("Show in Dock", "Off: only the menu bar item, and quit from there.") {
