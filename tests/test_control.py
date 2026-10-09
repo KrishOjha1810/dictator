@@ -141,12 +141,9 @@ def test_a_listener_that_is_gone_is_not_written_to():
 # ---- the command line
 
 def _cli():
-    import importlib.machinery, importlib.util
-    loader = importlib.machinery.SourceFileLoader("dcli", "bin/dictator")
-    spec = importlib.util.spec_from_loader("dcli", loader)
-    m = importlib.util.module_from_spec(spec)
-    loader.exec_module(m)
-    return m
+    # The CLI body lives in dictator.cli now; bin/dictator is just a launcher.
+    import importlib
+    return importlib.import_module("dictator.cli")
 
 
 def test_cli_says_when_nothing_is_running(short_state, capsys):

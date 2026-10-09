@@ -120,4 +120,4 @@ def test_the_shaping_flags_live_in_one_place():
     """They were defined in the listener and in the library at once, which is
     the exact duplication this layer exists to remove."""
     assert "_format_flags" not in (ROOT / "dictator" / "dictate.py").read_text()
-    assert "shaping_flags" in (ROOT / "bin" / "dictator").read_text()
+    assert "shaping_flags" in (ROOT / "dictator" / "cli.py").read_text()

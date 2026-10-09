@@ -68,12 +68,9 @@ def test_other_files_in_the_folder_are_not_notes():
 
 
 def _cli():
-    import importlib.machinery, importlib.util
-    loader = importlib.machinery.SourceFileLoader("dcli", "bin/dictator")
-    spec = importlib.util.spec_from_loader("dcli", loader)
-    m = importlib.util.module_from_spec(spec)
-    loader.exec_module(m)
-    return m
+    # The CLI body lives in dictator.cli now; bin/dictator is just a launcher.
+    import importlib
+    return importlib.import_module("dictator.cli")
 
 
 def test_cli_round_trip_as_the_app_uses_it(monkeypatch, capsys):

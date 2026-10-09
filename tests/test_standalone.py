@@ -98,7 +98,7 @@ def test_models_are_found_not_redownloaded(tmp_path, monkeypatch):
 def test_no_second_key_listener_is_flagged():
     """Two hold-to-talk listeners paste everything twice, and the symptom
     reads as a stutter rather than as two programs running."""
-    cli = (ROOT / "bin" / "dictator").read_text()
+    cli = (ROOT / "dictator" / "cli.py").read_text()
     assert "com.voicebridge.dictate.plist" in cli, \
         "doctor no longer warns about another dictation key"
 
@@ -132,7 +132,7 @@ def test_the_one_outside_dependency_is_installed_and_checked():
     """
     assert "jellyfish" in (ROOT / "install.sh").read_text(), \
         "the installer does not install it"
-    assert "jellyfish" in (ROOT / "bin" / "dictator").read_text(), \
+    assert "jellyfish" in (ROOT / "dictator" / "cli.py").read_text(), \
         "doctor does not check for it"
 
 
@@ -216,7 +216,7 @@ def test_no_listener_is_reported_as_a_problem():
     """The check was n <= 1, so zero listeners passed. Zero is the state where
     the key does nothing at all, which is the exact complaint this check was
     added to answer."""
-    src = (ROOT / "bin" / "dictator").read_text()
+    src = (ROOT / "dictator" / "cli.py").read_text()
     assert "n == 1" in src, "the listener count check accepts zero again"
 
 
@@ -232,7 +232,7 @@ def test_permissions_clears_a_grant_made_to_an_older_identity():
     on the answer rather than on the shape of the guess. The full set of cases
     lives in test_permissions.py."""
     from dictator import tcc
-    src = (ROOT / "bin" / "dictator").read_text()
+    src = (ROOT / "dictator" / "cli.py").read_text()
     assert "tccutil" in src, "it no longer clears what macOS remembers"
     assert "tcc.state(" in src, "permissions no longer asks what macOS remembers"
     assert tcc.verdict({"state": tcc.STALE})[0] == "bad", \
@@ -348,7 +348,7 @@ def test_the_installer_does_not_take_a_name_another_install_owns():
 def test_doctor_checks_the_command_on_path_is_this_checkout():
     """The failure is completely silent: every command reports success and
     none of them is running your code."""
-    src = (Path(__file__).resolve().parent.parent / "bin" / "dictator").read_text()
+    src = (Path(__file__).resolve().parent.parent / "dictator" / "cli.py").read_text()
     assert '"and it is this checkout"' in src
     assert "realpath" in src, "comparing unresolved paths misses a symlink"
 

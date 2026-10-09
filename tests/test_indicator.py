@@ -16,12 +16,9 @@ from dictator import core, orbnative
 
 
 def _cli():
-    import importlib.machinery, importlib.util
-    loader = importlib.machinery.SourceFileLoader("dcli", "bin/dictator")
-    spec = importlib.util.spec_from_loader("dcli", loader)
-    m = importlib.util.module_from_spec(spec)
-    loader.exec_module(m)
-    return m
+    # The CLI body lives in dictator.cli now; bin/dictator is just a launcher.
+    import importlib
+    return importlib.import_module("dictator.cli")
 
 
 DEFAULT = {"position": "top", "idle": "hover",

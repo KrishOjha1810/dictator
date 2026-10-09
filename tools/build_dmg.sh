@@ -57,6 +57,18 @@ PY_URL="https://github.com/astral-sh/python-build-standalone/releases/download/$
 JELLYFISH="jellyfish==1.2.1"
 JELLYFISH_SHA256="675ab43840488944899ca87f02d4813c1e32107e56afaba7489705a70214e8aa"
 
+# Nuitka compiles the dictator package to native extension modules, so the app
+# ships .so and not readable .py. It compiles what we then sign and ship, so
+# the source archive is pinned and checked the same way the Python runtime is:
+# downloaded, its SHA256 matched, and installed from that one verified file.
+# A version number alone would let the index hand over a different sdist, and
+# it would end up compiling every module in the release. The sum is PyPI's own
+# for nuitka-<ver>.tar.gz; another version means a new URL and a new sum.
+NUITKA_VERSION="4.2.2"
+NUITKA_SHA256="29c1bfb6f53154e620b38cf6167cbb03f54043f6e08ef7d3f2d5080a95df7e0d"
+NUITKA_FILE="nuitka-${NUITKA_VERSION}.tar.gz"
+NUITKA_URL="https://files.pythonhosted.org/packages/75/27/9fef9381e967c333c808d8b087ca2cca713d608647a638d962f34ea22a45/${NUITKA_FILE}"
+
 step() { printf '\n== %s\n' "$*"; }
 kb() { du -sk "$1" | awk '{print $1}'; }
 mb() { awk -v k="$1" 'BEGIN{printf "%.1f MB", k/1024}'; }
@@ -102,6 +114,66 @@ echo "$JELLYFISH --hash=sha256:$JELLYFISH_SHA256" > "$BUILD/jellyfish.req"
     --only-binary :all: --require-hashes -r "$BUILD/jellyfish.req" \
     --target "$C/Resources/site-packages"
 rm -rf "$C/Resources/site-packages/bin"
+
+# --- 2b. compile the package to native modules -------------------------------
+# The dictator package ships as .so, not readable .py, so the shipped app does
+# not carry its own source. Done here, before the trim below, because Nuitka
+# needs the Python.h headers under Resources/python/include that the trim
+# removes. The bundle's own interpreter builds the modules, so each .so matches
+# the ABI (cp312) it will be imported under at run time.
+#
+# __init__.py is the one file left as source: Nuitka will not compile a
+# package's __init__ as a lone --module, and it only re-exports the public api
+# names the README already documents. It is precompiled to .pyc by the
+# compileall step below, so the first run never writes into the signed bundle.
+step "Compile dictator to native modules (nuitka $NUITKA_VERSION)"
+NUITKA_DIR="$CACHE/nuitka-$NUITKA_VERSION"
+if [ -f "$CACHE/$NUITKA_FILE" ] && \
+   [ "$(shasum -a 256 "$CACHE/$NUITKA_FILE" | awk '{print $1}')" = "$NUITKA_SHA256" ]; then
+    echo "  sdist cached, SHA256 ok"
+else
+    echo "  downloading $NUITKA_FILE"
+    curl -fL --retry 3 -o "$CACHE/$NUITKA_FILE.part" "$NUITKA_URL"
+    got="$(shasum -a 256 "$CACHE/$NUITKA_FILE.part" | awk '{print $1}')"
+    if [ "$got" != "$NUITKA_SHA256" ]; then
+        mv "$CACHE/$NUITKA_FILE.part" "$CACHE/$NUITKA_FILE.bad"
+        echo "  SHA256 mismatch: expected $NUITKA_SHA256, got $got" >&2
+        exit 1
+    fi
+    mv "$CACHE/$NUITKA_FILE.part" "$CACHE/$NUITKA_FILE"
+    echo "  SHA256 ok"
+fi
+# nuitka lives in a build-local --target dir and goes on the path explicitly.
+# -s, not -I: -I ignores PYTHONPATH outright, so nuitka would not be found;
+# -s honors an explicit PYTHONPATH while still disabling the build machine's
+# user site-packages, and the variable is set to exactly NUITKA_DIR here, so
+# nothing from the build machine's own environment can leak into the compile.
+if ! PYTHONPATH="$NUITKA_DIR" "$PY" -s -c 'import nuitka' 2>/dev/null; then
+    rm -rf "$NUITKA_DIR"
+    "$PY" -I -m pip install --quiet --disable-pip-version-check --no-cache-dir \
+        --target "$NUITKA_DIR" "$CACHE/$NUITKA_FILE"
+fi
+PYTHONPATH="$NUITKA_DIR" "$PY" -s -c 'import nuitka' \
+    || { echo "  nuitka unavailable; refusing to ship readable .py" >&2; exit 1; }
+
+D="$C/Resources/dictator"
+n=0
+for f in "$D"/*.py; do
+    [ "$(basename "$f")" = "__init__.py" ] && continue
+    PYTHONPATH="$NUITKA_DIR" "$PY" -s -m nuitka --module "$f" \
+        --output-dir="$D" >/dev/null 2>"$BUILD/nuitka.err" \
+        || { echo "  nuitka failed on $f:" >&2; cat "$BUILD/nuitka.err" >&2; exit 1; }
+    n=$((n + 1))
+done
+# The sources and Nuitka's leftovers go; __init__.py and data/ stay.
+find "$D" -maxdepth 1 -name '*.py' ! -name '__init__.py' -delete
+rm -f "$D"/*.pyi
+rm -rf "$D"/*.build
+# Nothing readable may survive but the one __init__ stub.
+rem="$(find "$D" -maxdepth 1 -name '*.py' ! -name '__init__.py')"
+[ -z "$rem" ] && [ "$n" -gt 0 ] \
+    || { echo "  source left behind or nothing compiled: '$rem' (n=$n)" >&2; exit 1; }
+echo "  $n modules compiled to .so, sources removed"
 
 # Trim the runtime. Each of these is something the dictation loop never
 # imports: the stdlib's own tests, the IDLE editor, Tk (and the Tcl/Tk
@@ -154,11 +226,17 @@ echo "  runtime trimmed: $(mb "$before") -> $(mb "$after"), saved $(mb $((before
 SMOKE="$(mktemp -d "$BUILD/smoke.XXXXXX")"
 env -i HOME="$SMOKE" DICTATOR_STATE="$SMOKE/state" DICTATOR_BUNDLE="$APP" \
     PYTHONPATH="$C/Resources:$C/Resources/site-packages" PYTHONDONTWRITEBYTECODE=1 \
-    "$PY" -B -P -c 'import dictator.core, dictator.vocab, jellyfish, sys
+    "$PY" -B -P -c 'import dictator.core, dictator.vocab, dictator.cli, dictator.roman, jellyfish, sys
 assert dictator.vocab.jellyfish is not None, "jellyfish did not load"
-assert dictator.__file__.startswith(sys.argv[1]), dictator.__file__' "$C/Resources"
+assert dictator.__file__.startswith(sys.argv[1]), dictator.__file__
+# The compiled modules, not source: Nuitka reports __file__ as the original
+# name, so the proof the module came from a .so and not a .py is its loader.
+assert type(dictator.core.__loader__).__name__ == "nuitka_module_loader", \
+    type(dictator.core.__loader__).__name__
+# Path(__file__) data lookup still resolves beside the compiled module.
+assert dictator.roman._LEX.exists(), "data file not found beside compiled module"' "$C/Resources"
 rm -rf "$SMOKE"
-echo "  bundled python imports dictator and jellyfish"
+echo "  bundled python imports the compiled dictator package and jellyfish"
 
 # --- 3. native helpers and the app executable --------------------------------
 step "Native helpers"
