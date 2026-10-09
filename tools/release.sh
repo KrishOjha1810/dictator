@@ -27,7 +27,7 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 VERSION="${1:?usage: tools/release.sh VERSION [notes.md]}"
 NOTES="${2:-}"
-REPO="${DICTATOR_REPO:-KrishOjha1810/dictator}"
+REPO="${DICTATOR_REPO:-cc-vb/dictator}"
 KEYDIR="${DICTATOR_RELEASE_DIR:-$HOME/.dictator-release}"
 SPARKLE="$ROOT/build/cache/sparkle/bin"
 DMG="$ROOT/build/Dictator-$VERSION.dmg"

@@ -36,9 +36,9 @@ is the thing being worked on.
 
 ### Download the app
 
-**[Download Dictator for Mac](https://github.com/KrishOjha1810/dictator/releases/latest/download/Dictator.dmg)**
+**[Download Dictator for Mac](https://github.com/cc-vb/dictator/releases/latest/download/Dictator.dmg)**
 (Apple silicon, macOS 14 or newer, about 24 MB). Every version, with its
-SHA256, is on the [releases page](https://github.com/KrishOjha1810/dictator/releases).
+SHA256, is on the [releases page](https://github.com/cc-vb/dictator/releases).
 
 1. Open `Dictator.dmg` and drag Dictator into Applications. Open it from
    Applications, not from the disk image window: macOS stops a copy run from
@@ -67,14 +67,14 @@ exists and what it does and does not mean is in
 ### Install from source
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/KrishOjha1810/dictator/main/get.sh | bash
+curl -fsSL https://raw.githubusercontent.com/cc-vb/dictator/main/get.sh | bash
 ```
 
 Or clone it yourself, if you would rather read it first, which is the same
 thing in three steps:
 
 ```bash
-git clone https://github.com/KrishOjha1810/dictator.git ~/dictator
+git clone https://github.com/cc-vb/dictator.git ~/dictator
 cd ~/dictator && ./install.sh
 ```
 

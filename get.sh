@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # One line to install dictator:
 #
-#   curl -fsSL https://raw.githubusercontent.com/KrishOjha1810/dictator/main/get.sh | bash
+#   curl -fsSL https://raw.githubusercontent.com/cc-vb/dictator/main/get.sh | bash
 #
 # This exists because "git clone, then cd, then run a script" is three steps
 # and two of them are bookkeeping. It does nothing the three steps did not do,
@@ -9,7 +9,7 @@
 # replaced, so nothing you have changed is thrown away without warning.
 set -euo pipefail
 
-REPO="https://github.com/KrishOjha1810/dictator.git"
+REPO="https://github.com/cc-vb/dictator.git"
 DIR="${DICTATOR_DIR:-$HOME/dictator}"
 
 if [ "$(uname)" != "Darwin" ]; then
@@ -40,7 +40,7 @@ if [ -d "$DIR/.git" ]; then
     echo
     echo "  2. You want to leave that copy alone. Install a separate one:"
     echo "       DICTATOR_DIR=\"\$HOME/dictator-new\" bash <(curl -fsSL \\"
-    echo "         https://raw.githubusercontent.com/KrishOjha1810/dictator/main/get.sh)"
+    echo "         https://raw.githubusercontent.com/cc-vb/dictator/main/get.sh)"
     echo
     exit 1
   }
