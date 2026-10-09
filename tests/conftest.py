@@ -50,6 +50,7 @@ def _own_state_dir(tmp_path, monkeypatch):
             ("signing", "PASSFILE", tmp_path / "signing.pass"),
             ("paste", "HOW_FILE", tmp_path / "delivery"),
             ("orbnative", "PID", tmp_path / "orb.pid"),
+            ("orbnative", "SETTINGS", tmp_path / "indicator.json"),
             ("api", "CAPTURE_FLAG", tmp_path / "capturing"),
             ("api", "FORMAT_FILE", tmp_path / "format.json"),
             ("snippets", "STORE", tmp_path / "snippets.json"),

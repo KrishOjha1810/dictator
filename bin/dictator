@@ -31,6 +31,9 @@ USAGE = """dictator: hold a key and talk, anywhere on your Mac.
   dictator permissions --tidy      remove entries left by older versions
   dictator delivery [type|clipboard]   how the words get in
   dictator capture on|off        keep recordings, to compare speech models
+  dictator indicator             where the pill sits, and whether it hides
+  dictator indicator position top|bottom|left|right|top-left|top-right|bottom-left|bottom-right
+  dictator indicator hide-idle on|off   show it only while dictating
   dictator log        the last thing it did
   dictator errors     failures it noticed
   dictator dictate    run it in the foreground (for debugging)
@@ -584,7 +587,7 @@ def main(argv) -> int:
         elif len(rest) >= 2 and rest[0] in flags and rest[1] in ("on", "off"):
             flags[rest[0]] = rest[1] == "on"
         else:
-            print("usage: dictator format [lists|punctuation|sentences] on|off")
+            print("usage: dictator format [lists|punctuation|sentences|fillers|stutters] on|off")
             return 2
         _d.FORMAT_FILE.parent.mkdir(parents=True, exist_ok=True)
         _d.FORMAT_FILE.write_text(json.dumps(flags, indent=1))
@@ -688,6 +691,9 @@ def main(argv) -> int:
             print(f"  others: {', '.join(k for k in _hk.TOGGLE_KEYS if k != 'off')}")
         return 0
 
+    if cmd in ("indicator", "orb"):
+        return indicator(rest)
+
     if cmd == "capture":
         from dictator import api as _api
         want = rest[0] if rest else "status"
@@ -752,6 +758,34 @@ it is running, so that the decision stays yours and stays visible. macOS shows
 its own screen recording indicator in the menu bar for as long as it records.
 Tell the room. It costs one sentence.
 """
+
+
+def indicator(rest) -> int:
+    """The pill's place and whether it hides when nobody is dictating. The
+    running helper watches the file, so a change shows straight away."""
+    from dictator import orbnative
+    words = [w for w in rest if w != "--json"]
+    try:
+        if len(words) == 2 and words[0] == "position":
+            orbnative.save(position=words[1])
+        elif len(words) == 2 and words[0] in ("hide-idle", "hide_idle") \
+                and words[1] in ("on", "off"):
+            orbnative.save(hide_idle=words[1] == "on")
+        elif words:
+            print("usage: dictator indicator position "
+                  + "|".join(orbnative.POSITIONS)
+                  + "\n       dictator indicator hide-idle on|off")
+            return 2
+    except ValueError as e:
+        print(f"  {e}")
+        return 2
+    now = orbnative.settings()
+    if "--json" in rest:
+        return _json(now)
+    print(f"  position: {now['position']}")
+    print(f"  hide when not dictating: {'on' if now['hide_idle'] else 'off'}")
+    print("  Drag the pill to move it; it snaps to the nearest of eight places.")
+    return 0
 
 
 def meeting(rest) -> int:
