@@ -33,7 +33,18 @@ USAGE = """dictator: hold a key and talk, anywhere on your Mac.
   dictator capture on|off        keep recordings, to compare speech models
   dictator indicator             where the pill sits, and whether it hides
   dictator indicator position top|bottom|left|right|top-left|top-right|bottom-left|bottom-right
-  dictator indicator hide-idle on|off   show it only while dictating
+  dictator indicator idle hover|always|hide
+                      when not dictating: show it when the pointer comes to its
+                      place (default), always show the faint pill, or hide it
+  dictator indicator controls dictate,notetaker,scratchpad|none
+                      the buttons the pill shows on hover
+  dictator indicator shortcut notetaker|scratchpad on|off
+                      the app's Option-M and Option-S shortcuts
+  dictator hands-free [toggle|finish|cancel]
+                      start or finish hands free dictation, as the pill's
+                      button does (double-tap the key for the same thing)
+  dictator notes      the Scratchpad: list, show ID, new, save ID (text on
+                      stdin), delete ID, find WORDS. --json for the app
   dictator log        the last thing it did
   dictator errors     failures it noticed
   dictator dictate    run it in the foreground (for debugging)
@@ -694,6 +705,12 @@ def main(argv) -> int:
     if cmd in ("indicator", "orb"):
         return indicator(rest)
 
+    if cmd in ("hands-free", "handsfree"):
+        return hands_free(rest)
+
+    if cmd in ("notes", "note", "scratchpad"):
+        return notes(rest)
+
     if cmd == "capture":
         from dictator import api as _api
         want = rest[0] if rest else "status"
@@ -761,20 +778,36 @@ Tell the room. It costs one sentence.
 
 
 def indicator(rest) -> int:
-    """The pill's place and whether it hides when nobody is dictating. The
-    running helper watches the file, so a change shows straight away."""
+    """The pill: where it sits, what it does while nobody is dictating, which
+    buttons it shows on hover, and which app shortcuts are on. The running
+    helper watches the file, so a change shows straight away."""
     from dictator import orbnative
     words = [w for w in rest if w != "--json"]
+    usage = ("usage: dictator indicator position "
+             + "|".join(orbnative.POSITIONS)
+             + "\n       dictator indicator idle " + "|".join(orbnative.IDLE)
+             + "\n       dictator indicator hide-idle on|off"
+             + "\n       dictator indicator controls "
+             + ",".join(orbnative.CONTROLS) + "|none"
+             + "\n       dictator indicator shortcut "
+             + "|".join(orbnative.SHORTCUTS) + " on|off")
     try:
         if len(words) == 2 and words[0] == "position":
             orbnative.save(position=words[1])
         elif len(words) == 2 and words[0] in ("hide-idle", "hide_idle") \
                 and words[1] in ("on", "off"):
             orbnative.save(hide_idle=words[1] == "on")
+        elif len(words) == 2 and words[0] == "idle":
+            orbnative.save(idle=words[1])
+        elif len(words) == 2 and words[0] == "controls":
+            want = [] if words[1] == "none" else \
+                [w for w in words[1].split(",") if w]
+            orbnative.save(controls=want)
+        elif len(words) == 3 and words[0] == "shortcut" \
+                and words[2] in ("on", "off"):
+            orbnative.save(shortcuts={words[1]: words[2] == "on"})
         elif words:
-            print("usage: dictator indicator position "
-                  + "|".join(orbnative.POSITIONS)
-                  + "\n       dictator indicator hide-idle on|off")
+            print(usage)
             return 2
     except ValueError as e:
         print(f"  {e}")
@@ -782,10 +815,88 @@ def indicator(rest) -> int:
     now = orbnative.settings()
     if "--json" in rest:
         return _json(now)
+    idle = {"hover": "hidden, shown when the pointer comes to its place",
+            "always": "a small faint pill stays on screen",
+            "hide": "hidden, no buttons"}[now["idle"]]
     print(f"  position: {now['position']}")
-    print(f"  hide when not dictating: {'on' if now['hide_idle'] else 'off'}")
+    print(f"  when not dictating: {now['idle']} ({idle})")
+    print(f"  buttons on hover: {', '.join(now['controls']) or 'none'}")
+    print("  shortcuts: " + ", ".join(
+        f"{k} {'on' if v else 'off'}" for k, v in now["shortcuts"].items()))
     print("  Drag the pill to move it; it snaps to the nearest of eight places.")
     return 0
+
+
+def hands_free(rest) -> int:
+    """Start, finish or throw away a hands free session in the running loop,
+    exactly as the pill's buttons do. 1 when no loop is listening."""
+    from dictator import control
+    what = rest[0] if rest else "toggle"
+    if what not in control.COMMANDS:
+        print("usage: dictator hands-free [toggle|finish|cancel]")
+        return 2
+    if not control.serving() or not control.send(what):
+        print("  Dictation is not running, so there is nothing to start.")
+        return 1
+    print(f"  sent {what}.")
+    return 0
+
+
+def notes(rest) -> int:
+    """The Scratchpad's notes, for the app and for a terminal."""
+    from dictator import notes as n
+    as_json = "--json" in rest
+    words = [w for w in rest if w != "--json"]
+    what = words[0] if words else "list"
+    arg = words[1] if len(words) > 1 else ""
+    try:
+        if what in ("list", "ls"):
+            rows = n.all_notes()
+            if as_json:
+                return _json({"notes": rows})
+            if not rows:
+                print("  No notes yet. The Scratchpad is Option-S in the app.")
+            for r in rows:
+                when = __import__("time").strftime(
+                    "%d %b %H:%M", __import__("time").localtime(r["updated"]))
+                print(f"  {r['id']}  {when}  {r['title']}")
+            return 0
+        if what == "show":
+            r = n.get(arg)
+            if r is None:
+                print(f"  no note {arg}")
+                return 1
+            if as_json:
+                return _json(r)
+            print(r["text"])
+            return 0
+        if what == "new":
+            nid = n.new_id()
+            return _json({"id": nid}) if as_json else (print(nid) or 0)
+        if what == "save":
+            r = n.save(arg, sys.stdin.read())
+            if as_json:
+                return _json(r or {"id": arg, "deleted": True})
+            print("  saved." if r else "  empty, so not kept.")
+            return 0
+        if what in ("delete", "rm", "forget"):
+            ok = n.delete(arg)
+            if as_json:
+                return _json({"id": arg, "deleted": ok})
+            print("  deleted." if ok else f"  no note {arg}")
+            return 0 if ok else 1
+        if what in ("find", "search"):
+            rows = n.find(" ".join(words[1:]))
+            if as_json:
+                return _json({"notes": rows})
+            for r in rows:
+                print(f"  {r['id']}  {r['title']}")
+            return 0
+    except ValueError as e:
+        print(f"  {e}")
+        return 2
+    print("usage: dictator notes [list|show ID|new|save ID|delete ID|find WORDS] [--json]")
+    return 2
 
 
 def meeting(rest) -> int:
@@ -800,6 +911,12 @@ def meeting(rest) -> int:
 
     what = rest[0] if rest else ""
     args = rest[1:]
+
+    if what in ("", "status") and "--json" in rest:
+        live = m.running()
+        return _json({"recording": bool(live), "id": live.get("id", ""),
+                      "title": live.get("title", ""),
+                      "elapsed": live.get("elapsed", 0.0)})
 
     if what in ("", "status"):
         live = m.running()

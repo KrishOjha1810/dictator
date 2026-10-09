@@ -2,7 +2,7 @@
 //
 // Prints one line per gesture on stdout, so any language can consume it:
 //
-//   READY <key> toggle=<latch|off> cap=<ms>
+//   READY <key> toggle=<latch|off> cap=<ms> doubletap=<on|off>
 //   The latch gesture is TWO clean taps of the latch key inside a hold.
 //                        the listener is armed, and says how it is configured
 //   DOWN                 the talk key went down; start capturing now
@@ -11,14 +11,26 @@
 //   LOCKED <held_ms>     the screen locked while held; treat as CANCEL
 //   LATCH <ms>           the hold just became a HANDS FREE session. The mic
 //                        that DOWN opened stays open, and the talk key release
-//                        that follows deliberately emits NOTHING.
+//                        that follows deliberately emits NOTHING. Reached by
+//                        a DOUBLE TAP of the talk key, by two clean taps of
+//                        the latch key inside a hold, or by TOGGLE on stdin.
 //   LISTENING <ms>       heartbeat, every 5s, only while a session is open
-//   UP <ms> toggle       the user ended the session; stop and transcribe
+//   UP <ms> toggle       the user ended the session (one press of the talk
+//                        key, FINISH or TOGGLE on stdin); stop and transcribe
+//   CANCEL <ms> esc      Escape was pressed mid session; stop and DISCARD
+//   CANCEL <ms> button   CANCEL arrived on stdin (the pill's x); DISCARD
 //   CANCEL <ms> cap      the session hit its hard cap; stop and DISCARD
 //   CANCEL <ms> tap      we lost the ability to see the stop gesture; DISCARD
 //   CANCEL <ms> exit     we are exiting mid session; DISCARD
 //   LOCKED <ms> lock     the screen locked mid session; DISCARD
 //   BYE                  exiting; any open hold or session has been closed
+//
+// Commands, one per line on stdin, from the dictation loop (the pill's buttons
+// reach us this way, so a session has one owner whichever way it started):
+//
+//   TOGGLE   no session: open one (DOWN, LATCH 0). In one: end it, UP toggle.
+//   FINISH   in a session: end it and transcribe (UP <ms> toggle)
+//   CANCEL   in a session: end it and discard (CANCEL <ms> button)
 //
 // The trailing word on the session lines is a reason, always last, always
 // optional to read. Every consumer that already splits on whitespace and reads
@@ -30,6 +42,16 @@
 //    picker, input switch) only on the release of a CLEAN TAP, and ignores a
 //    hold. So a hold collides with nothing and needs no change to System
 //    Settings. A tap gesture would fight the OS.
+//
+//  * The DOUBLE TAP is the one tap gesture, and it is decided late on
+//    purpose. Each tap is still emitted as DOWN and a short UP, so a single
+//    tap does exactly what it always did (the loop discards anything under a
+//    quarter second). Only when a second clean tap starts within 350 ms of the
+//    first one ending, and ends within 300 ms of starting, is its release
+//    turned into LATCH instead of UP. The mic the second DOWN opened is the
+//    session's mic. macOS still runs the Globe key's own action on each clean
+//    tap; this process is listen only and cannot swallow it, so the setup
+//    tells the user to set "Press Globe key to" to Do Nothing.
 //
 //  * The latch key is a MODIFIER by default (shift), not the space bar. fn is
 //    not a translation modifier: fn+space produces U+0020 exactly as space
@@ -95,6 +117,11 @@ struct Options {
     // opening is a different kind of event entirely.
     var maxSessionMs: Double = 300_000
     var selfTest = false
+    /// Read scripted events from stdin and print what they produce, with no
+    /// event tap and no permission. For the Python tests.
+    var script = false
+    /// A double tap of the talk key starts a hands free session.
+    var doubleTap = true
 }
 
 /// Keycodes and modifier mask for each latch key we accept. Both sides of a
@@ -143,15 +170,26 @@ func parseArgs() -> Options {
             o.maxSessionMs = Double(it.next() ?? "300000") ?? 300_000
         case "--self-test":
             o.selfTest = true
+        case "--script":
+            o.script = true
+        case "--double-tap":
+            o.doubleTap = (it.next() ?? "on") != "off"
         case "--help", "-h":
             print("""
             dictator-hotkey [--key fn|rightcmd|rightopt|leftcmd] [--min-hold MS]
                             [--toggle-key shift|control|option|command|rightcmd|space|off]
-                            [--max-session MS] [--self-test]
+                            [--max-session MS] [--double-tap on|off]
+                            [--self-test] [--script]
 
             Emits DOWN / UP <ms> / CANCEL <ms> on stdout for a hold-to-talk key,
             and LATCH / LISTENING <ms> / UP <ms> toggle for a hands free session
-            started by tapping the toggle key inside a hold.
+            started by tapping the toggle key inside a hold, or by a double tap
+            of the talk key. A press of the talk key ends a session, Escape
+            discards it.
+
+            --script reads events from stdin (down, up, key, esc, sleep MS,
+            TOGGLE, FINISH, CANCEL) and prints the lines they produce, with no
+            event tap and no permission.
 
             --toggle-key space is a collision and is not the default: fn+space
             still types a space into whatever is in front of you, because this
@@ -211,15 +249,45 @@ final class Gesture {
 
     // ---- the hold, unchanged ---------------------------------------------
 
+    // The double tap of the talk key. A tap is a press shorter than this
+    // with nothing else pressed during it; the second one has to START this
+    // soon after the first one ENDED.
+    static let tapMaxMs: Double = 300
+    static let tapGap: TimeInterval = 0.35
+    private var lastTapUpAt: Date? = nil     // a clean tap of the talk key just ended
+    private var followsTap = false           // this press began inside the gap
+    private var latchedAt: Date? = nil       // when the open session began
+    private var pressInSession = false       // the talk key is down inside a session
+
     func down() {
-        // During a session the talk key is not a talk key any more: it only
-        // arms the stop chord. Emitting DOWN here would tell the caller to
-        // open a second microphone on top of the one already recording.
-        guard sessionAt == nil else { return }
+        // During a session the talk key is the stop. One press ends it and
+        // transcribes, on the press rather than the release, so it feels
+        // immediate; the release that follows says nothing. A press within a
+        // third of a second of the session starting is the same burst of
+        // tapping that started it (a triple tap), not a decision to stop.
+        if sessionAt != nil {
+            guard !pressInSession else { return }
+            pressInSession = true
+            if let l = latchedAt, Date().timeIntervalSince(l) < 0.3 { return }
+            endSession(reason: "UP", why: "toggle")
+            return
+        }
+        if pressInSession { return }          // still the press that ended one
         guard downAt == nil else { return }   // ignore auto-repeat
-        downAt = Date()
+        let now = Date()
+        followsTap = opts.doubleTap
+            && (lastTapUpAt.map { now.timeIntervalSince($0) <= Gesture.tapGap } ?? false)
+        lastTapUpAt = nil
+        downAt = now
         interrupted = false
         emit("DOWN")
+    }
+
+    /// Any key other than the talk key, held or not. Between two taps it
+    /// means they were not one gesture; during a hold it makes it a chord.
+    func otherKey() {
+        lastTapUpAt = nil
+        interrupt()
     }
 
     /// Another key arrived while we were held, so the user was typing a chord
@@ -234,9 +302,21 @@ final class Gesture {
         // A latch tap must begin and end inside the same hold. Once the talk
         // key is up there is nothing left to tap it against.
         latchAt = nil
+        pressInSession = false
         guard let d = downAt else { return }
-        downAt = nil
         let ms = Date().timeIntervalSince(d) * 1000
+        let cleanTap = opts.doubleTap && reason == "UP" && !interrupted && ms < Gesture.tapMaxMs
+        if cleanTap && followsTap {
+            // The second of two clean taps. Its DOWN already opened the mic;
+            // instead of closing it, this release makes it a session.
+            followsTap = false
+            lastTapUpAt = nil
+            startSession()
+            return
+        }
+        downAt = nil
+        followsTap = false
+        lastTapUpAt = cleanTap ? Date() : nil
         if interrupted {
             emit(String(format: "CANCEL %.0f", ms))
         } else if ms < opts.minHoldMs && reason == "UP" {
@@ -321,7 +401,7 @@ final class Gesture {
     /// Turn the hold that is already recording into a hands free session.
     /// No stop, no restart, no gap: the microphone opened by DOWN keeps
     /// running, which is why the latch can be tapped mid-sentence.
-    private func startSession() {
+    func startSession() {
         if let d = downAt {
             downAt = nil
             interrupted = false
@@ -336,6 +416,7 @@ final class Gesture {
             emit("LATCH 0")
         }
         lastBeat = -1
+        latchedAt = Date()
     }
 
     /// End a session. `reason` is the verb the consumer already understands:
@@ -348,8 +429,31 @@ final class Gesture {
         guard let s = sessionAt else { return }
         sessionAt = nil
         latchAt = nil
+        latchedAt = nil
+        lastTapUpAt = nil
         let ms = Date().timeIntervalSince(s) * 1000
         emit("\(reason) \(Int(ms.rounded())) \(why)")
+    }
+
+    /// One command from stdin. See the header.
+    func command(_ c: String) {
+        switch c.uppercased() {
+        case "TOGGLE":
+            if sessionAt != nil { endSession(reason: "UP", why: "toggle") }
+            else if downAt == nil { startSession() }
+            // A hold in progress: the person is already talking. Leave it.
+        case "FINISH":
+            endSession(reason: "UP", why: "toggle")
+        case "CANCEL":
+            endSession(reason: "CANCEL", why: "button")
+        default:
+            break
+        }
+    }
+
+    /// Escape, while a session is open: throw it away.
+    func escape() {
+        if sessionAt != nil { endSession(reason: "CANCEL", why: "esc") }
     }
 
     /// How long the open session has been running, or nil if none.
@@ -387,10 +491,12 @@ func runSelfTest() -> Never {
     func scenario(_ name: String,
                   minHold: Double = 0,
                   latch: Set<Int64> = [56, 60],
+                  doubleTap: Bool = true,
                   _ body: (Gesture) -> Void,
                   expect: [String]) {
         opts.minHoldMs = minHold
         opts.latchCodes = latch
+        opts.doubleTap = doubleTap
         var out: [String] = []
         sink = { out.append($0) }
         body(Gesture())
@@ -456,12 +562,17 @@ func runSelfTest() -> Never {
         g.up()                      // the release that follows must say nothing
     }, expect: ["DOWN", "LATCH 0"])
 
-    scenario("latch: second tap stops and transcribes", { g in
+    scenario("latch: a press of the talk key stops and transcribes", { g in
         g.down(); g.latchGesture(); g.up()
         usleep(400_000)             // past the chatter debounce
         g.down()                    // no second DOWN: the mic is already open
-        g.latchGesture()
         g.up()
+    }, expect: ["DOWN", "LATCH 0", "UP 400 toggle"])
+
+    scenario("latch: the second double tap of the latch key still stops it", { g in
+        g.down(); g.latchGesture(); g.up()
+        usleep(400_000)
+        g.latchGesture()
     }, expect: ["DOWN", "LATCH 0", "UP 400 toggle"])
 
     scenario("latch: fn+shift+arrow is editing, not a latch", { g in
@@ -511,11 +622,17 @@ func runSelfTest() -> Never {
         g.endSession(reason: "CANCEL", why: "exit")
     }, expect: ["DOWN", "LATCH 0", "CANCEL 0 cap"])
 
-    scenario("session: the talk key alone does nothing", { g in
+    scenario("session: a press straight after the latch is not a stop", { g in
         g.down(); g.latchGesture(); g.up()
-        g.down(); g.up()            // a bare tap mid session
-        g.down(); g.up()
+        g.down(); g.up()            // inside the 0.3 s after it began
     }, expect: ["DOWN", "LATCH 0"])
+
+    scenario("session: one press stops it, and the next press is a hold again", { g in
+        g.down(); g.latchGesture(); g.up()
+        usleep(350_000)
+        g.down(); g.up()            // the stop; its release says nothing
+        g.down(); g.up()            // an ordinary hold
+    }, expect: ["DOWN", "LATCH 0", "UP 350 toggle", "DOWN", "UP 0"])
 
     scenario("session: heartbeats only while one is open", { g in
         let g2 = g
@@ -554,6 +671,85 @@ func runSelfTest() -> Never {
         g.up()
     }, expect: ["DOWN", "UP 800"])
 
+    // --- the double tap of the talk key -----------------------------------
+
+    scenario("double tap: two clean taps start a session", { g in
+        g.down(); g.up()
+        g.down(); g.up()
+    }, expect: ["DOWN", "UP 0", "DOWN", "LATCH 0"])
+
+    scenario("double tap: one tap is still nothing but a short UP", { g in
+        g.down(); g.up()
+    }, expect: ["DOWN", "UP 0"])
+
+    scenario("double tap: too slow is two separate taps", { g in
+        g.down(); g.up()
+        usleep(450_000)
+        g.down(); g.up()
+    }, expect: ["DOWN", "UP 0", "DOWN", "UP 0"])
+
+    scenario("double tap: a held second press is push to talk", { g in
+        g.down(); g.up()
+        g.down(); usleep(350_000); g.up()
+    }, expect: ["DOWN", "UP 0", "DOWN", "UP 350"])
+
+    scenario("double tap: a key between the taps breaks it", { g in
+        g.down(); g.up()
+        g.otherKey()
+        g.down(); g.up()
+    }, expect: ["DOWN", "UP 0", "DOWN", "UP 0"])
+
+    scenario("double tap: a chord is not a tap", { g in
+        g.down(); g.otherKey(); g.up()
+        g.down(); g.up()
+    }, expect: ["DOWN", "CANCEL 0", "DOWN", "UP 0"])
+
+    scenario("double tap: then one press stops and transcribes", { g in
+        g.down(); g.up(); g.down(); g.up()
+        usleep(350_000)
+        g.down(); g.up()
+    }, expect: ["DOWN", "UP 0", "DOWN", "LATCH 0", "UP 350 toggle"])
+
+    scenario("double tap: a triple tap does not stop what it started", { g in
+        g.down(); g.up(); g.down(); g.up(); g.down(); g.up()
+    }, expect: ["DOWN", "UP 0", "DOWN", "LATCH 0"])
+
+    scenario("double tap: escape discards", { g in
+        g.down(); g.up(); g.down(); g.up()
+        g.escape()
+    }, expect: ["DOWN", "UP 0", "DOWN", "LATCH 0", "CANCEL 0 esc"])
+
+    scenario("double tap: escape outside a session does nothing", { g in
+        g.escape()
+    }, expect: [])
+
+    scenario("double tap: off gives two taps", doubleTap: false, { g in
+        g.down(); g.up(); g.down(); g.up()
+    }, expect: ["DOWN", "UP 0", "DOWN", "UP 0"])
+
+    // --- commands from the loop (the pill's buttons) ----------------------
+
+    scenario("commands: TOGGLE opens a session, TOGGLE again finishes it", { g in
+        g.command("TOGGLE"); usleep(50_000); g.command("TOGGLE")
+    }, expect: ["DOWN", "LATCH 0", "UP 50 toggle"])
+
+    scenario("commands: CANCEL discards", { g in
+        g.command("TOGGLE"); g.command("CANCEL")
+    }, expect: ["DOWN", "LATCH 0", "CANCEL 0 button"])
+
+    scenario("commands: FINISH and CANCEL with nothing open say nothing", { g in
+        g.command("FINISH"); g.command("CANCEL")
+    }, expect: [])
+
+    scenario("commands: TOGGLE during a hold leaves the hold alone", { g in
+        g.down(); g.command("TOGGLE"); g.up()
+    }, expect: ["DOWN", "UP 0"])
+
+    scenario("commands: a press of the talk key ends a session TOGGLE opened", { g in
+        g.command("TOGGLE"); usleep(350_000)
+        g.down(); g.up()
+    }, expect: ["DOWN", "LATCH 0", "UP 350 toggle"])
+
     // --- the gesture turned off -------------------------------------------
 
     scenario("off: the old behaviour, byte for byte", latch: [], { g in
@@ -569,6 +765,25 @@ func runSelfTest() -> Never {
 }
 
 if opts.selfTest { runSelfTest() }
+
+// Scripted events on stdin, the lines they produce on stdout. No tap, no
+// permission: the Python tests drive the real state machine through this.
+if opts.script {
+    while let line = readLine() {
+        let w = line.split(separator: " ").map(String.init)
+        guard let v = w.first else { continue }
+        switch v {
+        case "down": gesture.down()
+        case "up": gesture.up()
+        case "key": gesture.otherKey()
+        case "esc": gesture.escape(); gesture.otherKey()
+        case "sleep": usleep(UInt32((Double(w.count > 1 ? w[1] : "0") ?? 0) * 1000))
+        case "beat": gesture.beat()
+        default: gesture.command(v)
+        }
+    }
+    exit(0)
+}
 
 // ---------------------------------------------------------------- guards
 
@@ -638,15 +853,16 @@ let callback: CGEventTapCallBack = { _, type, event, _ in
         } else if latched, let mask = opts.latchMask {
             // A modifier latch: its own flag tells us which edge this is.
             if !talkHeld {
-                gesture.interrupt()             // outside a hold it is just a chord
+                gesture.otherKey()              // outside a hold it is just a chord
             } else if event.flags.contains(mask) {
                 gesture.latchDown()
             } else {
                 gesture.latchUp()
             }
-        } else if gesture.isHeld {
-            // A different modifier joined the hold: cmd, shift, ctrl. Chord.
-            gesture.interrupt()
+        } else {
+            // A different modifier: inside a hold it is a chord, and between
+            // two taps it means they were not a double tap.
+            gesture.otherKey()
         }
         return Unmanaged.passUnretained(event)
     }
@@ -660,10 +876,12 @@ let callback: CGEventTapCallBack = { _, type, event, _ in
         }
     }
 
-    // Any ordinary key pressed while held means the user is typing, not talking.
-    if type == .keyDown && gesture.isHeld {
-        gesture.interrupt()
-    }
+    // Escape throws a hands free session away. It still reaches the app in
+    // front: this tap only listens.
+    if type == .keyDown && kc == 53 { gesture.escape() }
+    // Any ordinary key pressed while held means the user is typing, not
+    // talking, and between two taps it means they were not a double tap.
+    if type == .keyDown { gesture.otherKey() }
     return Unmanaged.passUnretained(event)
 }
 
@@ -854,6 +1072,19 @@ if opts.latchMask == nil && !opts.latchCodes.isEmpty {
     """.data(using: .utf8)!)
 }
 
+// Commands from the loop on stdin (the pill's buttons). An EOF, as when the
+// caller gave us no pipe, just stops reading.
+FileHandle.standardInput.readabilityHandler = { h in
+    let d = h.availableData
+    if d.isEmpty { h.readabilityHandler = nil; return }
+    let text = String(decoding: d, as: UTF8.self)
+    DispatchQueue.main.async {
+        for line in text.split(whereSeparator: \.isNewline) {
+            gesture.command(line.trimmingCharacters(in: .whitespaces))
+        }
+    }
+}
+
 emit("READY \(opts.keyName) toggle=\(opts.latchCodes.isEmpty ? "off" : opts.latchName) "
-     + "cap=\(Int(opts.maxSessionMs))")
+     + "cap=\(Int(opts.maxSessionMs)) doubletap=\(opts.doubleTap ? "on" : "off")")
 CFRunLoopRun()

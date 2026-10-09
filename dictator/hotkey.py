@@ -7,7 +7,7 @@ which fires on key-press only and so cannot do this at all.
 
 It speaks a one-line-per-gesture protocol on stdout:
 
-    READY <key> toggle=<latch|off> cap=<ms>
+    READY <key> toggle=<latch|off> cap=<ms> doubletap=<on|off>
                       armed, and saying how it is configured. `cap` is the
                       longest hands free session it will allow, so a caller
                       can size its recorder from it instead of guessing.
@@ -28,15 +28,33 @@ It speaks a one-line-per-gesture protocol on stdout:
                       DOWN opened keeps running, and the key release that
                       follows deliberately emits nothing at all, so a caller
                       that does nothing with LATCH keeps recording, which is
-                      the correct fallback.
+                      the correct fallback. Reached by a DOUBLE TAP of the
+                      talk key (two clean taps, the second starting within
+                      350 ms of the first ending, each under 300 ms), by two
+                      taps of the latch key inside a hold, or by TOGGLE.
     LISTENING <ms>    heartbeat, every 5s, only while a session is open
-    UP <ms> toggle    the user tapped the chord again: stop and transcribe
-    CANCEL <ms> cap|tap|exit
-                      the session ended without the user asking for it. Stop
-                      and DISCARD: the reasons are a hard cap, a dead event
-                      tap, and our own exit.
+    UP <ms> toggle    the user ended the session (one press of the talk key,
+                      the latch chord again, FINISH or TOGGLE): transcribe
+    CANCEL <ms> cap|tap|exit|esc|button
+                      the session ended without being finished. Stop and
+                      DISCARD: a hard cap, a dead event tap, our own exit,
+                      Escape, or the pill's x (CANCEL on stdin).
     LOCKED <ms> lock  the screen locked mid-session. Stop and DISCARD.
     BYE               exiting, any open hold or session already closed
+
+Commands go the other way, one per line on the listener's stdin, so a hands
+free session has one owner however it started (a double tap, or the pill's
+buttons through dictator/control.py):
+
+    TOGGLE   no session: open one (DOWN, LATCH 0); in one: end it (UP toggle)
+    FINISH   end the open session and transcribe
+    CANCEL   end the open session and discard
+
+A single clean tap of the talk key still does what it always did: DOWN and a
+short UP, which the loop discards as a mis-press. macOS also runs the Globe
+key's own action on that tap (emoji picker, input source, dictation), and a
+listen-only tap cannot stop it, so the setup tells the user to set System
+Settings, Keyboard, "Press Globe key to" to Do Nothing.
 
 The trailing reason word is always last and always optional to read, so the
 older parser (token 0 is the verb, token 1 is milliseconds) is still correct.
@@ -166,7 +184,8 @@ def build(force: bool = False) -> str:
 
 def listen(key: str = "fn", min_hold_ms: int = 0,
            toggle_key: "str | None" = None,
-           max_session_ms: int = DEFAULT_MAX_SESSION_MS):
+           max_session_ms: int = DEFAULT_MAX_SESSION_MS,
+           double_tap: bool = True):
     """Start the listener. Returns a Popen whose stdout yields the protocol
 
     min_hold_ms defaults to 0, i.e. no mis-press floor. A very short hold
@@ -202,13 +221,31 @@ def listen(key: str = "fn", min_hold_ms: int = 0,
     try:
         return subprocess.Popen(
             [exe, "--key", key, "--min-hold", str(min_hold_ms),
-             "--toggle-key", toggle_key, "--max-session", str(int(max_session_ms))],
+             "--toggle-key", toggle_key, "--max-session", str(int(max_session_ms)),
+             "--double-tap", "on" if double_tap else "off"],
+            # stdin carries TOGGLE / FINISH / CANCEL from the loop.
+            stdin=subprocess.PIPE,
             stdout=subprocess.PIPE, stderr=subprocess.PIPE,
             text=True, bufsize=1,
         )
     except Exception as e:
         core.log(f"hotkey: launch failed: {e}")
         return None
+
+
+def tell(p, command: str) -> bool:
+    """Send one command (TOGGLE, FINISH, CANCEL) to a running listener.
+    False when it has no stdin or has gone; never raises."""
+    if command not in ("TOGGLE", "FINISH", "CANCEL"):
+        return False
+    try:
+        if p is None or p.stdin is None or p.poll() is not None:
+            return False
+        p.stdin.write(command + "\n")
+        p.stdin.flush()
+        return True
+    except Exception:
+        return False
 
 
 def measure(key: str = "fn", secs: int = 30, toggle_key: str = DEFAULT_TOGGLE) -> dict:

@@ -27,7 +27,7 @@ import subprocess
 import threading
 import time
 
-from . import core, fetch, hotkey, mac, orbnative, paste, stt, warmup
+from . import control, core, fetch, hotkey, mac, orbnative, paste, stt, warmup
 from .api import Dictator
 
 # When a hold that produced nothing is worth telling the user about.
@@ -163,6 +163,13 @@ class Dictation:
         # Set once the loop has written its last word. A transcription
         # still finishing after that must not say "ready" over it.
         self._stopped = False
+        # A hands free session is open: the listener said LATCH, after a
+        # double tap of the key or a click on the pill. The microphone stays
+        # open until a press of the key, the pill's check, Escape, the pill's
+        # cross or the cap. Written into hud.json (phase "handsfree") so the
+        # pill can draw its cross and check; it is appearance only, the pill
+        # still decides "listening" from the microphone itself.
+        self.hands_free = False
 
     def _publish(self, state: str) -> None:
         if state == "ready" and self.blocked:
@@ -203,6 +210,7 @@ class Dictation:
         # is read from disk WHILE you talk, so that when you let go the only
         # thing left is the work that needs the audio. See warmup.py.
         warmup.models()
+        self.hands_free = False
         core.set_hud("hearing", 0.0)
         with self._lock:
             self._publish("listening")
@@ -232,12 +240,24 @@ class Dictation:
                 if raw > 0.0:
                     floor = min(floor, raw)
                     span = max(0.15, 1.0 - floor)
-                    core.set_hud("hearing", min(1.0, max(0.0, (raw - floor) / span)))
+                    core.set_hud(self.phase(),
+                                 min(1.0, max(0.0, (raw - floor) / span)))
             except Exception:
                 pass
             time.sleep(0.08)
 
+    def phase(self) -> str:
+        """What hud.json says while the microphone is open."""
+        return "handsfree" if self.hands_free else "hearing"
+
+    def latch(self):
+        """The hold that is recording became a hands free session."""
+        if self.proc:
+            self.hands_free = True
+            core.set_hud("handsfree", 0.0)
+
     def up(self, held_ms: float):
+        self.hands_free = False
         p, self.proc = self.proc, None
         if not p:
             return
@@ -280,6 +300,7 @@ class Dictation:
         `publish` is False when the loop is stopping: it writes its own last
         word, and a "ready" written here first would be the app's last view
         of a loop that is gone."""
+        self.hands_free = False
         p, self.proc = self.proc, None
         if p:
             try:
@@ -440,6 +461,82 @@ class Dictation:
             core.log(f"timing: {ms}ms release-to-paste, {secs:.1f}s held, "
                      f"{said.engine}")
 
+# Why a take was thrown away, in the words the user is told.
+DISCARDED = {
+    "cap": "that hit the time limit, so I threw it away rather "
+           "than pasting minutes of whatever the room said",
+    "tap": "I lost sight of the keyboard, so I stopped and "
+           "threw it away",
+    "exit": "stopping, so I threw that away",
+    "lock": "the screen locked, so I threw that away",
+    "esc": "Escape, so I threw that away and pasted nothing",
+    "button": "cancelled from the pill, nothing pasted",
+}
+
+
+def handle(d: "Dictation", line: str, note=lambda m: None) -> str:
+    """One line from the key listener, acted on. Returns "ready" when it
+    armed, "bye" when it is leaving, and "" otherwise.
+
+    Out of run() so the whole state machine can be driven by a test with the
+    lines a real listener prints, including the ones the double tap and the
+    pill's buttons produce."""
+    parts = line.strip().split()
+    if not parts:
+        return ""
+    verb = parts[0]
+    if verb == "READY":
+        d._publish("ready")
+        note(f"listening for {d.key}. Press it and I will say so.")
+        return "ready"
+    if verb == "DOWN":
+        note("heard the key go down, recording...")
+        d.down()
+    elif verb == "UP":
+        held = 0.0
+        if len(parts) > 1:
+            try:
+                held = float(parts[1])
+            except ValueError:
+                pass
+        note("hands free session ended" if "toggle" in parts
+             else f"released after {held:.0f}ms")
+        d.up(held)
+    elif verb == "LATCH":
+        # Hands free. The microphone opened by DOWN keeps running, and the
+        # key release that follows emits nothing. Saying so matters: the
+        # user has taken their hand off the key and the only thing telling
+        # them the mic is still open is the indicator.
+        note("hands free now. Press the key once to finish, Escape to "
+             "throw it away.")
+        d.latch()
+    elif verb == "LISTENING":
+        # A heartbeat, so a listener that died quietly is not mistaken for
+        # one that is patiently waiting.
+        core.set_hud(d.phase(), 0.0)
+    elif verb in ("CANCEL", "LOCKED"):
+        why = parts[2] if len(parts) > 2 else ""
+        note(DISCARDED.get(why, "cancelled (another key joined, or the screen "
+                                "locked)"))
+        d.cancel()
+    elif verb == "BYE":
+        return "bye"
+    return ""
+
+
+# What each command from the pill (control.py) asks of the key listener.
+TO_LISTENER = {"toggle": "TOGGLE", "finish": "FINISH", "cancel": "CANCEL"}
+
+
+def command(p, word: str, note=lambda m: None) -> bool:
+    """Pass one command from the pill on to the key listener, which owns the
+    session. True if it was passed on."""
+    to = TO_LISTENER.get(word)
+    if not to:
+        return False
+    note(f"the pill says {word}")
+    return hotkey.tell(p, to)
+
 
 def _paste_where_you_are(text: str, send: bool = False) -> bool:
     """Paste into the frontmost app, and put the clipboard back afterwards.
@@ -545,7 +642,7 @@ def run(key: str = "fn", send: bool = False, debug: bool = True) -> int:
     # watching the terminal you started this from, which defeats the point of
     # a key that works everywhere.
     try:
-        if not orbnative.show():
+        if not orbnative.show(key=key):
             print("  (no orb: see `dictator log`)", flush=True)
     except Exception as e:
         print(f"  (no orb: {e})", flush=True)
@@ -575,6 +672,11 @@ def run(key: str = "fn", send: bool = False, debug: bool = True) -> int:
     _old_term = _on_sigterm()
     _write_pid()
 
+    # The pill's buttons, and `dictator hands-free`, reach the loop here.
+    ctl = control.Server()
+    if not ctl.start():
+        ctl = None
+
     print(f"Hold {key} anywhere and talk. The words land where your cursor is.")
     print("Ctrl-C to stop.\n")
     armed = False
@@ -587,7 +689,13 @@ def run(key: str = "fn", send: bool = False, debug: bool = True) -> int:
             # readline() rather than `for line in p.stdout`: iterating a pipe
             # goes through a hidden read-ahead buffer that waits for it to fill,
             # so events arrive late or in a clump. select gives us Ctrl-C too.
-            r, _, _ = select.select([p.stdout], [], [], 0.25)
+            r, _, _ = select.select([p.stdout] + ([ctl] if ctl else []),
+                                    [], [], 0.25)
+            if ctl and ctl in r:
+                for word in ctl.read():
+                    command(p, word, note)
+                if p.stdout not in r:
+                    continue
             if not r:
                 if p.poll() is not None:
                     final, code = ("error", "The key listener exited."), 1
@@ -600,45 +708,10 @@ def run(key: str = "fn", send: bool = False, debug: bool = True) -> int:
                 # as ready, so the branch above almost never runs.
                 final, code = ("error", "The key listener exited."), 1
                 break
-            parts = line.strip().split()
-            if not parts:
-                continue
-            if parts[0] == "READY":
+            what = handle(d, line, note)
+            if what == "ready":
                 armed = True
-                d._publish("ready")
-                note(f"listening for {key}. Press it and I will say so.")
-            elif parts[0] == "DOWN":
-                note("heard the key go down, recording...")
-                d.down()
-            elif parts[0] == "UP":
-                held = float(parts[1]) if len(parts) > 1 else 0.0
-                note("hands free session ended" if "toggle" in parts
-                     else f"released after {held:.0f}ms")
-                d.up(held)
-            elif parts[0] == "LATCH":
-                # Hands free. The microphone opened by DOWN keeps running, and
-                # the key release that follows emits nothing, so there is
-                # nothing to do here except say so. Saying so matters: the
-                # user has taken their hand off the key and the only thing
-                # telling them the mic is still open is the indicator.
-                note("hands free now. Tap the chord again to stop.")
-                core.set_hud("hearing", 0.0)
-            elif parts[0] == "LISTENING":
-                # A heartbeat, so a listener that died quietly is not mistaken
-                # for one that is patiently waiting.
-                core.set_hud("hearing", 0.0)
-            elif parts[0] in ("CANCEL", "LOCKED"):
-                why = parts[2] if len(parts) > 2 else ""
-                note({
-                    "cap": "that hit the time limit, so I threw it away rather "
-                           "than pasting minutes of whatever the room said",
-                    "tap": "I lost sight of the keyboard, so I stopped and "
-                           "threw it away",
-                    "exit": "stopping, so I threw that away",
-                    "lock": "the screen locked, so I threw that away",
-                }.get(why, "cancelled (another key joined, or the screen locked)"))
-                d.cancel()
-            elif parts[0] == "BYE":
+            elif what == "bye":
                 break
     except KeyboardInterrupt:
         pass
@@ -672,6 +745,8 @@ def run(key: str = "fn", send: bool = False, debug: bool = True) -> int:
                 publish("paused")
         _restore_sigterm(_old_term)
         _remove_pid()
+        if ctl:
+            ctl.close()
         try:
             orbnative.hide()
         except Exception:
