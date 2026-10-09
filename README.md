@@ -35,14 +35,14 @@ is the thing being worked on.
 ## Install
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/KrishOjha1810/dictator/main/get.sh | bash
+curl -fsSL https://raw.githubusercontent.com/cc-vb/dictator/main/get.sh | bash
 ```
 
 Or clone it yourself, if you would rather read it first, which is the same
 thing in three steps:
 
 ```bash
-git clone https://github.com/KrishOjha1810/dictator.git ~/dictator
+git clone https://github.com/cc-vb/dictator.git ~/dictator
 cd ~/dictator && ./install.sh
 ```
 
