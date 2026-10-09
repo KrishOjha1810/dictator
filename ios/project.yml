@@ -1,0 +1,63 @@
+# XcodeGen input. The .xcodeproj is generated and not committed, because a
+# project file is 600 lines of XML that merges badly and that nobody reads,
+# while this is the same information in a form a person can check.
+#
+#   ios/build.sh          generate, then build for the simulator
+#   ios/build.sh device   generate, then build for a phone (needs a team id)
+name: Dictator
+options:
+  bundleIdPrefix: com.dictator
+  deploymentTarget:
+    # SpeechTranscriber is iOS 26 and later. There is no fallback worth having:
+    # the older SFSpeechRecognizer sends audio to Apple's servers unless the
+    # device opts into on-device mode, which is the thing this product exists
+    # not to do.
+    iOS: "26.0"
+  createIntermediateGroups: true
+
+settings:
+  base:
+    SWIFT_VERSION: "6.0"
+    SWIFT_STRICT_CONCURRENCY: complete
+    TARGETED_DEVICE_FAMILY: "1,2"
+    CODE_SIGN_STYLE: Automatic
+    # Set DEVELOPMENT_TEAM in ios/team.xcconfig (gitignored) to build for a
+    # real phone. The simulator needs nothing.
+    MARKETING_VERSION: "0.1.0"
+    CURRENT_PROJECT_VERSION: "1"
+
+configFiles:
+  Debug: team.xcconfig
+  Release: team.xcconfig
+
+targets:
+  Dictator:
+    type: application
+    platform: iOS
+    sources:
+      - App
+      - Shared
+    info:
+      path: App/Info.plist
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.dictator.ios
+        INFOPLIST_FILE: App/Info.plist
+        GENERATE_INFOPLIST_FILE: NO
+    dependencies:
+      - target: DictatorKeyboard
+        embed: true
+
+  DictatorKeyboard:
+    type: app-extension
+    platform: iOS
+    sources:
+      - Keyboard
+      - Shared
+    info:
+      path: Keyboard/Info.plist
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.dictator.ios.keyboard
+        INFOPLIST_FILE: Keyboard/Info.plist
+        GENERATE_INFOPLIST_FILE: NO

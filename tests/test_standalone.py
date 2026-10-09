@@ -48,8 +48,17 @@ def test_the_app_runs_our_own_command():
 
 
 @pytest.mark.skipif(not always.APP.exists(), reason="app not built here")
-def test_built_bundle_points_at_a_real_checkout():
+def test_built_bundle_runs_dictator_and_not_something_else():
     """The bundle must run the code it was built from.
+
+    There are two shapes of Dictator.app now and this holds for both. The one
+    `dictator build` makes is a thin wrapper that names a checkout in
+    `DictatorCLI`. The one on the releases page carries its own CLI and its own
+    Python inside `Contents/Resources`, and has no `DictatorCLI` at all.
+
+    This asserted the first shape, so installing the released app turned the
+    suite red in a clone that had changed nothing. The invariant was never "the
+    plist has this key": it is that whatever the app runs is this product.
 
     Checked as "a real checkout" rather than "this one" because there is only
     one Dictator.app per machine and a second clone does not own it. Insisting
@@ -57,12 +66,24 @@ def test_built_bundle_points_at_a_real_checkout():
     person running it could act on."""
     info = plistlib.loads(
         (always.APP / "Contents" / "Info.plist").read_bytes())
-    cli = Path(info["DictatorCLI"])
-    assert cli.exists(), f"the app runs {cli}, which is not there"
-    assert cli.name == "dictator", cli
-    assert (cli.parent.parent / "dictator" / "stt.py").exists(), \
-        f"{cli} is not inside a dictator checkout"
-    assert ".dictator" in info["DictatorLog"], info["DictatorLog"]
+    assert ".dictator" in info.get("DictatorLog", ".dictator"), info["DictatorLog"]
+
+    if "DictatorCLI" in info:
+        cli = Path(info["DictatorCLI"])
+        assert cli.exists(), f"the app runs {cli}, which is not there"
+        assert cli.name == "dictator", cli
+        assert (cli.parent.parent / "dictator" / "stt.py").exists(), \
+            f"{cli} is not inside a dictator checkout"
+        return
+
+    # Self-contained: the CLI and the package it imports travel with the app.
+    res = always.APP / "Contents" / "Resources"
+    cli = res / "bin" / "dictator"
+    assert cli.exists(), f"no DictatorCLI and no {cli} either"
+    pkg = res / "dictator"
+    assert pkg.is_dir(), f"{cli} has no dictator package beside it"
+    # Shipped as compiled modules, so look for either shape of stt.
+    assert list(pkg.glob("stt.*")), f"{pkg} is not the dictator package"
 
 
 def test_state_is_our_own_directory():

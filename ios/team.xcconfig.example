@@ -1,0 +1,9 @@
+// Your Apple developer team, for building onto a real phone.
+//
+// A free Apple ID works for this: Xcode will sign with a personal team and the
+// app runs for seven days before it has to be rebuilt. That is enough to answer
+// the question this target exists to answer, and it costs nothing.
+//
+// Find the id in Xcode, Settings, Accounts, your Apple ID, Manage Certificates,
+// or leave this empty and set the team once in the target's Signing tab.
+DEVELOPMENT_TEAM =

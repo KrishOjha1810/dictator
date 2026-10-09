@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>CFBundleDisplayName</key>
+  <string>Dictator</string>
+  <key>CFBundleShortVersionString</key>
+  <string>0.1.0</string>
+  <key>CFBundleVersion</key>
+  <string>1</string>
+  <key>NSMicrophoneUsageDescription</key>
+  <string>Dictator turns what you say into text. The speech model runs on this phone and no audio leaves it.</string>
+  <key>NSExtension</key>
+  <dict>
+    <key>NSExtensionPointIdentifier</key>
+    <string>com.apple.keyboard-service</string>
+    <key>NSExtensionPrincipalClass</key>
+    <string>$(PRODUCT_MODULE_NAME).KeyboardViewController</string>
+    <key>NSExtensionAttributes</key>
+    <dict>
+      <key>PrimaryLanguage</key>
+      <string>en-IN</string>
+      <key>PrefersRightToLeft</key>
+      <false/>
+      <key>IsASCIICapable</key>
+      <false/>
+      <!-- Without this the extension is sandboxed away from the microphone and
+           from the network, and `hasFullAccess` stays false however many times
+           the user taps the button. It is a request: the user still has to turn
+           it on, which is why the keyboard says where. -->
+      <key>RequestsOpenAccess</key>
+      <true/>
+    </dict>
+  </dict>
+</dict>
+</plist>
