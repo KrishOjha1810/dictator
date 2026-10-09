@@ -368,3 +368,127 @@ seen and where, then the fix. Done in this order.
 - [x] Built: `tools/build_native.sh`, `tools/build_app.sh`,
       `tools/build_dmg.sh 0.1.3` (ad-hoc).
 - [ ] Install 0.1.3 on this Mac and try the drag and the warning for real.
+
+## Round 4: hover controls, hands free, Notetaker and Scratchpad (2026-10-09)
+
+### The pill disappears when idle and comes back on hover
+
+- [x] Nothing is drawn while nobody is dictating (`idle: "hover"`, the new
+      default). The pointer entering a zone 14 pt larger than the stack fades
+      it in (0.16 s); leaving it fades out about a second later. The zone is
+      checked from `NSEvent.mouseLocation` every 0.1 s, because there is no
+      window to hover over. Clicks pass through as soon as it starts fading.
+- [x] Listening is still drawn if and only if CoreAudio presence AND the
+      mic.lock flock, in every setting; `decide()` is unchanged. hud.json now
+      also picks the hands free look, still appearance only.
+- [x] "Hide when not dictating" became "When not dictating": Show on hover,
+      Always show (the old faint pill), Hide (only while dictating, no
+      buttons). An old `hide_idle: true` still means Hide and is still
+      written for older readers. `dictator indicator idle hover|always|hide`.
+- [x] orb.swift's header says what no pill means now, honestly.
+
+### Orientation
+
+- [x] Top and bottom centre lie flat. The edge centres and all four corners
+      stand up: the pill, its buttons, the hands free pill, and the waveform,
+      whose bars become flat strokes stacked top to bottom. The drop slots
+      are drawn in each place's own orientation, and the pill turns while it
+      is dragged across from an edge to the top.
+
+### The buttons
+
+- [x] The pill itself is the Dictate button (a mic on hover): click starts
+      hands free dictation, click again finishes and pastes into the app that
+      was in front. The panel never takes focus.
+- [x] Notetaker (record) and Scratchpad (pencil) stack from the pill toward
+      the middle of the screen. Labels slide out to the inside with the
+      shortcut in bold. The Notetaker button is red while a meeting records
+      (read from meetings/current, its status.json and the recorder's pid).
+- [x] Settings > General: which buttons show, and both shortcuts on or off.
+      `dictator indicator controls ...` and `dictator indicator shortcut ...`.
+- [x] Drag from any part of it, with three points of slack between a click
+      and a drag; it snaps to the eight places as before.
+
+### The control channel
+
+- [x] The loop binds a Unix datagram socket at STATE/dictate.sock, guarded by
+      an flock on dictate.sock.lock and made owner-only
+      (`dictator/control.py`). One datagram is one word: toggle, finish,
+      cancel. Nobody bound means the send fails at once. A signal to a pid
+      was considered and dropped: after a crash the pid can belong to
+      something else, and SIGUSR1's default action kills an older loop.
+- [x] The loop does not act on the words itself. It writes TOGGLE, FINISH or
+      CANCEL to the key listener's stdin, so a session has one owner (the
+      listener, with its cap, lock and tap checks) whether it began with a
+      double tap or a click. `dictator hands-free [toggle|finish|cancel]`.
+- [x] Checked here: the Swift sender reaches the Python socket, and fails
+      once the socket is closed.
+
+### Hands free, like Wispr Flow
+
+- [x] Double-tap the key: two clean taps, the second starting within 350 ms
+      of the first ending, each under 300 ms. The second tap's release becomes
+      LATCH, so the mic its DOWN opened stays open. A single tap is the short
+      DOWN/UP it always was, which the loop discards. A held second press is
+      push to talk. Any other key between the taps breaks it.
+- [x] One press of the key finishes (transcribe, paste where you were);
+      Escape cancels (nothing pasted); the pill's check and cross do the
+      same. A press within 0.3 s of the latch is ignored, so a triple tap
+      does not stop what it started.
+- [x] The cap is the existing one: two minutes, the recorder's MAX_SECS, and
+      a session that reaches it is thrown away, as before.
+- [x] Hands free pill: a cross at one end, the live waveform, a white check
+      at the other; vertical at the side edges and corners (cross on top).
+- [x] Tests: the real Swift state machine through `dictator-hotkey --script`
+      (double tap latches, one tap is nothing, slow taps are two taps, a hold
+      is push to talk, one press finishes, Escape discards, the pill's
+      commands), and the loop's side through `dictate.handle()` with the
+      lines a listener prints. The Swift self test has 42 scenarios.
+- [x] The Globe key: the listener only listens and cannot swallow a tap, so
+      macOS still runs its own action on each tap. README (install step 5 and
+      Using it), the onboarding key card (with a button to Keyboard settings)
+      and Help tell the user to set "Press 🌐 key to" to "Do Nothing".
+
+### Notetaker and Scratchpad in the app
+
+- [x] dictator://notetaker and dictator://scratchpad (CFBundleURLTypes). The
+      pill opens them in the copy of the app that holds STATE/app.lock, which
+      the app writes its own path into; without the app those two buttons are
+      not shown.
+- [x] Notetaker runs `dictator meeting start|stop` through the bundled CLI.
+      The first time, the app (not the pill) explains that it records other
+      people and waits for "Start Recording". `dictator meeting status --json`.
+- [x] Scratchpad window: notes list with search, a large text area with the
+      cursor in it, autosave 0.8 s after typing stops, on switching notes and
+      on close. One Markdown file per note in STATE/notes
+      (`dictator/notes.py`, `dictator notes ...`). A Scratchpad page in the Hub
+      sidebar lists them: open, copy, delete, search.
+- [x] Option-M and Option-S are Carbon hot keys, registered from
+      indicator.json's `shortcuts`, unregistered when switched off, and
+      checked again when they fire. Fake mode never registers them.
+
+### Checked
+
+- [x] `tools/build_native.sh`, `tools/build_app.sh`, `tools/build_dmg.sh 0.1.4`
+      (ad-hoc). The bundled CLI runs `notes`, `indicator`, `hands-free` and
+      `meeting status --json` against a scratch state directory.
+- [x] pytest: the known 16 failures (jellyfish), the rest pass.
+- [x] Snapshots in build/screens/round4-*.png (the pill helper's
+      DICTATOR_ORB_SNAPSHOT, and the app's fake mode). Fake-mode snapshot runs
+      no longer activate the app or take the keyboard: one earlier run did,
+      and a key typed meanwhile landed in its Scratchpad.
+
+### Not done, or not checked by hand
+
+- [ ] No real click on the pill, hover, drag or label on this Mac: the shell
+      has no Screen Recording and the running 0.1.3 was not touched.
+- [ ] No real double tap, Escape or stdin command through a live listener
+      (only through `--script`), and no live hands free session: the mic was
+      never opened.
+- [ ] No real meeting started, and the consent alert was not seen on screen.
+      Option-M and Option-S were not pressed (fake mode does not register them).
+- [ ] The dictator:// URL was not opened against a running app.
+- [ ] A repo install without the app (no DICTATOR_UI) shows only the dictate
+      control on hover; Notetaker and Scratchpad need the app.
+- [ ] The Hub's Meetings page is still a placeholder; a stopped meeting's
+      notes are only in `dictator meeting show`.
