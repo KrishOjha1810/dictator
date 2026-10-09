@@ -45,6 +45,27 @@ final class AppModel: ObservableObject {
     @Published var key = Prefs.key
     /// The last hold, from last.json. Read every second with the rest.
     @Published var last: Last? = Last.read()
+    /// Another dictation app that is running, if any (Rivals.swift). Checked
+    /// at launch, when the menu opens, and when an app starts or quits.
+    @Published var rival: Rivals.Running? = nil
+
+    /// The warning applies only while our key is fn: on another key the two
+    /// apps do not hear the same press.
+    var clash: Rivals.Running? { key == "fn" ? rival : nil }
+
+    func checkRivals() {
+        let r = Rivals.running()
+        if r != rival { rival = r }
+    }
+
+    func quitRival() {
+        guard let r = rival else { return }
+        Rivals.quit(r)
+        // terminate() asks; the app may take a moment, or ask to save.
+        for delay in [1.0, 3.0] {
+            DispatchQueue.main.asyncAfter(deadline: .now() + delay) { self.checkRivals() }
+        }
+    }
 
     func refresh() {
         let s = Status.read()
@@ -137,6 +158,14 @@ final class UI: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWindowDelegat
         item.menu = menu
         model.refresh()
         model.loadLanguage()
+        model.checkRivals()
+        let ws = NSWorkspace.shared.notificationCenter
+        for n in [NSWorkspace.didLaunchApplicationNotification,
+                  NSWorkspace.didTerminateApplicationNotification] {
+            ws.addObserver(forName: n, object: nil, queue: .main) { [weak self] _ in
+                self?.model.checkRivals()
+            }
+        }
         drawIcon()
         Supervisor.shared.onChange = { [weak self] in
             self?.model.refresh()
@@ -363,6 +392,7 @@ final class UI: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWindowDelegat
 
     func menuNeedsUpdate(_ menu: NSMenu) {
         model.refresh()
+        model.checkRivals()
         menu.removeAllItems()
         let s = model.shown
 
@@ -385,6 +415,20 @@ final class UI: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWindowDelegat
                                   keyEquivalent: "")
             line.target = self
             menu.addItem(line)
+        }
+        if let r = model.clash {
+            let warn = NSMenuItem(title: "", action: nil, keyEquivalent: "")
+            warn.attributedTitle = NSAttributedString(
+                string: Rivals.warning(r.rival).replacingOccurrences(of: ", so both", with: ",\nso both")
+                    .replacingOccurrences(of: ". Quit it", with: ".\nQuit it"),
+                attributes: [.font: NSFont.menuFont(ofSize: 12),
+                             .foregroundColor: NSColor.systemOrange])
+            warn.image = NSImage(systemSymbolName: "exclamationmark.triangle.fill",
+                                 accessibilityDescription: "Warning")
+            warn.isEnabled = false
+            menu.addItem(warn)
+            add(menu, "Quit \(r.rival.name)", #selector(quitRival))
+            add(menu, "Change key…", #selector(changeKey))
         }
         menu.addItem(.separator())
 
@@ -433,6 +477,8 @@ final class UI: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWindowDelegat
     }
 
     @objc func openHub() { showHub(.home) }
+    @objc func quitRival() { model.quitRival() }
+    @objc func changeKey() { showHub(.settings) }
     @objc func openSettings() { showHub(.settings) }
     @objc func openHelp() { showHub(.help) }
 

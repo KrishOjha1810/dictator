@@ -275,6 +275,7 @@ struct HomePage: View {
 
     var body: some View {
         PageScroll {
+            if let r = model.clash { RivalBanner(running: r) }
             HStack(alignment: .top) {
                 VStack(alignment: .leading, spacing: Theme.s2) {
                     Text(greeting).font(.pageTitle).foregroundColor(Theme.text)
@@ -330,7 +331,10 @@ struct HomePage: View {
                 }
             }
         }
-        .onAppear(perform: load)
+        .onAppear {
+            load()
+            model.checkRivals()
+        }
     }
 
     private var greeting: String {
@@ -900,5 +904,35 @@ struct HelpPage: View {
             Spacer()
         }
         .padding(Theme.s4)
+    }
+}
+
+/// Another dictation app on the same key. Says so, and offers the two ways
+/// out; it never quits anything without the click.
+struct RivalBanner: View {
+    @EnvironmentObject var model: AppModel
+    var running: Rivals.Running
+
+    var body: some View {
+        HStack(alignment: .center, spacing: Theme.s3) {
+            Image(systemName: "exclamationmark.triangle.fill")
+                .font(.system(size: 16, weight: .semibold))
+                .foregroundColor(Theme.warn)
+            Text(Rivals.warning(running.rival))
+                .font(.system(size: 13))
+                .foregroundColor(Theme.text)
+                .fixedSize(horizontal: false, vertical: true)
+            Spacer(minLength: Theme.s2)
+            Button("Change key") { model.page = .settings }
+                .buttonStyle(QuietButton())
+            Button("Quit \(running.rival.name)") { model.quitRival() }
+                .buttonStyle(PrimaryButton())
+        }
+        .padding(.horizontal, Theme.s4)
+        .padding(.vertical, Theme.s3)
+        .background(RoundedRectangle(cornerRadius: Theme.radius, style: .continuous)
+            .fill(Theme.warn.opacity(0.08)))
+        .overlay(RoundedRectangle(cornerRadius: Theme.radius, style: .continuous)
+            .strokeBorder(Theme.warn.opacity(0.35), lineWidth: 1))
     }
 }
