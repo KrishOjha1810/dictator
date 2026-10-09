@@ -481,12 +481,16 @@ def _noon(days_ago: int) -> float:
 
 
 def test_stats_with_nothing_said():
-    assert views.stats() == {"words": 0, "wpm": None, "streak_days": 0}
+    assert views.stats() == {"words": 0, "wpm": None, "streak_days": 0,
+                             "saved_secs": None, "today_words": 0,
+                             "today_saved_secs": None}
 
 
 def test_words_per_minute_is_unknown_without_durations():
     _said("deploy the thing now", _noon(0))
-    assert views.stats() == {"words": 4, "wpm": None, "streak_days": 1}
+    assert views.stats() == {"words": 4, "wpm": None, "streak_days": 1,
+                             "saved_secs": None, "today_words": 4,
+                             "today_saved_secs": None}
 
 
 def test_words_per_minute_counts_only_timed_rows():
@@ -495,6 +499,34 @@ def test_words_per_minute_counts_only_timed_rows():
     got = views.stats()
     assert got["words"] == 9
     assert got["wpm"] == 120.0
+
+
+def test_time_saved_is_typing_time_minus_speaking_time():
+    # 40 words typed at 40 a minute is 60 s; said in 15 s, 45 s saved.
+    _said(" ".join(["word"] * 40), _noon(0), secs=15.0)
+    # Yesterday: 20 words is 30 s to type, said in 10 s, 20 s saved.
+    _said(" ".join(["word"] * 20), _noon(1), secs=10.0)
+    # No duration: not counted either way.
+    _said("no duration here", _noon(0))
+    got = views.stats()
+    assert got["saved_secs"] == 65
+    assert got["today_saved_secs"] == 45
+    assert got["today_words"] == 43
+
+
+def test_time_saved_never_goes_below_zero():
+    # Two words said in ten seconds: slower than typing them.
+    _said("um okay", _noon(0), secs=10.0)
+    got = views.stats()
+    assert got["saved_secs"] == 0
+    assert got["today_saved_secs"] == 0
+
+
+def test_today_counts_only_today():
+    _said("yesterday only words", _noon(1), secs=1.0)
+    got = views.stats()
+    assert got["today_words"] == 0
+    assert got["today_saved_secs"] is None
 
 
 def test_a_streak_ending_yesterday_is_still_alive():
@@ -549,7 +581,8 @@ def _cli(tmp_path, *args):
 
 
 @pytest.mark.parametrize("args,keys", [
-    (("stats", "--json"), {"words", "wpm", "streak_days"}),
+    (("stats", "--json"), {"words", "wpm", "streak_days", "saved_secs",
+                            "today_words", "today_saved_secs"}),
     (("words", "--json"), {"words", "pending"}),
     (("snippet", "--json"), {"snippets"}),
     (("snippets", "--json"), {"snippets"}),

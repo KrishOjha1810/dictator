@@ -196,30 +196,57 @@ def _streak(days: set, today: date) -> int:
     return n
 
 
+# How fast people type, for "time saved". 40 words a minute is the usual
+# figure for an average typist; the point of the number is the comparison,
+# not its third digit.
+TYPING_WPM = 40.0
+
+
 def stats(now: "float|None" = None) -> dict:
-    """{"words": int, "wpm": number|None, "streak_days": int}, from local
-    history only.
+    """{"words", "wpm", "streak_days", "saved_secs", "today_words",
+    "today_saved_secs"}, from local history only.
 
     Words per minute is counted over the rows that know how long they took.
     Rows with no duration are left out of it rather than counted as instant,
     which would push the average to infinity, and with none at all it is None
     rather than zero: zero words a minute is a claim, and there is no
-    evidence for it."""
+    evidence for it.
+
+    Time saved is the same rule: for each timed row, the time it would have
+    taken to type its words at TYPING_WPM, minus the seconds spent saying
+    them. A row said slower than it could have been typed counts against,
+    so the total is honest; it never goes below zero. None without a timed
+    row."""
     from . import history as _h
     rows = _h.recent(limit=10_000_000)
+    today = date.fromtimestamp(now if now is not None else time.time())
     words = 0
     timed_words, secs = 0, 0.0
+    saved, today_saved, today_words = 0.0, 0.0, 0
+    timed_today = False
     days = set()
     for r in rows:
         n = len((r.get("shown") or r.get("heard") or "").split())
         words += n
-        if (r.get("secs") or 0) > 0:
-            timed_words += n
-            secs += float(r["secs"])
         try:
-            days.add(date.fromtimestamp(float(r["at"])))
+            day = date.fromtimestamp(float(r["at"]))
         except Exception:
-            pass
+            day = None
+        if day is not None:
+            days.add(day)
+        if day == today:
+            today_words += n
+        s = float(r.get("secs") or 0)
+        if s > 0:
+            timed_words += n
+            secs += s
+            gain = n / TYPING_WPM * 60.0 - s
+            saved += gain
+            if day == today:
+                today_saved += gain
+                timed_today = True
     wpm = round(timed_words / (secs / 60.0), 1) if secs > 0 else None
-    today = date.fromtimestamp(now if now is not None else time.time())
-    return {"words": words, "wpm": wpm, "streak_days": _streak(days, today)}
+    return {"words": words, "wpm": wpm, "streak_days": _streak(days, today),
+            "saved_secs": round(max(0.0, saved)) if secs > 0 else None,
+            "today_words": today_words,
+            "today_saved_secs": round(max(0.0, today_saved)) if timed_today else None}
