@@ -226,3 +226,78 @@ no warnings. None of it is ticked: the app has not been launched, even with
 - 2026-10-08: The test suite leaves a temporary signing keychain on the
   user's keychain search list on every run (about 20 found on this Mac).
   Pre-existing, from the signing identity test; not fixed yet.
+
+---
+
+## Round 2: the first real install (2026-10-09)
+
+Found by installing v0.1.0 on this Mac and using it. Each line says what was
+seen and where, then the fix. Done in this order.
+
+### Bugs
+
+- [x] App never started: the app delegate was a local, released straight
+      after assignment under -O, so no menu bar item, no onboarding, no
+      dictation, and no error anywhere. Fixed in `main.swift`.
+- [x] Windows opened on another Space behind a full-screen app. Fixed with
+      `collectionBehavior` in `MenuBar.swift`.
+- [ ] "Try it" card stays empty: it waits for the text to be pasted into its
+      own box, but the paste went to "the front app" with nothing focused
+      (history: app empty, saw "gone"). Fix: the loop writes the last result
+      into status.json and the card shows it directly.
+- [ ] Hinglish model downloaded five times: each key press on the "Your key"
+      card restarted the dictation loop, which killed the download thread
+      (log: five "downloading ggml-large-v3-turbo.bin" in three seconds).
+      Fix: one key change on Continue only, and downloads that resume.
+- [ ] Wrong message while the Hinglish model was still arriving: "Speech
+      recognition isn't set up. Run setup on the Mac." Fix: say it is still
+      downloading, and use the English result meanwhile.
+- [ ] Repeated sentence pasted four times ("Yar ye test karke dekho" x4):
+      the loop guard noticed and still pasted it. Fix: collapse repeats
+      before pasting.
+- [ ] No Dock icon, so no normal way to quit or force quit. Fix: a regular
+      app with a Dock icon and an app menu with Quit, an app icon, and a
+      "Show in Dock" setting.
+- [ ] Opening the copy inside the .dmg: no warning, killed by Gatekeeper
+      after 8 seconds (log: "Security policy would not allow process").
+      Fix: the app notices it runs from a disk image or a translocated path
+      and offers to move itself to Applications; README says so too.
+- [ ] Fake mode reads sample data from the maintainer's Desktop path built
+      into the binary, so macOS asked for Desktop access. Fix: fixtures ship
+      inside the app; no source path in a release build.
+
+### Latency
+
+- [ ] Measured: the bundled engines match Homebrew's (turbo 3.9s vs 3.8s,
+      parakeet 0.53s vs 0.54s on the same 6s clip), so the build is not it.
+      The route is: Hinglish speech goes to parakeet first, is rejected, then
+      a language check, then turbo started cold from disk (1.6 GB) for every
+      sentence, and a repeat triggers a second full run. Fix: record time
+      from key release to paste for every utterance, then keep the
+      multilingual model loaded when it is measured to help, and skip the
+      parakeet attempt when the setting is Hinglish.
+
+### Accuracy, from the message dictated in this round
+
+- [ ] Immediate repeats left in: "is is", "I I", "the check the". Fix:
+      remove stutters before pasting.
+- [ ] Mixed English and Hinglish in one long hold goes to the English engine
+      and the Hindi part is anglicised ("test vala text jo hai" came out as
+      "test while our text view"). Larger problem, tracked separately.
+- [ ] Names and slang: "Bro" as "Brooke", "bugs" as "books", "Wispr Flow"
+      as "whisper flow". The Words page can teach these; check it works.
+
+### Redesign: light, Wispr Flow as the reference
+
+- [ ] Light theme throughout: onboarding, Hub, Settings
+- [ ] Hub like Wispr Flow's: sidebar with icons, Home with stats and history
+      by day with copy, Words, Snippets, Style per app
+- [ ] Onboarding redesigned, with the Try it card showing the live result
+- [ ] The bar: a pill with a live waveform, keeping "visible only when our
+      microphone is open"
+- [ ] Better than the reference: time-to-paste shown per sentence, a local
+      only badge, a Hinglish switch, and fixing a word in history teaches it
+
+### Then
+
+- [ ] Rebuild as 0.1.2, install on this Mac, test, then release

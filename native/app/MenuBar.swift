@@ -269,6 +269,10 @@ final class UI: NSObject, NSApplicationDelegate, NSMenuDelegate {
             rootView: view().environmentObject(model))
         w.setContentSize(size)
         w.center()
+        // Open where the user is looking. Without this the window lands on
+        // the desktop Space while they sit in a full-screen app, and the
+        // first launch looks like nothing happened at all.
+        w.collectionBehavior = [.moveToActiveSpace, .fullScreenAuxiliary]
         windows[id] = w
         w.makeKeyAndOrderFront(nil)
         // An accessory app does not come to the front on its own.

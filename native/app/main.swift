@@ -262,12 +262,19 @@ var onboarding = false
 let app = NSApplication.shared
 app.setActivationPolicy(.accessory)
 
+/// NSApplication holds its delegate weakly. Held here, at file scope, for the
+/// life of the process. As a local inside the `if` below, the optimiser was
+/// free to release it straight after the assignment, and did: the app ran
+/// with no delegate, so no menu bar item, no onboarding, and no dictation,
+/// and nothing anywhere said so.
+var delegate: UI?
+
 if showsUI {
     // The UI decides when to call begin(): straight away on a normal launch,
     // without prompts behind the onboarding cards on the first one, and not
     // at all with DICTATOR_FAKE, which must never start the real thing.
-    let ui = UI()
-    app.delegate = ui
+    delegate = UI()
+    app.delegate = delegate
     app.run()
 } else {
     begin(prompt: true)
