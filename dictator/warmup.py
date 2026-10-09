@@ -134,7 +134,7 @@ def helpers() -> None:
     helper does not touch the clipboard. What gets paid here is exactly the
     part that is expensive once, and nothing else happens."""
     for name in _HELPERS:
-        exe = core.STATE_DIR / "bin" / name
+        exe = core.helper_path(name)
         if not exe.exists():
             continue
         try:

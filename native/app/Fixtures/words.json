@@ -1,0 +1,8 @@
+{"words": [
+ {"term": "Kubernetes", "mode": "learned", "heard": ["cube a net is", "kubernetis"], "count": 9},
+ {"term": "kubectl", "mode": "added", "heard": ["cube cuttle"], "count": 4},
+ {"term": "Wispr", "mode": "added", "heard": [], "count": 1}
+ ],
+ "pending": [
+ {"term": "Hinglish", "heard": ["english"]}
+ ]}

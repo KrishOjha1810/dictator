@@ -1,25 +1,49 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
-  "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-  <key>CFBundleName</key><string>Dictator</string>
-  <key>CFBundleDisplayName</key><string>Dictator</string>
-  <key>CFBundleIdentifier</key><string>com.dictator.dictation</string>
-  <key>CFBundleExecutable</key><string>Dictator</string>
-  <key>CFBundlePackageType</key><string>APPL</string>
-  <key>CFBundleShortVersionString</key><string>1.0</string>
-  <key>CFBundleVersion</key><string>1</string>
-  <!-- No Dock icon and no menu bar: this is a key, not a window. -->
-  <key>LSUIElement</key><true/>
-  <key>LSMinimumSystemVersion</key><string>13.0</string>
-  <!-- These strings ARE the permission dialog. macOS shows them verbatim, so
-       they have to answer "why does this want that" in one sentence. -->
-  <key>NSMicrophoneUsageDescription</key>
-  <string>To hear what you say while you hold the dictation key.</string>
-  <key>NSInputMonitoringUsageDescription</key>
-  <string>To notice when you hold the dictation key.</string>
-  <key>NSAppleEventsUsageDescription</key>
-  <string>To type what you said into whichever app you were using.</string>
+	<key>CFBundleDisplayName</key>
+	<string>Dictator</string>
+	<key>CFBundleExecutable</key>
+	<string>Dictator</string>
+	<key>CFBundleIconFile</key>
+	<string>AppIcon</string>
+	<key>CFBundleIdentifier</key>
+	<string>com.dictator.dictation</string>
+	<key>CFBundleName</key>
+	<string>Dictator</string>
+	<key>CFBundlePackageType</key>
+	<string>APPL</string>
+	<key>CFBundleShortVersionString</key>
+	<string>1.0</string>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>com.dictator.dictation</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>dictator</string>
+			</array>
+		</dict>
+	</array>
+	<key>CFBundleVersion</key>
+	<string>1</string>
+	<key>LSMinimumSystemVersion</key>
+	<string>14.0</string>
+	<key>NSAppleEventsUsageDescription</key>
+	<string>To type what you said into whichever app you were using.</string>
+	<key>NSInputMonitoringUsageDescription</key>
+	<string>To notice when you hold the dictation key.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>To hear what you say while you hold the dictation key.</string>
+	<key>SUEnableAutomaticChecks</key>
+	<true/>
+	<key>SUFeedURL</key>
+	<string>https://github.com/cc-vb/dictator/releases/latest/download/appcast.xml</string>
+	<key>SUPublicEDKey</key>
+	<string>N9EQ56mpe6sTWXB3nhgyGYLGl8JhvW+xPpp7n+E4bMY=</string>
+	<key>SUScheduledCheckInterval</key>
+	<integer>86400</integer>
 </dict>
 </plist>

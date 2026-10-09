@@ -14,6 +14,12 @@ real path, which the next mtime check reads as "already built" and runs.
 Compiling beside it and renaming avoids both: a rename is atomic and unlinks
 the old file rather than writing through it, so a running helper keeps the copy
 it started with and the next launch gets the new one.
+
+Inside the app none of that applies. The helpers there were built and signed
+before the .dmg was made, the user's Mac may have no swiftc at all, and a
+helper rebuilt in place would carry a different signature from the one the
+user granted. So in bundle mode this never compiles: the prebuilt helper is
+used as it is, or it is reported missing.
 """
 import os
 import shutil
@@ -29,6 +35,8 @@ def compile_if_needed(src, out, what: str, force: bool = False,
     reason logged. Never raises: a helper that cannot be built has to degrade
     to its fallback, not take the dictation path down with it."""
     src, out = Path(src), Path(out)
+    if core.BUNDLE is not None:
+        return prebuilt(out, what)
     if not src.exists():
         core.log(f"{what}: source missing at {src}")
         return ""
@@ -53,4 +61,19 @@ def compile_if_needed(src, out, what: str, force: bool = False,
             tmp.unlink()
         except OSError:
             pass
+    return ""
+
+
+def prebuilt(out, what: str) -> str:
+    """The helper the app shipped with. Path, or "" with a reason logged.
+
+    Missing means the bundle was assembled wrong, and there is nothing the
+    user can do about that from here except get a good copy, so the error says
+    so instead of suggesting the Xcode tools."""
+    out = Path(out)
+    if out.exists() and os.access(out, os.X_OK):
+        return str(out)
+    core.surface_error(
+        what, f"The app is missing its {what} helper ({out.name}).",
+        hint="The app bundle is incomplete. Download Dictator again.")
     return ""

@@ -64,6 +64,37 @@ def arriving(name: str) -> bool:
     """Is this one being downloaded right now?"""
     return (MODEL_DIR / (name + ".part")).exists()
 
+
+def model_status() -> dict:
+    """{filename: {"have": bool, "progress": 0.0 to 1.0, "essential": bool}}
+    for every shipped model, for status.json.
+
+    `essential` is the last column of SHIPPED, so the app can wait for the
+    models English needs and not for the Hinglish one, which is allowed to
+    keep arriving after the user has moved on. Without it the app had to
+    wait for all of them, 1.5 GB of optional model included.
+
+    Progress is the size of the .part file against the size in SHIPPED, which
+    is in mebibytes and rounded, so it is held just under 1.0 until the file
+    is actually in place: a bar that reads full while the model is still
+    missing is a bar that lies. Three stat calls, so it is cheap enough to
+    run on every state change."""
+    out = {}
+    for name, mb, _what, essential in SHIPPED:
+        if (MODEL_DIR / name).exists():
+            out[name] = {"have": True, "progress": 1.0,
+                         "essential": essential}
+            continue
+        got = 0.0
+        try:
+            size = (MODEL_DIR / (name + ".part")).stat().st_size
+            got = min(0.99, size / float(mb * 1024 * 1024))
+        except Exception:
+            pass
+        out[name] = {"have": False, "progress": round(got, 3),
+                     "essential": essential}
+    return out
+
 # Which engine answered the last transcription. Recorded rather than
 # inferred, because the routing has changed more than once and a
 # history full of guesses about it would be worse than no history.
@@ -227,6 +258,15 @@ _BREW_BINS = ("/opt/homebrew/bin", "/usr/local/bin")
 
 
 def _find(name: str) -> str:
+    # The app's own copy first. Inside the downloadable app whisper and
+    # parakeet ship in Contents/Helpers, built from the pinned source, and a
+    # Homebrew install on the same Mac is a different version that the app
+    # was never tested against. Falling through to it is still better than
+    # nothing, so the search below stays.
+    if core.BUNDLE is not None:
+        own = core.helper_path(name)
+        if own.exists() and os.access(own, os.X_OK):
+            return str(own)
     p = shutil.which(name)
     if p:
         return p
@@ -404,7 +444,16 @@ PINNABLE = ("en", "hi")
 # Language identification off a second or two of audio is a coin flip, and a
 # hold that short is usually a name or a single word, which is exactly when
 # getting it wrong hurts most.
-MIN_DETECT_SECS = 4.0
+#
+# Was 4.0. Lowered because what the alternative costs depends on the Mac, and
+# on the one it was set on it cost almost nothing. Below this, whisper decides
+# the language itself by running the encoder twice. Measured on an 8 GB M2
+# with turbo (9 October 2026): a 3 second hold took 5.15s with `-l auto` and
+# 3.42s pinned, while the tiny detector answered in 0.18s. The accuracy side
+# was already measured (see audio_ctx_for: pinning short holds, 4.98% against
+# 4.98%), and MIN_DETECT_P and PINNABLE still refuse an unsure or unlikely
+# answer, so an unclear short hold still goes to whisper as before.
+MIN_DETECT_SECS = 1.0
 
 
 def audio_seconds(wav: str) -> float:
@@ -1094,6 +1143,23 @@ def _transcribe_ex(wav: str) -> "tuple[str, float]":
         if got:
             core.log(f"stt: parakeet dropped speech, falling back to "
                      f"{stt_lang_mode()[0].name}: {got[:60]!r}")
+        # The multilingual model may not be here yet: the app fetches it in
+        # the background after English is ready. Saying "speech recognition
+        # isn't set up" then was wrong, and dropping what parakeet heard was
+        # worse. Keep the English answer and say why Hindi is not used yet.
+        multi = stt_lang_mode()[0]
+        if not multi.exists():
+            pct = model_status().get(multi.name, {}).get("progress", 0.0)
+            core.surface_error(
+                "transcribe",
+                "The Hindi and Hinglish model is still downloading"
+                + (f" ({pct:.0%})." if pct else "."),
+                hint="English works meanwhile; Hinglish starts working "
+                     "when it lands.")
+            if got:
+                LAST_ENGINE = "parakeet"
+                return got, 0.6
+            return "", 0.0
 
     """Transcribe and also return whisper's confidence (mean token
     probability, 0..1). Real directed speech scores ~0.7+; background
@@ -1155,6 +1221,7 @@ def _transcribe_ex(wav: str) -> "tuple[str, float]":
             else:
                 core.log("transcribe: it looped at full size too, "
                          "so the audio is the problem, not the setting")
+                text = loops.collapse(text)
         except Exception as e:
             core.log(f"transcribe: the second pass failed: {e}")
     lines = [ln.strip() for ln in text.splitlines() if ln.strip()]

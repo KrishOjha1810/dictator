@@ -1,0 +1,8 @@
+  enabled      on
+  punctuation  on
+  lists        off
+  sentences    on
+  fillers      on
+
+  change with: dictator format lists on
+  or in one application only: dictator format in Slack lists on

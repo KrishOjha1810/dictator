@@ -34,6 +34,41 @@ is the thing being worked on.
 
 ## Install
 
+### Download the app
+
+**[Download Dictator for Mac](https://github.com/cc-vb/dictator/releases/latest/download/Dictator.dmg)**
+(Apple silicon, macOS 14 or newer, about 24 MB). Every version, with its
+SHA256, is on the [releases page](https://github.com/cc-vb/dictator/releases).
+
+1. Open `Dictator.dmg` and drag Dictator into Applications. Open it from
+   Applications, not from the disk image window: macOS stops a copy run from
+   the disk image after a few seconds. If you do open that one, it offers to
+   move itself to Applications.
+2. Open Dictator. macOS stops it, because Dictator is free and not paid into
+   Apple's developer programme. Press **Done**, not Move to Trash (or Move to Bin).
+3. Open **System Settings → Privacy & Security**, scroll down, and press
+   **Open Anyway** next to Dictator. Confirm. This happens once.
+4. Allow the microphone and Accessibility when it asks. The speech models
+   download on first launch, English first (about 700 MB), then Hindi and
+   Hinglish in the background (1.5 GB). Each is checked against its published
+   SHA256 before it is used.
+5. Hold **right ⌥ Option** and talk; double-tap it for hands free. That is the
+   app's key unless you change it, and it needs no other setup.
+
+Only if you switch the key to fn: open **System Settings → Keyboard** and set
+   **Press 🌐 key to** to **Do Nothing**. A quick tap of fn (🌐) otherwise
+   opens the emoji picker, switches the input source or starts Apple's own
+   dictation, and a double tap of fn is how you start hands free dictation
+   here. Wispr Flow asks for the same change. The app's "Choose your key"
+   card has a button that opens the right pane.
+
+This is a preview. The app is new and has had less use than the install below,
+which is still the way to run it if anything here goes wrong. Why the warning
+exists and what it does and does not mean is in
+[`docs/platforms.md`](docs/platforms.md).
+
+### Install from source
+
 ```bash
 curl -fsSL https://raw.githubusercontent.com/cc-vb/dictator/main/get.sh | bash
 ```
@@ -122,13 +157,44 @@ a listener started from that shell writes into somebody else's directory.
 
 The key can be `fn` (the default), `rightcmd`, `rightopt` or `leftcmd`.
 
-**Hold, do not tap.** macOS fires the Globe key's own action on a clean tap and
-never on a hold, so holding is the one gesture that cannot collide with
-anything the system already does.
+**Hold to talk.** Hold the key, speak, let go: the words land where your
+cursor is.
 
-While you hold it, a small indicator appears and its bars move with your
-voice. That is not decoration: it is the honest answer to "is the microphone
-actually open", so you never talk into a dead mic and find out afterwards.
+**Double-tap for hands free.** Two quick taps of the key and the microphone
+stays open without holding anything. Press the key once to finish: it stops,
+transcribes and pastes into the app you were in. Escape throws it away and
+pastes nothing. A session stops on its own after two minutes (the same cap as
+a hold) and is thrown away, because a microphone open that long is more
+likely forgotten than a monologue. A single tap does nothing.
+
+**Set the Globe key to Do Nothing.** With fn as your key, open **System
+Settings → Keyboard** and set **Press 🌐 key to** to **Do Nothing**. macOS
+acts on every quick tap of fn itself (the emoji picker, the input source, or
+Apple's dictation), so without this a double tap does that as well. Dictator
+only listens to the keyboard and cannot stop it. Holding is never affected.
+
+**The pill.** While the microphone is open a small dark pill shows, and its
+bars move with your voice. That is not decoration: it is the honest answer to
+"is the microphone actually open", so you never talk into a dead mic and find
+out afterwards. It is drawn if and only if our microphone is really open, and
+in hands free mode it carries a cross (throw it away) and a check (finish and
+paste).
+
+When nobody is dictating it is not drawn at all. Move the pointer to its place
+and it fades in with its buttons:
+
+| | |
+|---|---|
+| the pill (mic) | click to start hands free dictation, click again to finish |
+| record | start or stop the Notetaker (a meeting recording). The first time, the app explains that it records other people and asks before it starts. Red while recording. `⌥M` from anywhere |
+| pencil | open the Scratchpad, a notes window with the cursor ready, so you can dictate into it. Notes are Markdown files in `~/.dictator/notes`. `⌥S` from anywhere |
+
+Hovering a button shows its name and shortcut. Drag the pill to any of eight
+places: at the top and bottom centre it lies flat, at the side edges and in
+the corners it stands up. Settings → General chooses whether it shows on
+hover, always, or only while dictating, which buttons it has, and whether the
+two shortcuts are on. From a terminal: `dictator indicator`,
+`dictator hands-free`, `dictator notes`.
 
 ---
 

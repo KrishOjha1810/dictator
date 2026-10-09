@@ -106,12 +106,9 @@ def test_an_unreadable_field_is_recorded_rather_than_swallowed(monkeypatch):
 
 
 def _cli():
-    import importlib.machinery, importlib.util
-    loader = importlib.machinery.SourceFileLoader("dcli", "bin/dictator")
-    spec = importlib.util.spec_from_loader("dcli", loader)
-    m = importlib.util.module_from_spec(spec)
-    loader.exec_module(m)
-    return m
+    # The CLI body lives in dictator.cli now; bin/dictator is just a launcher.
+    import importlib
+    return importlib.import_module("dictator.cli")
 
 
 def test_a_loop_that_has_caught_nothing_says_so(monkeypatch, capsys):

@@ -59,7 +59,7 @@ class Transcript:
 
 
 DEFAULT_SHAPING = {"enabled": True, "punctuation": True, "lists": False,
-                   "sentences": True, "fillers": True}
+                   "sentences": True, "fillers": True, "stutters": True}
 FORMAT_FILE = core.STATE_DIR / "format.json"
 
 # Where held audio is kept while a capture is running, so two speech models can

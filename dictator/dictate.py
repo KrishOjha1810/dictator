@@ -23,13 +23,11 @@ Two rules make that safe rather than merely convenient:
     is text you can delete, not a message somebody received.
 """
 import os
-from pathlib import Path
-import shutil
 import subprocess
 import threading
 import time
 
-from . import core, hotkey, mac, orbnative, paste, stt, warmup
+from . import control, core, fetch, hotkey, mac, orbnative, paste, stt, warmup
 from .api import Dictator
 
 # When a hold that produced nothing is worth telling the user about.
@@ -55,6 +53,70 @@ TOO_BRIEF = 1.0
 # transcribing a click into nothing.
 MIN_MS = 250
 MAX_SECS = 120
+
+
+# What the loop last asked publish() for, so the model watcher can write the
+# same state again with fresher model progress. Behind a lock with the write,
+# so the watcher can never put back a state the loop has already left.
+_published: list = []
+_publish_lock = threading.RLock()
+
+
+def publish(state: str, error: "str|None" = None) -> None:
+    """Tell the app what the loop is doing, through status.json.
+
+    Called on state changes, never from the level pump or the still-working
+    loop, so it costs a few stat calls and one small write per hold. The one
+    other caller is _watch_models, which repeats the last state while a model
+    is arriving. "ready" turns into "downloading" while a model English needs
+    is still arriving, because a ready that cannot transcribe is not ready;
+    the Hinglish model arriving in the background leaves it ready, since
+    English works without it. Never raises."""
+    with _publish_lock:
+        _published[:] = [state, error]
+        _write_status(state, error)
+
+
+def republish() -> None:
+    """Write the last state again, with the models as they are now."""
+    with _publish_lock:
+        if _published:
+            _write_status(*_published)
+
+
+def _write_status(state: str, error: "str|None") -> None:
+    try:
+        models = stt.model_status()
+    except Exception:
+        models = {}
+    if state == "ready":
+        try:
+            if any(stt.arriving(m[0]) for m in stt.missing(essential_only=True)):
+                state = "downloading"
+        except Exception:
+            pass
+    core.write_status(state, models=models, error=error)
+
+
+def _watch_models(stop: threading.Event, every: float = 1.5) -> None:
+    """Keep status.json's models current while any is missing.
+
+    status.json is otherwise written only when the loop changes state, so a
+    download that finished while nobody pressed the key stayed "have": false
+    in it, and the app's model card waited for a key press that the card
+    itself does not ask for. Writes only when something changed, and stops
+    once every model is on disk."""
+    last = None
+    while not stop.wait(every):
+        try:
+            now = stt.model_status()
+        except Exception:
+            continue
+        if now != last:
+            republish()
+            last = now
+        if all(m.get("have") for m in now.values()):
+            return
 
 
 def _engine_name(engine: str) -> str:
@@ -88,6 +150,42 @@ class Dictation:
         self._n = 0
         self.app = ""               # what was in front when you pressed
         self.started = 0.0
+        # Set when the listener says it cannot see the keyboard. Kept, so
+        # that the end of a hold does not report "ready" over the top of it.
+        self.blocked = ""
+        # Holds released and still being transcribed. "ready" is only true
+        # when this is zero and no recorder is open, and the check and the
+        # write happen under one lock, the same one down() publishes
+        # "listening" under, so a hold ending on its own thread cannot say
+        # ready over a hold that has just started or is still transcribing.
+        self._lock = threading.Lock()
+        self._inflight = 0
+        # Set once the loop has written its last word. A transcription
+        # still finishing after that must not say "ready" over it.
+        self._stopped = False
+        # A hands free session is open: the listener said LATCH, after a
+        # double tap of the key or a click on the pill. The microphone stays
+        # open until a press of the key, the pill's check, Escape, the pill's
+        # cross or the cap. Written into hud.json (phase "handsfree") so the
+        # pill can draw its cross and check; it is appearance only, the pill
+        # still decides "listening" from the microphone itself.
+        self.hands_free = False
+
+    def _publish(self, state: str) -> None:
+        if state == "ready" and self.blocked:
+            publish("needs_permission", self.blocked)
+        else:
+            publish(state)
+
+    def _settle(self) -> None:
+        """Say ready, unless it is not true yet. Takes the lock."""
+        with self._lock:
+            self._settle_locked()
+
+    def _settle_locked(self) -> None:
+        if self.proc or self._stopped:
+            return
+        self._publish("transcribing" if self._inflight else "ready")
 
     # ---- the two edges ----------------------------------------------------
 
@@ -112,7 +210,10 @@ class Dictation:
         # is read from disk WHILE you talk, so that when you let go the only
         # thing left is the work that needs the audio. See warmup.py.
         warmup.models()
+        self.hands_free = False
         core.set_hud("hearing", 0.0)
+        with self._lock:
+            self._publish("listening")
         # An indicator that does not move tells you the mic is open and nothing
         # else. Moving with your voice is what tells you it is hearing YOU, and
         # it is the difference between a light and a meter: a stuck light and a
@@ -139,12 +240,24 @@ class Dictation:
                 if raw > 0.0:
                     floor = min(floor, raw)
                     span = max(0.15, 1.0 - floor)
-                    core.set_hud("hearing", min(1.0, max(0.0, (raw - floor) / span)))
+                    core.set_hud(self.phase(),
+                                 min(1.0, max(0.0, (raw - floor) / span)))
             except Exception:
                 pass
             time.sleep(0.08)
 
+    def phase(self) -> str:
+        """What hud.json says while the microphone is open."""
+        return "handsfree" if self.hands_free else "hearing"
+
+    def latch(self):
+        """The hold that is recording became a hands free session."""
+        if self.proc:
+            self.hands_free = True
+            core.set_hud("handsfree", 0.0)
+
     def up(self, held_ms: float):
+        self.hands_free = False
         p, self.proc = self.proc, None
         if not p:
             return
@@ -170,14 +283,24 @@ class Dictation:
             pass
         if held_ms < MIN_MS:
             core.set_hud("listening", 0.0)
+            self._settle()
             return
         core.set_hud("thinking", 0.0)
+        with self._lock:
+            self._inflight += 1
+            self._publish("transcribing")
         threading.Thread(target=self._finish,
-                         args=(self.wav, self.app, held_ms / 1000.0, cut),
+                         args=(self.wav, self.app, held_ms / 1000.0, cut,
+                               time.monotonic()),
                          daemon=True).start()
 
-    def cancel(self):
-        """Another key joined the hold, so you were typing a chord, not talking."""
+    def cancel(self, publish: bool = True):
+        """Another key joined the hold, so you were typing a chord, not talking.
+
+        `publish` is False when the loop is stopping: it writes its own last
+        word, and a "ready" written here first would be the app's last view
+        of a loop that is gone."""
+        self.hands_free = False
         p, self.proc = self.proc, None
         if p:
             try:
@@ -185,10 +308,29 @@ class Dictation:
             except Exception:
                 pass
         core.set_hud("listening", 0.0)
+        if publish:
+            self._settle()
 
     # ---- off the key thread -----------------------------------------------
 
-    def _finish(self, wav, app, secs: float = 0.0, cut: str = ""):
+    def _finish(self, wav, app, secs: float = 0.0, cut: str = "",
+                released: "float|None" = None):
+        """One hold, delivered, and then the app told it is over. The work
+        is in _deliver; this only makes sure "transcribing" cannot outlive
+        it, whichever of its many returns it leaves by."""
+        try:
+            self._deliver(wav, app, secs, cut, released)
+        finally:
+            # Unless another hold has started meanwhile, or is still being
+            # transcribed: saying ready over the first would be the app
+            # showing a closed microphone while it is open, and over the
+            # second, an idle loop while it is working.
+            with self._lock:
+                self._inflight = max(0, self._inflight - 1)
+                self._settle_locked()
+
+    def _deliver(self, wav, app, secs: float = 0.0, cut: str = "",
+                 released: "float|None" = None):
         """One hold, from the recording to the words being on screen.
 
         The pipeline itself lives in api.py and this calls it. It used to live
@@ -282,8 +424,14 @@ class Dictation:
         else:
             say(f'heard: "{said.text[:70]}"')
 
+        def took() -> "int|None":
+            # From the key coming up to now: what the person waited through.
+            return (int((time.monotonic() - released) * 1000)
+                    if released is not None else None)
+
         now = mac.frontmost_app()
         if app and now and now != app:
+            core.write_last(said.text, took(), said.engine, now or "")
             say(f"you moved from {app} to {now}, so I did not paste")
             # You moved. Typing here would put your sentence somewhere you were
             # not looking, which is the one failure that is not recoverable by
@@ -295,12 +443,99 @@ class Dictation:
             # This path presses Return, which paste.deliver deliberately never
             # does, so it keeps the original single shot behaviour.
             _paste_where_you_are(said.text, send=True)
+            core.write_last(said.text, took(), said.engine, now or "", True)
         elif not paste.deliver(said.text, now or app or ""):
+            core.write_last(said.text, took(), said.engine, now or "")
             # Deliberately no retry. A long transcript is delivered in pieces,
             # so if one failed some of the text is already in the field and
             # pasting the whole thing again would duplicate it.
             say("some of that did not paste. Nothing was pasted again, "
                 "to avoid duplicating what did land.")
+        else:
+            core.write_last(said.text, took(), said.engine, now or "", True)
+        # One line per hold, so the wait can be measured from the log over
+        # real use rather than guessed at.
+        ms = took()
+        if ms is not None:
+            say(f"{ms} ms from letting go to the words landing")
+            core.log(f"timing: {ms}ms release-to-paste, {secs:.1f}s held, "
+                     f"{said.engine}")
+
+# Why a take was thrown away, in the words the user is told.
+DISCARDED = {
+    "cap": "that hit the time limit, so I threw it away rather "
+           "than pasting minutes of whatever the room said",
+    "tap": "I lost sight of the keyboard, so I stopped and "
+           "threw it away",
+    "exit": "stopping, so I threw that away",
+    "lock": "the screen locked, so I threw that away",
+    "esc": "Escape, so I threw that away and pasted nothing",
+    "button": "cancelled from the pill, nothing pasted",
+}
+
+
+def handle(d: "Dictation", line: str, note=lambda m: None) -> str:
+    """One line from the key listener, acted on. Returns "ready" when it
+    armed, "bye" when it is leaving, and "" otherwise.
+
+    Out of run() so the whole state machine can be driven by a test with the
+    lines a real listener prints, including the ones the double tap and the
+    pill's buttons produce."""
+    parts = line.strip().split()
+    if not parts:
+        return ""
+    verb = parts[0]
+    if verb == "READY":
+        d._publish("ready")
+        note(f"listening for {d.key}. Press it and I will say so.")
+        return "ready"
+    if verb == "DOWN":
+        note("heard the key go down, recording...")
+        d.down()
+    elif verb == "UP":
+        held = 0.0
+        if len(parts) > 1:
+            try:
+                held = float(parts[1])
+            except ValueError:
+                pass
+        note("hands free session ended" if "toggle" in parts
+             else f"released after {held:.0f}ms")
+        d.up(held)
+    elif verb == "LATCH":
+        # Hands free. The microphone opened by DOWN keeps running, and the
+        # key release that follows emits nothing. Saying so matters: the
+        # user has taken their hand off the key and the only thing telling
+        # them the mic is still open is the indicator.
+        note("hands free now. Press the key once to finish, Escape to "
+             "throw it away.")
+        d.latch()
+    elif verb == "LISTENING":
+        # A heartbeat, so a listener that died quietly is not mistaken for
+        # one that is patiently waiting.
+        core.set_hud(d.phase(), 0.0)
+    elif verb in ("CANCEL", "LOCKED"):
+        why = parts[2] if len(parts) > 2 else ""
+        note(DISCARDED.get(why, "cancelled (another key joined, or the screen "
+                                "locked)"))
+        d.cancel()
+    elif verb == "BYE":
+        return "bye"
+    return ""
+
+
+# What each command from the pill (control.py) asks of the key listener.
+TO_LISTENER = {"toggle": "TOGGLE", "finish": "FINISH", "cancel": "CANCEL"}
+
+
+def command(p, word: str, note=lambda m: None) -> bool:
+    """Pass one command from the pill on to the key listener, which owns the
+    session. True if it was passed on."""
+    to = TO_LISTENER.get(word)
+    if not to:
+        return False
+    note(f"the pill says {word}")
+    return hotkey.tell(p, to)
 
 
 def _paste_where_you_are(text: str, send: bool = False) -> bool:
@@ -340,24 +575,14 @@ def _paste_where_you_are(text: str, send: bool = False) -> bool:
     return True
 
 
-_PASTE_BIN = core.STATE_DIR / "bin" / "dictator-paste"
-_PASTE_SRC = Path(__file__).resolve().parent.parent / "native" / "paste.swift"
-
-
 def _paste_helper() -> str:
-    """Build it once, then reuse."""
-    try:
-        if _PASTE_BIN.exists() and _PASTE_BIN.stat().st_mtime >= _PASTE_SRC.stat().st_mtime:
-            return str(_PASTE_BIN)
-        if not _PASTE_SRC.exists() or not shutil.which("swiftc"):
-            return ""
-        _PASTE_BIN.parent.mkdir(parents=True, exist_ok=True)
-        subprocess.run(["swiftc", "-O", str(_PASTE_SRC), "-o", str(_PASTE_BIN)],
-                       check=True, capture_output=True, timeout=240)
-        return str(_PASTE_BIN)
-    except Exception as e:
-        core.log(f"dictate: could not build the paste helper: {e}")
-        return ""
+    """Build it once, then reuse.
+
+    The same helper paste.py delivers with, found and built the same way. This
+    used to carry its own copy of the swiftc call, which would have gone on
+    compiling into ~/.dictator inside the app, where the helper is prebuilt
+    and nothing may be compiled."""
+    return paste.helper()
 
 
 def run(key: str = "fn", send: bool = False, debug: bool = True) -> int:
@@ -378,6 +603,7 @@ def run(key: str = "fn", send: bool = False, debug: bool = True) -> int:
     # and is not, or the reverse.
     p = hotkey.listen(key, min_hold_ms=0, max_session_ms=int(MAX_SECS * 1000))
     if not p:
+        publish("error", "Could not start the key listener.")
         print("Could not start the key listener. See `dictator log`.")
         print("If this is the first run, grant Accessibility and try again:")
         print("  System Settings > Privacy & Security > Accessibility")
@@ -394,9 +620,18 @@ def run(key: str = "fn", send: bool = False, debug: bool = True) -> int:
             for ln in iter(p.stderr.readline, ""):
                 if ln.strip():
                     print(f"  {ln.rstrip()}", flush=True)
+                # The two lines that mean no key press will ever arrive.
+                # Everything else it says is advice around them.
+                if ("trusted = false" in ln
+                        or "could not create an event tap" in ln):
+                    d.blocked = ("Dictator needs Accessibility to see the "
+                                 "key. Allow it in Privacy & Security.")
+                    with d._lock:
+                        d._publish("ready")
         except Exception:
             pass
-    threading.Thread(target=_drain, daemon=True).start()
+    drain = threading.Thread(target=_drain, daemon=True)
+    drain.start()
 
     def note(msg):
         if debug:
@@ -407,7 +642,7 @@ def run(key: str = "fn", send: bool = False, debug: bool = True) -> int:
     # watching the terminal you started this from, which defeats the point of
     # a key that works everywhere.
     try:
-        if not orbnative.show():
+        if not orbnative.show(key=key):
             print("  (no orb: see `dictator log`)", flush=True)
     except Exception as e:
         print(f"  (no orb: {e})", flush=True)
@@ -418,75 +653,162 @@ def run(key: str = "fn", send: bool = False, debug: bool = True) -> int:
     # waiting, and cost nothing on a machine that has already paid them.
     warmup.at_startup()
 
+    # Models that are still arriving get their progress written as it moves,
+    # not only when a key is pressed.
+    stop_watch = threading.Event()
+    # The app has no installer to fetch them, so the loop does, English
+    # first. A repo install got them from install.sh and is left alone.
+    if core.BUNDLE:
+        fetch.in_background()
+    if stt.missing():
+        threading.Thread(target=_watch_models, args=(stop_watch,),
+                         daemon=True).start()
+
+    # The app stops this loop with SIGTERM (Pause, a new key, Quit). Python's
+    # default for it is to die where it stands, which skipped everything in
+    # the finally below: the recorder was left running with the microphone
+    # open until its own time limit, and status.json kept saying "listening".
+    # Treated as Ctrl-C instead, which is already a clean stop.
+    _old_term = _on_sigterm()
+    _write_pid()
+
+    # The pill's buttons, and `dictator hands-free`, reach the loop here.
+    ctl = control.Server()
+    if not ctl.start():
+        ctl = None
+
     print(f"Hold {key} anywhere and talk. The words land where your cursor is.")
     print("Ctrl-C to stop.\n")
     armed = False
+    # What to leave in status.json when the loop ends without being asked
+    # to. None means it was asked to (Ctrl-C, SIGTERM, BYE): "paused".
+    final = None
+    code = 0
     try:
         while True:
             # readline() rather than `for line in p.stdout`: iterating a pipe
             # goes through a hidden read-ahead buffer that waits for it to fill,
             # so events arrive late or in a clump. select gives us Ctrl-C too.
-            r, _, _ = select.select([p.stdout], [], [], 0.25)
+            r, _, _ = select.select([p.stdout] + ([ctl] if ctl else []),
+                                    [], [], 0.25)
+            if ctl and ctl in r:
+                for word in ctl.read():
+                    command(p, word, note)
+                if p.stdout not in r:
+                    continue
             if not r:
                 if p.poll() is not None:
-                    print("The key listener exited.")
-                    return 1
+                    final, code = ("error", "The key listener exited."), 1
+                    break
                 continue
             line = p.stdout.readline()
             if not line:
+                # End of its output without a BYE is the listener dying, and
+                # in practice the only way that is seen: a closed pipe reads
+                # as ready, so the branch above almost never runs.
+                final, code = ("error", "The key listener exited."), 1
                 break
-            parts = line.strip().split()
-            if not parts:
-                continue
-            if parts[0] == "READY":
+            what = handle(d, line, note)
+            if what == "ready":
                 armed = True
-                note(f"listening for {key}. Press it and I will say so.")
-            elif parts[0] == "DOWN":
-                note("heard the key go down, recording...")
-                d.down()
-            elif parts[0] == "UP":
-                held = float(parts[1]) if len(parts) > 1 else 0.0
-                note("hands free session ended" if "toggle" in parts
-                     else f"released after {held:.0f}ms")
-                d.up(held)
-            elif parts[0] == "LATCH":
-                # Hands free. The microphone opened by DOWN keeps running, and
-                # the key release that follows emits nothing, so there is
-                # nothing to do here except say so. Saying so matters: the
-                # user has taken their hand off the key and the only thing
-                # telling them the mic is still open is the indicator.
-                note("hands free now. Tap the chord again to stop.")
-                core.set_hud("hearing", 0.0)
-            elif parts[0] == "LISTENING":
-                # A heartbeat, so a listener that died quietly is not mistaken
-                # for one that is patiently waiting.
-                core.set_hud("hearing", 0.0)
-            elif parts[0] in ("CANCEL", "LOCKED"):
-                why = parts[2] if len(parts) > 2 else ""
-                note({
-                    "cap": "that hit the time limit, so I threw it away rather "
-                           "than pasting minutes of whatever the room said",
-                    "tap": "I lost sight of the keyboard, so I stopped and "
-                           "threw it away",
-                    "exit": "stopping, so I threw that away",
-                    "lock": "the screen locked, so I threw that away",
-                }.get(why, "cancelled (another key joined, or the screen locked)"))
-                d.cancel()
-            elif parts[0] == "BYE":
+            elif what == "bye":
                 break
     except KeyboardInterrupt:
         pass
     finally:
         if not armed:
             print("\nThe listener never armed, so no key press could reach it.")
-        d.cancel()
+        d.cancel(publish=False)
         try:
             p.terminate()
             p.wait(timeout=2)
         except Exception:
             pass
+        # Its last lines on stderr are often the reason it stopped ("could
+        # not create an event tap"), and the thread reading them can still be
+        # behind. Once the listener has exited that pipe ends, so this is short.
+        drain.join(timeout=2)
+        stop_watch.set()
+        # One last word, and the most specific one there is. A missing
+        # permission is something the user can fix and the app has a button
+        # for; a listener that died is an error; anything else was a stop on
+        # purpose. Nothing is listening in any of them, so "ready" is never
+        # left behind for the app to promise a key that does nothing.
+        with d._lock:
+            d._stopped = True
+            if d.blocked:
+                publish("needs_permission", d.blocked)
+            elif final:
+                print(final[1])
+                publish(*final)
+            else:
+                publish("paused")
+        _restore_sigterm(_old_term)
+        _remove_pid()
+        if ctl:
+            ctl.close()
         try:
             orbnative.hide()
         except Exception:
             pass
-    return 0
+    return code
+
+
+PID_NAME = "dictate.pid"
+
+
+def _write_pid() -> None:
+    """Which process is the loop, for `dictator status` in the app.
+
+    Inside the app there is no login item for launchd to be asked about, so
+    the pid is the only way to tell a loop that is running from one that
+    stopped and left its last status.json behind. A path computed at call
+    time, so a test's state directory is the one written."""
+    try:
+        core.STATE_DIR.mkdir(parents=True, exist_ok=True)
+        (core.STATE_DIR / PID_NAME).write_text(str(os.getpid()))
+    except Exception:
+        pass
+
+
+def _remove_pid() -> None:
+    try:
+        f = core.STATE_DIR / PID_NAME
+        if f.read_text().strip() == str(os.getpid()):
+            f.unlink()
+    except Exception:
+        pass
+
+
+def loop_running() -> bool:
+    """Is a dictation loop alive, by the pid it wrote."""
+    try:
+        pid = int((core.STATE_DIR / PID_NAME).read_text().strip())
+        os.kill(pid, 0)
+        return True
+    except PermissionError:
+        return True
+    except Exception:
+        return False
+
+
+def _on_sigterm():
+    import signal
+
+    def _stop(signum, frame):
+        raise KeyboardInterrupt
+    try:
+        return signal.signal(signal.SIGTERM, _stop)
+    except Exception:
+        # Not the main thread, as in a test: nothing to install.
+        return None
+
+
+def _restore_sigterm(old) -> None:
+    if old is None:
+        return
+    import signal
+    try:
+        signal.signal(signal.SIGTERM, old)
+    except Exception:
+        pass

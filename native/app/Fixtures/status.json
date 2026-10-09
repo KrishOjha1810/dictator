@@ -1,0 +1,5 @@
+{"state": "downloading",
+ "models": {"parakeet-tdt-0.6b-v3-q8_0.gguf": {"have": true, "progress": 1.0, "essential": true},
+            "ggml-large-v3-turbo.bin": {"have": false, "progress": 0.41, "essential": false}},
+ "error": null,
+ "updated": 1791460800}

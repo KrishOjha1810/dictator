@@ -262,7 +262,7 @@ def test_the_listener_recovers_without_being_restarted():
 def test_the_app_never_rebuilds_itself_to_explain_itself():
     """Rebuilding changes the signature, which is what causes this state.
     The path the waiting app calls must not be able to trigger one."""
-    src = (Path(__file__).resolve().parent.parent / "bin" / "dictator").read_text()
+    src = (Path(__file__).resolve().parent.parent / "dictator" / "cli.py").read_text()
     body = src.split("def permissions(", 1)[1].split("\n\ndef ", 1)[0]
     explain = body.split("if explain:", 1)[1].split("\n    if not app.exists()", 1)[0]
     assert "build_app" not in explain, \
@@ -458,13 +458,9 @@ def test_no_listener_record_at_all_changes_nothing():
 
 
 def _cli():
-    import importlib.machinery
-    import importlib.util
-    loader = importlib.machinery.SourceFileLoader("dcli", "bin/dictator")
-    spec = importlib.util.spec_from_loader("dcli", loader)
-    m = importlib.util.module_from_spec(spec)
-    loader.exec_module(m)
-    return m
+    # The CLI body lives in dictator.cli now; bin/dictator is just a launcher.
+    import importlib
+    return importlib.import_module("dictator.cli")
 
 
 def test_a_refused_tccutil_is_reported_rather_than_swallowed(monkeypatch):
@@ -588,7 +584,7 @@ def test_a_running_listener_is_not_proof_that_macos_trusts_it():
     Told that, a user with a DENIED row spent an hour switching on the two
     OTHER Dictator entries in the list, because the tool had said the
     permission was fine and the problem must be elsewhere."""
-    src = (Path(__file__).resolve().parent.parent / "bin" / "dictator").read_text()
+    src = (Path(__file__).resolve().parent.parent / "dictator" / "cli.py").read_text()
     watch = src[src.index("Watching. This updates itself"):]
     watch = watch[:watch.index("def ") if "def " in watch else len(watch)]
     assert "if live and trusted:" in watch, \

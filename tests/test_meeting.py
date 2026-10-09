@@ -584,10 +584,7 @@ def test_a_meeting_can_be_transcribed_after_the_fact(monkeypatch, capsys):
     monkeypatch.setattr(meeting, "notes", lambda m: meeting.load(m))
     monkeypatch.setattr(meeting, "render", lambda r, **k: "notes here\n")
 
-    loader = importlib.machinery.SourceFileLoader("dcli", "bin/dictator")
-    spec = importlib.util.spec_from_loader("dcli", loader)
-    cli = importlib.util.module_from_spec(spec)
-    loader.exec_module(cli)
+    cli = importlib.import_module("dictator.cli")
     assert cli.meeting(["transcribe"]) == 0
     assert done == [mid]
 
@@ -606,10 +603,7 @@ def test_a_failure_while_transcribing_says_how_to_pick_it_up(monkeypatch,
     monkeypatch.setattr(meeting, "chunks_expected", lambda m: 1)
     monkeypatch.setattr(meeting, "transcribe", boom)
 
-    loader = importlib.machinery.SourceFileLoader("dcli", "bin/dictator")
-    spec = importlib.util.spec_from_loader("dcli", loader)
-    cli = importlib.util.module_from_spec(spec)
-    loader.exec_module(cli)
+    cli = importlib.import_module("dictator.cli")
     assert cli.meeting(["transcribe"]) == 1
     out = capsys.readouterr().out
     assert "recording is safe" in out

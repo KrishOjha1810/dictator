@@ -75,7 +75,7 @@ _TERMINALS = ("terminal", "iterm", "ghostty", "alacritty", "kitty", "wezterm",
 
 # Built by the caller on first use. Reused rather than rebuilt here, because
 # two processes compiling to the same path is a race for no benefit.
-_HELPER = core.STATE_DIR / "bin" / "dictator-paste"
+_HELPER = core.helper_path("dictator-paste")
 _HELPER_SRC = Path(__file__).resolve().parent.parent / "native" / "paste.swift"
 
 

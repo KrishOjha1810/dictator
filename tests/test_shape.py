@@ -327,3 +327,36 @@ def test_words_that_carry_meaning_are_left_alone(said):
 def test_a_sentence_of_nothing_but_filler_survives():
     """Returning an empty string would look like a failed transcription."""
     assert drop_fillers("um uh hmm") == "um uh hmm"
+
+
+import pytest as _pytest
+
+
+@_pytest.mark.parametrize("said,want", [
+    ("text is is being increased", "text is being increased"),
+    ("I I want you to check", "I want you to check"),
+    ("if if any update", "if any update"),
+    ("Just seen that still g giving me", "Just seen that still giving me"),
+    ("running or the f FN icon", "running or the FN icon"),
+    ("yaar k kya hua", "yaar kya hua"),
+])
+def test_stutters_are_removed(said, want):
+    from dictator.shape import drop_stutters
+    assert drop_stutters(said) == want
+
+
+@_pytest.mark.parametrize("said", [
+    "she had had enough",
+    "I know that that works",
+    "I imagine it is",
+    "a apple a day",
+])
+def test_real_doubles_and_words_are_kept(said):
+    from dictator.shape import drop_stutters
+    assert drop_stutters(said) == said
+
+
+def test_stutters_can_be_turned_off():
+    from dictator.shape import shape
+    assert "is is" in shape("it is is fine", stutters=False)
+    assert "is is" not in shape("it is is fine")

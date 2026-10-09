@@ -18,6 +18,7 @@ The short version:
 | | Possible | Cost | What it gives up |
 |---|---|---|---|
 | macOS, double-clickable | **Only with $99/year** | $99/year plus 2 to 4 days of first-time work | Nothing. It is the same product, installed properly |
+| macOS, `.dmg` with one Open Anyway step (added 8 October 2026) | **Yes, free** | Nothing in money. The same bundling work as the row above, minus notarization | A warning on first open, and one trip to Privacy & Security to approve it |
 | Windows | **Yes** | about 11 weeks, plus a code signing certificate, and Microsoft's cheap route is closed to India | The gesture, elevated windows, 2 to 3 times the latency, and the readback |
 | iOS | **No, and a server would not fix it** | n/a | n/a |
 | Android | **Yes, mechanically** | 8 to 10 weeks for English, 16 to 22 for parity | Hinglish, which is the reason the product exists |
@@ -25,6 +26,16 @@ The short version:
 ---
 
 ## macOS, without the 99 dollars
+
+> **Update, 8 October 2026.** The central claim of this section was retested
+> on macOS 27.0.1 and did not hold. A quarantined, ad-hoc signed app copied out
+> of a `.dmg` is blocked on first open, but Privacy & Security then offers
+> **Open Anyway**, and after one approval it opens normally every time. So a
+> free `.dmg` is possible, with a warning on first open. The test and its
+> limits are in "Retested 8 October 2026" below. Everything else in this
+> section is the original text, kept as written so the earlier reasoning stays
+> visible; where a sentence is now wrong, the update says so rather than
+> deleting it.
 
 **It cannot be a double-clickable app without the 99 dollars.** Not as a
 `.dmg`, not as a `.zip`, not as a `.pkg`, and, as of November 2025, not as a
@@ -93,6 +104,10 @@ Dictator downloaded from a release page does **not** offer Open Anyway. It
 offers to move itself to the Trash. There is no button for the user to press
 that gets them out of it.
 
+*(Update, 8 October 2026: not reproduced. On macOS 27.0.1 at default settings
+the same kind of app was blocked, and Privacy & Security then showed Open
+Anyway next to it. See "Retested 8 October 2026" below.)*
+
 "Anywhere" is the only setting under which they could approve it, and
 "Anywhere" is not in System Settings any more. It is `sudo spctl
 --master-disable` in a terminal, which is a worse thing to ask of somebody than
@@ -143,6 +158,79 @@ Walking a non-technical person through
 `xattr -dr com.apple.quarantine /Applications/Dictator.app` is strictly worse
 than walking them through the install command we already have, because it
 teaches them that this is a thing you do to apps macOS refuses.
+
+### Retested 8 October 2026: Open Anyway is there
+
+*(Added 8 October 2026. The sections above are the original text.)*
+
+The trash prompt above came from a published test and was listed at the end of
+this document as not reproduced here. It has now been reproduced, and the
+result is the opposite.
+
+macOS 27.0.1 (26A434), Apple silicon, `spctl --status` reporting
+`assessments enabled`. A throwaway `GKProbe.app` (one Swift file that shows a
+window saying it launched) was built in a scratch directory, ad-hoc signed,
+packed into a `.dmg` with an Applications link, and given the quarantine
+attribute a browser download writes:
+
+```
+$ codesign --force --deep -s - GKProbe.app
+Signature=adhoc
+TeamIdentifier=not set
+$ hdiutil create -volname GKProbe -srcfolder dmgsrc -format UDZO GKProbe.dmg
+$ xattr -w com.apple.quarantine "0083;...;Chrome;" GKProbe.dmg
+```
+
+The `.dmg` was mounted and the app copied out, the way a drag to Applications
+would. Quarantine travels with it, and Gatekeeper rejects it:
+
+```
+$ xattr -p com.apple.quarantine GKProbe.app
+0083;00000000;;
+$ spctl -a -vvv -t exec GKProbe.app
+GKProbe.app: rejected
+```
+
+Then it was opened, and what happened on screen, in order:
+
+1. A warning that it could not be verified. The app did not run.
+2. **System Settings → Privacy & Security** showed GKProbe as blocked, with an
+   **Open Anyway** button.
+3. Open Anyway, confirmed, and the app ran.
+4. A second `open` with no prompt at all: the process was running three
+   seconds later.
+
+`spctl` still says `rejected` after the approval, and the quarantine flag is
+unchanged. The approval is stored by the system as an exception for that app,
+not by removing the flag.
+
+What this changes: **a free `.dmg` is a real install path.** It is not a
+terminal command and not a bypass. It is the approval flow Apple built into
+System Settings, and the user goes through it once.
+
+What this test did not cover, and which the real app has to be checked for
+before anyone is pointed at it:
+
+- **App Translocation.** On the second launch the process ran from a random
+  path under `/private/var/folders/.../AppTranslocation/`, because the copy had
+  not been moved by Finder. A user dragging the app into `/Applications` in
+  Finder should not get this, but anything in Dictator that finds files next to
+  its own bundle must be checked against it.
+- **Permissions on an app that was approved this way.** The probe asked for
+  nothing. Dictator needs Microphone and Accessibility. Whether those prompts
+  and grants behave normally on an app approved with Open Anyway is untested.
+- **Updates.** Whether Open Anyway has to be clicked again for every new
+  version. Likely yes, since each download is a new quarantined copy.
+- **Signature stability across updates.** An ad-hoc signature changes with
+  every build, which is the permissions bug `signing.py` exists to fix. A
+  `.dmg` built for other people would need one self-signed certificate kept by
+  whoever builds releases and used for every release, so the designated
+  requirement names the certificate and not the binary. Free, and untested
+  across two releases.
+- **Why this differs from the published result.** Either macOS changed between
+  26.6.1 and 27.0.1, or the published table describes only the first dialog.
+  Not known. It should be retested on each new major macOS before relying on
+  it.
 
 ### The Homebrew cask route closed in November 2025
 
@@ -295,6 +383,20 @@ In descending order of what it is worth:
 
 Not worth doing: a `.dmg` with a README telling people to run `xattr`, a
 third-party tap, and anything that asks a user to enable Anywhere.
+
+*(Update, 8 October 2026: there is now a fourth item, and it goes above the
+other three.)*
+
+0. **A free `.dmg`, approved once with Open Anyway.** Measured in "Retested 8
+   October 2026" above. Ship a small app with the Swift helpers, whisper, a
+   Python runtime and `jellyfish` inside it, signed with one self-signed
+   certificate kept for every release, and the models downloaded on first
+   launch as `install.sh` already does. About 60 to 90 MB installed and 30 to
+   45 MB as a `.dmg`, estimated rather than measured. The download page shows
+   the warning and the Open Anyway screen with a screenshot of each. This is
+   not the `xattr` README ruled out above: the user never opens a terminal.
+   Item 2 is part of this work anyway, and all of it carries over unchanged to
+   a notarized build if the 99 dollars is ever paid.
 
 ---
 
@@ -1196,7 +1298,9 @@ one.
 
 - That a quarantined `.app` shows the trash prompt rather than Open Anyway on
   the **default** Gatekeeper setting is taken from a published test on macOS
-  26.6.1, not reproduced here. What was reproduced here is the quarantine
+  26.6.1, not reproduced here. *(Update, 8 October 2026: since tested here on
+  macOS 27.0.1, and it did not hold. Open Anyway was offered. See "Retested 8
+  October 2026".)* What was reproduced here is the quarantine
   propagation, the `syspolicy_check` verdict, the `.pkg` rejection, the
   `.command` refusal with error -128 and its control, and that `xattr -d` still
   works.
