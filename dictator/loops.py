@@ -97,3 +97,35 @@ def why(text: str) -> str:
     if _repeats_across(t):
         return "the same sentence three times over"
     return ""
+
+
+_CLAUSE_END = re.compile(r"[^.!?]+[.!?]*\s*")
+
+
+def collapse(text: str) -> str:
+    """Keep one copy of a sentence the decoder said three or more times.
+
+    For when it looped on both passes, which means the audio is the problem
+    and running it again will not help. Pasting the loop was the old answer:
+    on the first real install "Yar ye test karke dekho." went in four times.
+    Only runs of MIN_REPEATS or more identical sentences are touched, so a
+    sentence somebody really said twice is left as it was."""
+    parts = _CLAUSE_END.findall(text or "")
+    out, i = [], 0
+    while i < len(parts):
+        j = i
+        key = parts[i].strip().lower().rstrip(".!? ")
+        while j + 1 < len(parts) and \
+                parts[j + 1].strip().lower().rstrip(".!? ") == key:
+            j += 1
+        if key and j - i + 1 >= MIN_REPEATS:
+            out.append(parts[i])
+            # The loop usually stops mid-word when the audio runs out, and
+            # that tail is the same sentence again, cut short.
+            nxt = parts[j + 1].strip().lower() if j + 1 < len(parts) else ""
+            if nxt and key.startswith(nxt.rstrip(".!? ")):
+                j += 1
+        else:
+            out.extend(parts[i:j + 1])
+        i = j + 1
+    return "".join(out).strip()

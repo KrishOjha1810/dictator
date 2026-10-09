@@ -23,7 +23,14 @@ def server():
                 self.send_response(404)
                 self.end_headers()
                 return
-            self.send_response(200)
+            rng = self.headers.get("Range", "")
+            files.setdefault("_ranges", []).append(rng)
+            if rng.startswith("bytes=") and files.get("_honour_range", True):
+                start = int(rng[6:].rstrip("-"))
+                body = body[start:]
+                self.send_response(206)
+            else:
+                self.send_response(200)
             self.send_header("Content-Length", str(len(body)))
             self.end_headers()
             self.wfile.write(body)
@@ -112,3 +119,45 @@ def test_the_shipped_models_all_have_a_verified_source():
         url, size, sha = fetch.SOURCES[name]
         assert url.startswith("https://huggingface.co/")
         assert size > 0 and len(sha) == 64
+
+
+def test_an_interrupted_download_is_continued_not_restarted(models):
+    d, files, _ = models
+    d.mkdir(parents=True)
+    whole = files["/en.bin"]
+    (d / "en.bin.part").write_bytes(whole[:3000])
+    fetch.fetch("en.bin")
+    assert (d / "en.bin").read_bytes() == whole
+    assert files["_ranges"][-1] == "bytes=3000-"
+
+
+def test_a_server_that_ignores_the_range_still_gives_a_whole_file(models):
+    d, files, _ = models
+    d.mkdir(parents=True)
+    files["_honour_range"] = False
+    (d / "en.bin.part").write_bytes(files["/en.bin"][:3000])
+    fetch.fetch("en.bin")
+    assert (d / "en.bin").read_bytes() == files["/en.bin"]
+
+
+def test_a_bad_part_is_removed_so_it_is_never_continued(models):
+    d, files, _ = models
+    d.mkdir(parents=True)
+    (d / "en.bin.part").write_bytes(b"x" * 3000)     # not the real start
+    with pytest.raises(fetch.Mismatch):
+        fetch.fetch("en.bin")
+    assert not (d / "en.bin.part").exists()
+
+
+def test_downloads_run_in_their_own_process(models, monkeypatch):
+    started = []
+
+    class P:
+        def __init__(self, args, **kw):
+            started.append((args, kw))
+
+    monkeypatch.setattr(fetch.subprocess, "Popen", P)
+    assert fetch.in_background() is not None
+    args, kw = started[0]
+    assert args[-2:] == ["models", "fetch"]
+    assert kw.get("start_new_session") is True

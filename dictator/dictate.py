@@ -270,7 +270,8 @@ class Dictation:
             self._inflight += 1
             self._publish("transcribing")
         threading.Thread(target=self._finish,
-                         args=(self.wav, self.app, held_ms / 1000.0, cut),
+                         args=(self.wav, self.app, held_ms / 1000.0, cut,
+                               time.monotonic()),
                          daemon=True).start()
 
     def cancel(self, publish: bool = True):
@@ -291,12 +292,13 @@ class Dictation:
 
     # ---- off the key thread -----------------------------------------------
 
-    def _finish(self, wav, app, secs: float = 0.0, cut: str = ""):
+    def _finish(self, wav, app, secs: float = 0.0, cut: str = "",
+                released: "float|None" = None):
         """One hold, delivered, and then the app told it is over. The work
         is in _deliver; this only makes sure "transcribing" cannot outlive
         it, whichever of its many returns it leaves by."""
         try:
-            self._deliver(wav, app, secs, cut)
+            self._deliver(wav, app, secs, cut, released)
         finally:
             # Unless another hold has started meanwhile, or is still being
             # transcribed: saying ready over the first would be the app
@@ -306,7 +308,8 @@ class Dictation:
                 self._inflight = max(0, self._inflight - 1)
                 self._settle_locked()
 
-    def _deliver(self, wav, app, secs: float = 0.0, cut: str = ""):
+    def _deliver(self, wav, app, secs: float = 0.0, cut: str = "",
+                 released: "float|None" = None):
         """One hold, from the recording to the words being on screen.
 
         The pipeline itself lives in api.py and this calls it. It used to live
@@ -400,8 +403,14 @@ class Dictation:
         else:
             say(f'heard: "{said.text[:70]}"')
 
+        def took() -> "int|None":
+            # From the key coming up to now: what the person waited through.
+            return (int((time.monotonic() - released) * 1000)
+                    if released is not None else None)
+
         now = mac.frontmost_app()
         if app and now and now != app:
+            core.write_last(said.text, took(), said.engine, now or "")
             say(f"you moved from {app} to {now}, so I did not paste")
             # You moved. Typing here would put your sentence somewhere you were
             # not looking, which is the one failure that is not recoverable by
@@ -413,12 +422,23 @@ class Dictation:
             # This path presses Return, which paste.deliver deliberately never
             # does, so it keeps the original single shot behaviour.
             _paste_where_you_are(said.text, send=True)
+            core.write_last(said.text, took(), said.engine, now or "", True)
         elif not paste.deliver(said.text, now or app or ""):
+            core.write_last(said.text, took(), said.engine, now or "")
             # Deliberately no retry. A long transcript is delivered in pieces,
             # so if one failed some of the text is already in the field and
             # pasting the whole thing again would duplicate it.
             say("some of that did not paste. Nothing was pasted again, "
                 "to avoid duplicating what did land.")
+        else:
+            core.write_last(said.text, took(), said.engine, now or "", True)
+        # One line per hold, so the wait can be measured from the log over
+        # real use rather than guessed at.
+        ms = took()
+        if ms is not None:
+            say(f"{ms} ms from letting go to the words landing")
+            core.log(f"timing: {ms}ms release-to-paste, {secs:.1f}s held, "
+                     f"{said.engine}")
 
 
 def _paste_where_you_are(text: str, send: bool = False) -> bool:

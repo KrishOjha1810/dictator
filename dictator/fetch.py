@@ -19,8 +19,10 @@ two writers on one .part file would make a model that passes no check.
 import fcntl
 import hashlib
 import os
-import threading
+import subprocess
+import sys
 import urllib.request
+from pathlib import Path
 
 from . import core, stt
 
@@ -63,19 +65,38 @@ def fetch(name: str, timeout: float = 60.0) -> None:
     """Download one model into the model directory, verified.
 
     Writes to <name>.part, which is what stt.model_status reads progress
-    from, and renames it into place only once size and hash match. On any
-    failure the .part is removed: a stale .part would keep the app saying
-    "downloading" for a download nobody is doing."""
+    from, and renames it into place only once size and hash match.
+
+    A .part left by an earlier run is continued with a Range request rather
+    than started again: on the first real install the Hinglish model was
+    started five times in three seconds, each run killed by the next. A file
+    that arrives and does not match is removed, so a bad one is never
+    continued; an interrupted one is kept, because it is only unfinished."""
     url, size, sha = SOURCES[name]
     d = stt.MODEL_DIR
     d.mkdir(parents=True, exist_ok=True)
     final, part = d / name, d / (name + ".part")
     h = hashlib.sha256()
-    got = 0
+    have = 0
     try:
-        req = urllib.request.Request(url, headers={"User-Agent": "dictator"})
-        with urllib.request.urlopen(req, timeout=timeout) as r, \
-                open(part, "wb") as out:
+        have = part.stat().st_size
+    except OSError:
+        pass
+    if not 0 < have < size:
+        have = 0
+    headers = {"User-Agent": "dictator"}
+    if have:
+        headers["Range"] = f"bytes={have}-"
+    req = urllib.request.Request(url, headers=headers)
+    with urllib.request.urlopen(req, timeout=timeout) as r:
+        if have and getattr(r, "status", 200) != 206:
+            have = 0          # the server sent the whole file again
+        if have:
+            with open(part, "rb") as f:
+                for block in iter(lambda: f.read(CHUNK), b""):
+                    h.update(block)
+        got = have
+        with open(part, "ab" if have else "wb") as out:
             while True:
                 block = r.read(CHUNK)
                 if not block:
@@ -83,17 +104,15 @@ def fetch(name: str, timeout: float = 60.0) -> None:
                 out.write(block)
                 h.update(block)
                 got += len(block)
-        if got != size:
-            raise Mismatch(f"{name}: got {got} bytes, expected {size}")
-        if h.hexdigest() != sha:
-            raise Mismatch(f"{name}: SHA256 does not match the published one")
-        os.replace(part, final)
-    except BaseException:
+    if got != size or h.hexdigest() != sha:
         try:
             part.unlink()
         except FileNotFoundError:
             pass
-        raise
+        if got != size:
+            raise Mismatch(f"{name}: got {got} bytes, expected {size}")
+        raise Mismatch(f"{name}: SHA256 does not match the published one")
+    os.replace(part, final)
 
 
 def fetch_missing(names: "list|None" = None) -> list:
@@ -130,10 +149,22 @@ def fetch_missing(names: "list|None" = None) -> list:
         lock.close()
 
 
-def in_background() -> "threading.Thread|None":
-    """Start fetch_missing on a daemon thread if anything is missing."""
+def in_background() -> "subprocess.Popen|None":
+    """Start `dictator models fetch` as its own process, if anything is missing.
+
+    Its own process and its own session, not a thread of the dictation loop:
+    the app restarts the loop whenever the key changes, and a thread died
+    with it, mid-download. The lock in fetch_missing keeps a second one from
+    doing anything, so starting it again is harmless."""
     if not stt.missing():
         return None
-    t = threading.Thread(target=fetch_missing, name="fetch", daemon=True)
-    t.start()
-    return t
+    cli = Path(__file__).resolve().parent.parent / "bin" / "dictator"
+    try:
+        with open(core.LOG_FILE, "a") as log:
+            return subprocess.Popen(
+                [sys.executable, str(cli), "models", "fetch"],
+                stdin=subprocess.DEVNULL, stdout=log, stderr=log,
+                start_new_session=True)
+    except Exception as e:
+        core.log(f"fetch: could not start the download: {e}")
+        return None

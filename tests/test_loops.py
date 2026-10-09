@@ -184,3 +184,16 @@ def test_unknown_duration_still_means_do_not_trim():
     from dictator import stt
     assert stt.audio_ctx_for(0) == 0
     assert stt.audio_ctx_for(-1) == 0
+
+
+def test_a_sentence_looped_three_times_is_kept_once():
+    from dictator import loops
+    got = loops.collapse("yar ye test karke dekho. yar ye test karke dekho. "
+                         "yar ye test karke dekho. yar ye tes")
+    assert got == "yar ye test karke dekho."
+
+
+def test_a_sentence_said_twice_is_left_alone():
+    from dictator import loops
+    t = "Do it now. Do it now. Then stop."
+    assert loops.collapse(t) == t

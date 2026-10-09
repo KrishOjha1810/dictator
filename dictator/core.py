@@ -117,6 +117,7 @@ LOG_FILE = STATE_DIR / "log"
 HUD_FILE = STATE_DIR / "hud.json"
 ERRORS_FILE = STATE_DIR / "errors.jsonl"
 STATUS_FILE = STATE_DIR / "status.json"
+LAST_FILE = STATE_DIR / "last.json"
 
 
 def log(msg: str) -> None:
@@ -219,6 +220,28 @@ def read_status() -> dict:
         return json.loads(STATUS_FILE.read_text())
     except Exception:
         return {}
+
+
+def write_last(text: str, ms: "int|None", engine: str = "",
+               app: str = "", pasted: bool = False) -> bool:
+    """The last thing transcribed, for the app to show without a paste.
+
+    The onboarding's "Try it" card used to wait for the text to be pasted
+    into its own box, which only works if that box has keyboard focus, and
+    on the first real install it did not: the words went to "the front app"
+    and the card sat empty while the user typed it in by hand. The card reads
+    this instead. `ms` is from letting go of the key to the text being
+    delivered, the number a person actually waits through. Never raises."""
+    try:
+        STATE_DIR.mkdir(parents=True, exist_ok=True)
+        tmp = str(LAST_FILE) + f".{os.getpid()}.{threading.get_ident()}.tmp"
+        with open(tmp, "w") as f:
+            json.dump({"text": text, "ms": ms, "engine": engine, "app": app,
+                       "pasted": pasted, "at": time.time()}, f)
+        os.replace(tmp, LAST_FILE)
+        return True
+    except Exception:
+        return False
 
 
 _last_surfaced: dict = {}
