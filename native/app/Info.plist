@@ -10,9 +10,11 @@
   <key>CFBundlePackageType</key><string>APPL</string>
   <key>CFBundleShortVersionString</key><string>1.0</string>
   <key>CFBundleVersion</key><string>1</string>
-  <!-- No Dock icon: this is a key, not a window. Built from the .dmg it has
-       a menu bar item; built from a checkout, nothing on screen at all. -->
-  <key>LSUIElement</key><true/>
+  <!-- No LSUIElement: with a UI this is a regular app with a Dock icon and
+       an app menu, so it can be quit and force quit like any other. main.swift
+       sets the policy at launch: accessory for a headless repo install, and
+       when Show in Dock is off. -->
+  <key>CFBundleIconFile</key><string>AppIcon</string>
   <key>LSMinimumSystemVersion</key><string>14.0</string>
   <!-- These strings ARE the permission dialog. macOS shows them verbatim, so
        they have to answer "why does this want that" in one sentence. -->

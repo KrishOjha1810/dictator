@@ -13,6 +13,7 @@ final class SettingsState: ObservableObject {
     @Published var installed = ""
     @Published var confirmErase = false
     @Published var erased = ""
+    @Published var dock = Prefs.showInDock
 }
 
 struct SettingsPage: View {
@@ -20,7 +21,8 @@ struct SettingsPage: View {
     @StateObject private var st = SettingsState()
 
     var body: some View {
-        Form {
+        PageScroll {
+            PageHeader("Settings", "Your key, language, and where your words are kept.")
             general
             language
             microphone
@@ -28,53 +30,85 @@ struct SettingsPage: View {
             advanced
             about
         }
-        .formStyle(.grouped)
+        .tint(Theme.accent)
         .onAppear { model.loadLanguage() }
     }
 
     // -----------------------------------------------------------------------
 
     private var general: some View {
-        Section("General") {
-            Picker("Hold to talk", selection: Binding(get: { model.key },
-                                                      set: { model.setKey($0) })) {
-                ForEach(Prefs.keys, id: \.self) { Text(Prefs.keyNames[$0] ?? $0).tag($0) }
+        SettingsGroup("General") {
+            SettingRow("Hold to talk", "The key you hold while you speak.") {
+                Picker("", selection: Binding(get: { model.key },
+                                              set: { model.setKey($0) })) {
+                    ForEach(Prefs.keys, id: \.self) { Text(Prefs.keyNames[$0] ?? $0).tag($0) }
+                }
+                .labelsHidden().fixedSize()
             }
+            Hairline()
             // Only the bundle registers itself as a login item. A repo install
             // already has one, the launchd plist `dictator on` writes, and two
             // of them would start two listeners on the same key.
             if Mode.current.isBundle {
-                Toggle("Start at login", isOn: Binding(get: { st.atLogin }, set: { on in
-                    do {
-                        if on { try SMAppService.mainApp.register() }
-                        else { try SMAppService.mainApp.unregister() }
-                    } catch {
-                        NSLog("dictator: login item: \(error)")
-                    }
-                    st.atLogin = SMAppService.mainApp.status == .enabled
-                }))
+                SettingRow("Start at login", "Ready to dictate after a restart.") {
+                    Toggle("", isOn: Binding(get: { st.atLogin }, set: { on in
+                        do {
+                            if on { try SMAppService.mainApp.register() }
+                            else { try SMAppService.mainApp.unregister() }
+                        } catch {
+                            NSLog("dictator: login item: \(error)")
+                        }
+                        st.atLogin = SMAppService.mainApp.status == .enabled
+                    }))
+                    .toggleStyle(.switch).labelsHidden()
+                }
             } else {
-                LabeledContent("Start at login", value: "dictator on / dictator off")
+                SettingRow("Start at login", "Set from a terminal in a repo install.") {
+                    Text("dictator on / off").font(.system(size: 12, design: .monospaced))
+                        .foregroundColor(Theme.secondary)
+                }
+            }
+            Hairline()
+            SettingRow("Show in Dock", "Off: only the menu bar item, and quit from there.") {
+                Toggle("", isOn: Binding(get: { st.dock }, set: { on in
+                    Prefs.showInDock = on
+                    st.dock = on
+                    (NSApp.delegate as? UI)?.applyDockPolicy()
+                }))
+                .toggleStyle(.switch).labelsHidden()
             }
         }
     }
 
     private var language: some View {
-        Section("Language") {
-            Picker("Expect", selection: Binding(get: { model.language },
-                                                set: { model.setLanguage($0) })) {
-                Text("Auto (English first, Hinglish when it hears it)").tag("english")
-                Text("Hinglish").tag("hinglish")
+        SettingsGroup("Language") {
+            SettingRow("Expect", "Hinglish skips the English-only engine.") {
+                Picker("", selection: Binding(get: { model.language },
+                                              set: { model.setLanguage($0) })) {
+                    Text("Auto, English first").tag("english")
+                    Text("Hinglish").tag("hinglish")
+                }
+                .labelsHidden().fixedSize()
             }
             if model.status.models.isEmpty {
-                Text("Models: not reported yet").foregroundColor(.secondary)
+                Hairline()
+                SettingRow("Speech models", "Not reported yet.") { EmptyView() }
             }
             ForEach(model.status.models, id: \.name) { m in
-                LabeledContent(modelTitle(m.name)) {
+                Hairline()
+                SettingRow(modelTitle(m.name), m.essential ? "Needed to dictate."
+                                                           : "Optional, for Hinglish.") {
                     if m.have {
-                        Text("Ready").foregroundColor(.secondary)
+                        Label("Ready", systemImage: "checkmark.circle.fill")
+                            .font(.system(size: 12, weight: .medium))
+                            .foregroundColor(Theme.good)
                     } else {
-                        ProgressView(value: m.progress).frame(width: 160)
+                        HStack(spacing: Theme.s2) {
+                            ProgressView(value: m.progress).frame(width: 140)
+                            Text("\(Int((m.progress * 100).rounded()))%")
+                                .font(.system(size: 12).monospacedDigit())
+                                .foregroundColor(Theme.secondary)
+                        }
                     }
                 }
             }
@@ -82,28 +116,40 @@ struct SettingsPage: View {
     }
 
     private var microphone: some View {
-        Section("Microphone") {
-            LabeledContent("Input",
-                value: AVCaptureDevice.default(for: .audio)?.localizedName ?? "None found")
-            LabeledContent("Permission", value: model.mic == .authorized ? "Allowed" : "Not allowed")
-            Text("Dictator records from the system's default input. Change it in "
-                 + "System Settings, Sound.").font(.caption).foregroundColor(.secondary)
+        SettingsGroup("Microphone") {
+            SettingRow("Input", "The system default. Change it in System Settings, Sound.") {
+                Text(AVCaptureDevice.default(for: .audio)?.localizedName ?? "None found")
+                    .font(.system(size: 13)).foregroundColor(Theme.secondary)
+            }
+            Hairline()
+            SettingRow("Permission", nil) {
+                if model.mic == .authorized {
+                    Label("Allowed", systemImage: "checkmark.circle.fill")
+                        .font(.system(size: 12, weight: .medium)).foregroundColor(Theme.good)
+                } else {
+                    Button("Open settings") {
+                        NSWorkspace.shared.open(URL(string:
+                            "x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone")!)
+                    }
+                    .buttonStyle(QuietButton())
+                }
+            }
         }
     }
 
     private var privacy: some View {
-        Section("Privacy") {
-            LabeledContent("History is kept in") {
-                Button(stateDir.path) {
+        SettingsGroup("Privacy") {
+            SettingRow("History is kept in", "On this Mac only. Nothing you say is uploaded.") {
+                Button(stateDir.path.replacingOccurrences(of: home.path, with: "~")) {
                     NSWorkspace.shared.activateFileViewerSelecting([stateDir])
                 }
                 .buttonStyle(.link)
             }
-            Text("On this Mac only. Nothing is uploaded.")
-                .font(.caption).foregroundColor(.secondary)
-            HStack {
-                Button("Delete all history…", role: .destructive) { st.confirmErase = true }
-                if !st.erased.isEmpty { Text(st.erased).foregroundColor(.secondary) }
+            Hairline()
+            SettingRow("Delete all history", st.erased.isEmpty ? "This cannot be undone." : st.erased) {
+                Button("Delete…") { st.confirmErase = true }
+                    .buttonStyle(QuietButton())
+                    .foregroundColor(Theme.bad)
             }
             .alert("Delete everything you have dictated?", isPresented: $st.confirmErase) {
                 Button("Delete", role: .destructive) {
@@ -121,46 +167,54 @@ struct SettingsPage: View {
     }
 
     private var advanced: some View {
-        Section("Advanced") {
-            HStack {
-                Button("Install command line tool") { st.installed = installCLI() }
-                if !st.installed.isEmpty {
-                    Text(st.installed).font(.caption).foregroundColor(.secondary)
-                }
+        SettingsGroup("Advanced") {
+            SettingRow("Command line tool",
+                       st.installed.isEmpty ? "Puts `dictator` in ~/.local/bin. No password."
+                                            : st.installed) {
+                Button("Install") { st.installed = installCLI() }.buttonStyle(QuietButton())
             }
-            Text("Puts `dictator` in ~/.local/bin. No administrator password.")
-                .font(.caption).foregroundColor(.secondary)
-            HStack {
-                Button(st.running ? "Running…" : "Run diagnostics") {
-                    st.running = true
-                    CLI.load({ CLI.text(["doctor"]) }) { out in
-                        st.doctor = out
-                        st.running = false
+            Hairline()
+            SettingRow("Diagnostics", "Checks permissions, models and the key.") {
+                HStack(spacing: Theme.s2) {
+                    Button("Show log") {
+                        NSWorkspace.shared.activateFileViewerSelecting(
+                            [stateDir.appendingPathComponent("dictate.log")])
                     }
-                }
-                .disabled(st.running)
-                Button("Show log") {
-                    NSWorkspace.shared.activateFileViewerSelecting(
-                        [stateDir.appendingPathComponent("dictate.log")])
+                    .buttonStyle(QuietButton())
+                    Button(st.running ? "Running…" : "Run") {
+                        st.running = true
+                        CLI.load({ CLI.text(["doctor"]) }) { out in
+                            st.doctor = out
+                            st.running = false
+                        }
+                    }
+                    .buttonStyle(QuietButton())
+                    .disabled(st.running)
                 }
             }
             if !st.doctor.isEmpty {
+                Hairline()
                 ScrollView {
-                    Text(st.doctor).font(.system(.caption, design: .monospaced))
+                    Text(st.doctor).font(.system(size: 11, design: .monospaced))
+                        .foregroundColor(Theme.text)
                         .textSelection(.enabled)
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
                 .frame(height: 200)
+                .padding(Theme.s4)
             }
         }
     }
 
     private var about: some View {
-        Section("About") {
+        SettingsGroup("About") {
             let info = Bundle.main.infoDictionary ?? [:]
-            LabeledContent("Version", value: (info["CFBundleShortVersionString"] as? String ?? "dev")
-                + " (" + (info["CFBundleVersion"] as? String ?? "0") + ")")
-            LabeledContent("Running from", value: Mode.current.isBundle ? "app bundle" : "repo install")
+            SettingRow("Version", Mode.current.isBundle ? "App bundle" : "Repo install") {
+                Text((info["CFBundleShortVersionString"] as? String ?? "dev")
+                     + " (" + (info["CFBundleVersion"] as? String ?? "0") + ")")
+                    .font(.system(size: 13).monospacedDigit()).foregroundColor(Theme.secondary)
+            }
+            Hairline()
             VStack(alignment: .leading, spacing: 4) {
                 Text("Speech recognition by whisper.cpp (MIT) with OpenAI Whisper "
                      + "models (MIT).")
@@ -168,8 +222,62 @@ struct SettingsPage: View {
                      + "CC-BY-4.0, converted to GGUF by ggml-org.")
                 Text("Python runtime from python-build-standalone. jellyfish (MIT).")
             }
-            .font(.caption).foregroundColor(.secondary)
+            .font(.caption12).foregroundColor(Theme.secondary)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, Theme.s4)
+            .padding(.vertical, Theme.s3)
         }
+    }
+}
+
+/// A titled white card of rows.
+struct SettingsGroup<Content: View>: View {
+    var title: String
+    var content: Content
+    init(_ title: String, @ViewBuilder _ c: () -> Content) {
+        self.title = title
+        content = c()
+    }
+    var body: some View {
+        VStack(alignment: .leading, spacing: Theme.s2) {
+            Text(title.uppercased()).font(.system(size: 11, weight: .semibold)).kerning(0.6)
+                .foregroundColor(Theme.tertiary).padding(.leading, Theme.s1)
+            VStack(spacing: 0) { content }.card(padding: 0)
+        }
+    }
+}
+
+/// One setting: a name, a line under it, and the control on the right.
+struct SettingRow<Trailing: View>: View {
+    var title: String
+    var detail: String?
+    var trailing: Trailing
+    init(_ title: String, _ detail: String?, @ViewBuilder trailing: () -> Trailing) {
+        self.title = title
+        self.detail = detail
+        self.trailing = trailing()
+    }
+    var body: some View {
+        HStack(spacing: Theme.s4) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title).font(.system(size: 13, weight: .medium)).foregroundColor(Theme.text)
+                if let d = detail, !d.isEmpty {
+                    Text(d).font(.caption12).foregroundColor(Theme.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            Spacer(minLength: Theme.s4)
+            trailing
+        }
+        .padding(.horizontal, Theme.s4)
+        .padding(.vertical, 11)
+        .frame(minHeight: 52)
+    }
+}
+
+struct Hairline: View {
+    var body: some View {
+        Rectangle().fill(Theme.hairline).frame(height: 1).padding(.leading, Theme.s4)
     }
 }
 

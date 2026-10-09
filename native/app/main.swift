@@ -260,7 +260,11 @@ func waitForAccessibility() {
 var onboarding = false
 
 let app = NSApplication.shared
-app.setActivationPolicy(.accessory)
+// Info.plist no longer says LSUIElement, so the app with a UI is a regular
+// one, with a Dock icon and an app menu (Show in Dock can turn that off; see
+// UI.applyDockPolicy). Set before run() so a headless repo install, which has
+// no windows and no menu bar item, never flashes a Dock icon.
+app.setActivationPolicy(showsUI && Prefs.showInDock ? .regular : .accessory)
 
 /// NSApplication holds its delegate weakly. Held here, at file scope, for the
 /// life of the process. As a local inside the `if` below, the optimiser was
