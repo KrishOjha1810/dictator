@@ -742,6 +742,7 @@ struct StylePage: View {
         "sentences": ("Sentences", "A capital letter at the start of each one."),
         "lists": ("Lists", "“One… two… three…” becomes a numbered list."),
         "fillers": ("Remove fillers", "Leave out um, uh and the like."),
+        "stutters": ("Remove stutters", "“is is” becomes “is”, and “g giving” becomes “giving”."),
     ]
 
     var body: some View {
