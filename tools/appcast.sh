@@ -33,6 +33,20 @@ BUILD="$(plutil -extract CFBundleVersion raw "$APP/Contents/Info.plist")"
 SHORT="$(plutil -extract CFBundleShortVersionString raw "$APP/Contents/Info.plist")"
 [ "$SHORT" = "$VERSION" ] || { echo "staged app is $SHORT, not $VERSION" >&2; exit 1; }
 
+# Installed apps take an update only if its build number is higher than
+# their own. The build number is the commit count of the branch released
+# from, so a squash merge, or releasing from a branch with fewer commits,
+# would quietly produce a LOWER one and every installed copy would ignore
+# every release from then on. Refuse that here, before anything is published.
+LIVE="https://github.com/$REPO/releases/latest/download/appcast.xml"
+PUBLISHED="$(curl -fsSL --max-time 30 "$LIVE" 2>/dev/null \
+    | sed -n 's:.*<sparkle\:version>\([0-9]*\)</sparkle\:version>.*:\1:p' | head -1 || true)"
+if [ -n "$PUBLISHED" ] && [ "$BUILD" -le "$PUBLISHED" ]; then
+    echo "build $BUILD is not higher than the published $PUBLISHED: installed apps would never take it" >&2
+    echo "(the build number is the commit count of the release branch)" >&2
+    exit 1
+fi
+
 SIG_LINE="$("$SPARKLE/sign_update" --ed-key-file "$KEY" "$DMG")"
 URL="https://github.com/$REPO/releases/download/v$VERSION/Dictator-$VERSION.dmg"
 cat > "$FEED" <<EOF

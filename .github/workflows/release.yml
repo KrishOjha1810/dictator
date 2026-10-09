@@ -30,10 +30,9 @@ on:
   workflow_dispatch:
 
 env:
-  # Which branches a v* tag may point into. While the app is tested from the
-  # feature branch, releases come from it; once it is merged, this becomes
-  # just "main" and a tag anywhere else is refused.
-  RELEASE_BRANCHES: "feat/dmg-app main"
+  # Which branches a v* tag may point into. Releases come from main only; a
+  # tag anywhere else is refused (tools/release.sh reads this list too).
+  RELEASE_BRANCHES: "main"
   # whisper.cpp tag the native build compiles. The cache key follows it, so
   # bumping it here is all a rebuild takes.
   # build_native.sh checks the tag's commit too, and only v1.9.1 is pinned.
