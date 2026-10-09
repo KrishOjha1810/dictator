@@ -506,8 +506,38 @@ def drop_fillers(text: str) -> str:
     return out or text
 
 
+# Doubled words that are often correct English and so are never collapsed:
+# "she had had enough", "I know that that works".
+_REAL_DOUBLES = {"had", "that"}
+_DOUBLED = re.compile(r"\b([A-Za-z][A-Za-z']*)(\s+\1\b)+", re.IGNORECASE)
+# A single letter said and abandoned before the word it was starting:
+# "g giving", "the f FN". Never "a" or "I", which are words.
+_FALSE_START = re.compile(r"\b([b-hj-zB-HJ-Z])\s+(?=(\1)[A-Za-z])", re.IGNORECASE)
+
+
+def drop_stutters(text: str) -> str:
+    """Remove a word said twice in a row, and a letter abandoned mid-word.
+
+    A setting, on by default, rather than part of drop_fillers, because the
+    reasoning above holds: repetition can be meant. On the first real install
+    the dictated text carried "is is", "I I", "if if", "that that" and
+    "the f FN", and the person asked for them gone, so they go unless the
+    setting is turned off. Only exact repeats of one word, never phrases, and
+    never the doubles in _REAL_DOUBLES."""
+    if not text:
+        return text
+
+    def one(m):
+        w = m.group(1)
+        return m.group(0) if w.lower() in _REAL_DOUBLES else w
+
+    out = _DOUBLED.sub(one, text)
+    out = _FALSE_START.sub("", out)
+    return out
+
+
 def shape(text, enabled=True, punctuation=True, lists=False, sentences=True,
-          fillers=True):
+          fillers=True, stutters=True):
     """Shape a raw transcript into text that reads as though it was typed.
 
     Pure: the same string in gives the same string out, and nothing else
@@ -525,11 +555,15 @@ def shape(text, enabled=True, punctuation=True, lists=False, sentences=True,
                  needs asking for. Needs three ascending markers at clause
                  starts, each with real content behind it.
     sentences    tidy the spacing and put a capital at the start of a sentence.
+    stutters     a word said twice in a row once, a letter abandoned before
+                 the word it started dropped ("is is", "g giving").
     """
     if not enabled:
         return text
     if fillers:
         text = drop_fillers(text)
+    if stutters:
+        text = drop_stutters(text)
     if not enabled or not text or not text.strip():
         return text
     out = text
