@@ -45,14 +45,17 @@ SHA256, is on the [releases page](https://github.com/cc-vb/dictator/releases).
    the disk image after a few seconds. If you do open that one, it offers to
    move itself to Applications.
 2. Open Dictator. macOS stops it, because Dictator is free and not paid into
-   Apple's developer programme. Press **Done**, not Move to Trash.
+   Apple's developer programme. Press **Done**, not Move to Trash (or Move to Bin).
 3. Open **System Settings → Privacy & Security**, scroll down, and press
    **Open Anyway** next to Dictator. Confirm. This happens once.
 4. Allow the microphone and Accessibility when it asks. The speech models
    download on first launch, English first (about 700 MB), then Hindi and
    Hinglish in the background (1.5 GB). Each is checked against its published
    SHA256 before it is used.
-5. If your key is fn, open **System Settings → Keyboard** and set
+5. Hold **right ⌥ Option** and talk; double-tap it for hands free. That is the
+   app's key unless you change it, and it needs no other setup.
+
+Only if you switch the key to fn: open **System Settings → Keyboard** and set
    **Press 🌐 key to** to **Do Nothing**. A quick tap of fn (🌐) otherwise
    opens the emoji picker, switches the input source or starts Apple's own
    dictation, and a double tap of fn is how you start hands free dictation

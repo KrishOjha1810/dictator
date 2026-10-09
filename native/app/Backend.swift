@@ -455,8 +455,11 @@ enum Prefs {
     /// bin/dictator, because it is passed straight to `dictate`.
     static var key: String {
         get {
-            let k = store.string(forKey: "key") ?? "fn"
-            return keys.contains(k) ? k : "fn"
+            // Right ⌥ by default: unlike fn it has no system action of its
+            // own, so a downloaded app works without anyone visiting
+            // Keyboard settings. fn stays one click away in Settings.
+            let k = store.string(forKey: "key") ?? "rightopt"
+            return keys.contains(k) ? k : "rightopt"
         }
         set { store.set(newValue, forKey: "key") }
     }

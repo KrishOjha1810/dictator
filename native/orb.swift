@@ -1682,8 +1682,8 @@ enum Snapshot {
             case .button(.notetaker): t = LabelView.make(recording ? "Stop Notetaker" : "Start Notetaker", "⌥ M")
             case .button(.scratchpad): t = LabelView.make("Scratchpad", "⌥ S")
             case .cancel: t = LabelView.make("Cancel, paste nothing", "esc")
-            case .finish: t = LabelView.make("Finish and paste", "fn")
-            case .pill: t = LabelView.make("Dictate hands free", "double-tap fn")
+            case .finish: t = LabelView.make("Finish and paste", KEY_NAME)
+            case .pill: t = LabelView.make("Dictate hands free", "double-tap \(KEY_NAME)")
             default: t = nil
             }
             if let t = t {
