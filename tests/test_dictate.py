@@ -364,3 +364,19 @@ def test_an_engine_it_does_not_recognise_is_named_rather_than_hidden():
     from dictator.dictate import _engine_name
     assert _engine_name("cli:something-new.bin") == "cli:something-new.bin"
     assert _engine_name("") == "an unknown engine"
+
+
+def test_the_listener_floor_and_the_discard_floor_are_the_same_number():
+    """They used to disagree, and the gap was paid for in microphone opens.
+
+    The listener reported every brush of the key with `min_hold_ms=0`, and
+    `up` then discarded anything under MIN_MS. So for a 40ms tap the mic
+    opened, a recorder started, a file was written, and the result was thrown
+    away. In one real log that happened 19 times in 49 holds, on the fn key,
+    which hands and sleeves find on their own.
+    """
+    src = (Path(__file__).resolve().parent.parent
+           / "dictator" / "dictate.py").read_text()
+    assert "min_hold_ms=MIN_MS" in src, \
+        "the listener no longer uses the same floor it discards at"
+    assert "min_hold_ms=0" not in src, "the floor is back to zero"

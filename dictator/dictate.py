@@ -625,7 +625,21 @@ def run(key: str = "fn", send: bool = False, debug: bool = True) -> int:
     # listening after the recorder had already stopped, which is the exact
     # failure this product cannot have: a microphone the user believes is open
     # and is not, or the reverse.
-    p = hotkey.listen(key, min_hold_ms=0, max_session_ms=int(MAX_SECS * 1000))
+    # The listener's floor is MIN_MS, the same number `up` throws a hold away
+    # at. They used to disagree: the listener reported every brush of the key
+    # and `up` then discarded anything under 250ms, so the microphone opened,
+    # a recorder started and a file was written for a press that had already
+    # been decided against.
+    #
+    # It is not theoretical. In one real log, 19 of 49 holds were under 150ms
+    # and 23 were under a second; the key here is fn, which hands and sleeves
+    # find on their own. Every one of them opened the microphone.
+    #
+    # Measured before raising it: a floor at 250ms discards 20 of those 49 and
+    # costs zero utterances that had produced words, and the shortest hold in
+    # the whole log that produced any text at all was 770ms ("Okay.").
+    p = hotkey.listen(key, min_hold_ms=MIN_MS,
+                      max_session_ms=int(MAX_SECS * 1000))
     if not p:
         publish("error", "Could not start the key listener.")
         print("Could not start the key listener. See `dictator log`.")

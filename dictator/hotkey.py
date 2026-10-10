@@ -188,11 +188,18 @@ def listen(key: str = "fn", min_hold_ms: int = 0,
            double_tap: bool = True):
     """Start the listener. Returns a Popen whose stdout yields the protocol
 
-    min_hold_ms defaults to 0, i.e. no mis-press floor. A very short hold
-    transcribes to nothing and inserts nothing, which is genuinely silent,
-    whereas a floor buys nothing (the OS has already acted on the tap) and
-    costs us a real utterance whenever someone speaks faster than the
-    threshold. Raise it only with data.
+    min_hold_ms is the mis-press floor. It defaulted to 0 on the reasoning
+    that a very short hold transcribes to nothing anyway, so a floor buys
+    nothing and risks a real utterance. Half of that held: nothing was
+    inserted. The rest did not. A reported hold opens the microphone, starts
+    a recorder and writes a file, and `dictate.up` then threw the result away
+    for being under its own 250ms floor, so the cost was paid in full and
+    discarded. In one real log that happened 19 times in 49 holds.
+
+    The data the old comment asked for, from that log: a floor at 250ms
+    discards 20 of the 49 and costs zero holds that had produced any words,
+    and the shortest hold in it that produced text at all was 770ms. Callers
+    should pass the same number they are willing to act on.
     above, or None. The caller owns the process and MUST terminate it; the
     listener closes any open hold on SIGTERM so we can never be left believing
     the key is still down.

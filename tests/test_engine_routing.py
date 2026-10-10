@@ -145,6 +145,45 @@ def test_real_speech_is_not_mistaken_for_silence(said):
     assert not stt.is_silence(said)
 
 
+@pytest.mark.parametrize("filler", [
+    "Thank you.", "thank you", "Thanks for watching!", "Bye.", "you",
+    "Okay.", "Subscribe", "  Thank  you!  ",
+])
+def test_whispers_filler_for_an_empty_room_is_recognised(filler):
+    """Not the bracket markers above: these are ordinary words.
+
+    Whisper learned them from subtitle data whose silent stretches were
+    captioned with exactly these phrases, and it emits them on an empty room
+    with ordinary confidence, so neither `is_silence` nor a probability
+    threshold catches them. In this project's own log a 1.3 second hold where
+    nobody spoke came back as "Thank you." and was pasted into an editor."""
+    assert stt.is_filler(filler)
+
+
+@pytest.mark.parametrize("said", [
+    "thank you for the review",      # the phrase inside a sentence
+    "okay so let us go",
+    "bye for now, I will push it",
+    "thanks, that worked",
+    "",
+])
+def test_filler_is_only_ever_the_whole_transcript(said):
+    """Somebody saying "thank you for the review" said something. Only an
+    answer that is nothing BUT the filler is the model shrugging."""
+    assert not stt.is_filler(said)
+
+
+def test_the_two_silence_numbers_are_ordered_and_measured():
+    """SILENT is "do not even transcribe", QUIET_SPEECH is "do not believe a
+    filler phrase". Both come from the 198 corpus recordings with a stored
+    transcript: the quietest real speech there is 0.0070 and every filler
+    phrase is at or below 0.0070, so SILENT sits well under real speech and
+    QUIET_SPEECH sits just above the loudest filler."""
+    assert 0 < stt.SILENT < stt.QUIET_SPEECH
+    assert stt.SILENT < 0.0070, "would silence the quietest real speech"
+    assert stt.QUIET_SPEECH > 0.0070, "would believe the loudest filler"
+
+
 def test_an_empty_answer_from_the_fast_engine_also_falls_back():
     """It was treated as "no opinion" and fell through to the English model,
     which produced [NON-ENGLISH SPEECH] and [INAUDIBLE] on real Hinglish

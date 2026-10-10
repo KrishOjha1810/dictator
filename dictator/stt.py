@@ -566,6 +566,50 @@ def ensure_whisper_server(wait_s: float = 20.0) -> bool:
     return False
 
 
+# How loud a recording has to be before it is worth transcribing at all.
+#
+# Measured over the 198 corpus recordings that have a stored transcript: the
+# quietest real speech in the whole set is 0.0070, and the only two files
+# below 0.0020 are both the word "Thank you", which is whisper hallucinating
+# on silence. So nothing is lost by refusing to transcribe below this, and a
+# hold that captured a room instead of a voice stops costing a model load.
+SILENT = 0.002
+
+# And how loud a recording has to be before a filler phrase is believed.
+#
+# Every filler phrase in that corpus sits at 0.0070 or below; the loudest is
+# exactly 0.0070 and the quietest real speech is also exactly 0.0070. The
+# phrase test below is what does the work, and this is its safety net: say
+# "thank you" out loud and deliberately and it comes through, because it will
+# not be this quiet.
+QUIET_SPEECH = 0.0075
+
+# What whisper says when it heard nothing at all.
+#
+# Not transcripts. These are the model's trained-in filler, learned from
+# hours of subtitle data whose silent stretches were captioned with exactly
+# these words, and it emits them on an empty room with high confidence. Seen
+# in this project's own logs: a 1.3 second hold where nobody spoke came back
+# as "Thank you." and was pasted.
+#
+# Only ever a whole transcript, never a substring: "thank you for the review"
+# is somebody talking and must survive untouched.
+FILLER = frozenset({
+    "thank you", "thanks", "thank you very much", "thanks for watching",
+    "thank you for watching", "thanks for watching the video",
+    "bye", "bye bye", "goodbye", "see you", "see you next time",
+    "you", "okay", "ok", "so", "uh", "um", "hmm", "mm", "mhm",
+    "subscribe", "please subscribe", "the end", "music", "applause",
+    "silence", "carlos", "amen",
+})
+
+
+def is_filler(text: str) -> bool:
+    """Is this whisper's filler for silence rather than something said?"""
+    words = re.sub(r"[^a-z ]", " ", (text or "").lower()).split()
+    return bool(words) and " ".join(words) in FILLER
+
+
 # Whisper says these when it heard no speech. They are not a transcript, they
 # are the model telling you there was nothing, and pasting them into somebody's
 # editor is worse than pasting nothing: it looks like a wrong transcription

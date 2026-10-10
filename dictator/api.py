@@ -142,6 +142,28 @@ class Dictator:
         started = time.time()
         said = Transcript(seconds=stt.audio_seconds(wav))
         self.last_learned = self.check_corrections(app)
+
+        # How loud it was, measured once and used twice: here to decide
+        # whether transcribing is worth doing at all, and below to decide
+        # whether a one-word answer is a word or an empty room.
+        #
+        # -1 means the file could not be read, which is not a claim about
+        # the room, so it never silences anything.
+        try:
+            level = stt.loudness(wav)
+        except Exception:
+            level = -1.0
+
+        # A room is not speech. Below this nothing in 198 corpus recordings
+        # was ever a real word, and the two files that are there both came
+        # back as "Thank you", so this saves a 1.6GB model load as well as a
+        # wrong paste.
+        if 0 <= level < stt.SILENT:
+            core.log(f"dictator: nothing was said (too quiet, {level:.4f})")
+            self._retire(wav, said, ours=ours)
+            said.took = time.time() - started
+            return said
+
         try:
             said.heard, said.confidence = stt.transcribe_ex(wav)
             said.heard = (said.heard or "").strip()
@@ -159,6 +181,26 @@ class Dictator:
         # silence, and they go looking for what they said wrong.
         if stt.is_silence(said.heard):
             core.log(f"dictator: nothing was said ({said.heard.strip()[:40]!r})")
+            said.heard = ""
+            said.took = time.time() - started
+            return said
+
+        # The other way a model says nothing: it says "Thank you".
+        #
+        # Whisper learned its filler from subtitle data whose silent stretches
+        # were captioned with exactly these words, and it emits them on an
+        # empty room with ordinary confidence, so neither the bracket test
+        # above nor a probability threshold catches them. Somebody tapped the
+        # key, said nothing, and "Thank you." was pasted into their editor.
+        #
+        # Two conditions, because either alone is wrong. The phrase alone
+        # would eat a real "thank you"; the loudness alone would eat the
+        # quietest real speech in the corpus, which sits at exactly the same
+        # level as the loudest of these. Together they caught 7 of 7 in the
+        # corpus and cost none of the 198.
+        if 0 <= level < stt.QUIET_SPEECH and stt.is_filler(said.heard):
+            core.log(f"dictator: nothing was said "
+                     f"({said.heard.strip()[:30]!r} at {level:.4f})")
             said.heard = ""
             said.took = time.time() - started
             return said

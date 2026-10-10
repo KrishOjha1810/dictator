@@ -121,3 +121,68 @@ def test_the_shaping_flags_live_in_one_place():
     the exact duplication this layer exists to remove."""
     assert "_format_flags" not in (ROOT / "dictator" / "dictate.py").read_text()
     assert "shaping_flags" in (ROOT / "dictator" / "cli.py").read_text()
+
+
+def test_a_quiet_room_is_not_transcribed_at_all(tmp_path, monkeypatch):
+    """Below SILENT nothing is worth a model load.
+
+    Measured over the 198 corpus recordings with a stored transcript: the
+    quietest real speech is 0.0070, and the only two files under 0.0020 both
+    came back as "Thank you", which is whisper hallucinating on an empty
+    room. So this saves a wrong paste and a 1.6GB model load together."""
+    import dictator
+    from dictator import stt
+
+    wav = tmp_path / "quiet.wav"
+    wav.write_bytes(b"RIFF")                       # never read: loudness is faked
+    monkeypatch.setattr(stt, "loudness", lambda p: 0.0005)
+    monkeypatch.setattr(stt, "audio_seconds", lambda p: 1.3)
+
+    def boom(p):
+        raise AssertionError("transcribed a room")
+
+    monkeypatch.setattr(stt, "transcribe_ex", boom)
+    said = dictator.Dictator(remember=False, learn=False,
+                             expand=False).transcribe(str(wav))
+    assert said.text == ""
+    assert said.heard == ""
+
+
+def test_quiet_filler_is_dropped_and_loud_filler_is_kept(tmp_path, monkeypatch):
+    """"Thank you." from an empty room is the model shrugging; said out loud
+    it is a thing somebody meant to type. The phrase alone cannot tell them
+    apart and neither can the level, because the quietest real speech in the
+    corpus sits at exactly the level of the loudest filler. Both together
+    caught 7 of 7 and cost none of 198."""
+    import dictator
+    from dictator import stt
+
+    wav = tmp_path / "hold.wav"
+    wav.write_bytes(b"RIFF")
+    monkeypatch.setattr(stt, "audio_seconds", lambda p: 1.1)
+    monkeypatch.setattr(stt, "transcribe_ex", lambda p: ("Thank you.", 0.9))
+
+    d = dictator.Dictator(remember=False, learn=False, expand=False)
+
+    monkeypatch.setattr(stt, "loudness", lambda p: 0.004)
+    assert d.transcribe(str(wav)).text == "", "quiet filler reached the screen"
+
+    monkeypatch.setattr(stt, "loudness", lambda p: 0.05)
+    assert d.transcribe(str(wav)).text, "a spoken thank you was swallowed"
+
+
+def test_an_unreadable_recording_never_silences_anything(tmp_path, monkeypatch):
+    """`loudness` answers -1 when it cannot read the file. That is not a claim
+    about the room, and treating it as one would silence every hold on a
+    machine whose recorder writes a format this cannot parse."""
+    import dictator
+    from dictator import stt
+
+    wav = tmp_path / "odd.wav"
+    wav.write_bytes(b"RIFF")
+    monkeypatch.setattr(stt, "loudness", lambda p: -1.0)
+    monkeypatch.setattr(stt, "audio_seconds", lambda p: 2.0)
+    monkeypatch.setattr(stt, "transcribe_ex", lambda p: ("Thank you.", 0.9))
+    said = dictator.Dictator(remember=False, learn=False,
+                             expand=False).transcribe(str(wav))
+    assert said.text, "an unreadable file silenced a transcript"
