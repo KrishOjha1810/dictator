@@ -24,8 +24,11 @@ new addresses serve, so every installed app moves over.
 ## How updates reach users
 
 Installed apps use [Sparkle](https://sparkle-project.org). They read
-`appcast.xml` from the bucket (through the website, when it is set) and take
-an update only when:
+`appcast.xml` from the bucket (through the website, when it is set) on their
+own every two days, and when someone picks Check for Updates, at most 10 times
+a day on each Mac. Each check is a read the bucket counts; see
+[`cloudflare-r2.md`](cloudflare-r2.md#what-it-costs). They take an update only
+when:
 
 1. its `.dmg` is signed with the Sparkle update key, and
 2. its build number is higher than their own.

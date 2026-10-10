@@ -15,9 +15,26 @@ R2 has a free allowance every month, and downloads (egress) are always free:
 | Class A operations (writes, lists) | 1 million | about 4 per release |
 | Class B operations (reads) | 10 million | every download, and every update check an installed app makes |
 
-Class B is the one that grows. Each installed app checks the feed about once a
-day, so 10 million reads a month is roughly 300,000 apps checking daily. Past
-the allowance it is $0.36 per million reads.
+Class B is the one that grows. Each installed app checks the feed on its own
+every two days (`SUScheduledCheckInterval` in `native/app/Info.plist`), about
+15 reads a month. "Check for Updates" by hand is limited to 10 a calendar day
+on each Mac (`Updater.manualLimit` in `native/app/Updater.swift`), so one
+person cannot run the count up by clicking. Past the allowance it is $0.36 per
+million reads.
+
+What the free allowance holds, one limit at a time:
+
+| | Free each month | Why |
+|---|---|---|
+| Releases | about 500 | each is 3 writes, so R2 allows 330,000; the 500 Pages builds a month run out first |
+| New downloads | 10 million | one read each, egress free |
+| Update checks | 10 million | one read each, hand or automatic |
+| Installed apps | about 500,000 | 15 automatic checks, a few by hand and one update download each a month |
+
+All of these share the same 10 million reads. 100,000 installed apps use
+about 2 million a month, which leaves 8 million for new downloads. If every
+app used all 10 hand checks every day (315 reads a month each), the allowance
+would hold about 30,000 apps.
 
 R2 asks for a card to turn it on, even on the free allowance.
 
@@ -119,6 +136,21 @@ costs this month, R2 included.
 It takes a small scheduled check that reads the month's R2 usage from
 Cloudflare's GraphQL analytics API and sends a notification past each
 threshold. It is not built yet.
+
+## Open points
+
+- **Automatic updates as a premium feature.** Later, automatic update checks
+  are meant to be for paying users only, with everyone else checking by hand.
+  Today every copy checks on its own every two days. The switch is
+  `SUEnableAutomaticChecks` in `native/app/Info.plist`, and the user setting
+  behind it is `Updater.automaticallyChecks`. Not started: it needs a way to
+  know who has paid, and that check must not send audio or text anywhere.
+- **The limit of 10 hand checks a day is local.** It is kept in the app's
+  preferences on each Mac, so it stops accidents, not someone determined to
+  get around it. A hard limit would need a Cloudflare Worker in front of the
+  bucket.
+- **Custom domain.** Move the bucket off `r2.dev` before there are many users
+  (see "Set up Cloudflare").
 
 ## Moving the storage later
 
