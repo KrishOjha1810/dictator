@@ -2,6 +2,7 @@
   "name": "dictator-website",
   "private": true,
   "type": "module",
+  "packageManager": "pnpm@12.5.1",
   "scripts": {
     "dev": "astro dev",
     "build": "astro build",
