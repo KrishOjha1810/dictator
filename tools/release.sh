@@ -34,7 +34,7 @@ VERSION="${1:?usage: tools/release.sh VERSION [notes.md]}"
 NOTES="${2:-}"
 # shellcheck source=env.sh
 . "$ROOT/tools/env.sh"
-REPO="${DICTATOR_RELEASES_REPO:-cc-vb/dictator}"
+REPO="${DICTATOR_RELEASES_REPO:?set DICTATOR_RELEASES_REPO (owner/name) in the environment or .env}"
 KEYDIR="${DICTATOR_RELEASE_DIR:-$HOME/.dictator-release}"
 DMG="$ROOT/build/Dictator-$VERSION.dmg"
 FEED="$ROOT/build/appcast.xml"

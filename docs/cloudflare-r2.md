@@ -1,6 +1,6 @@
 # Serving releases from Cloudflare R2
 
-Releases are served from the public GitHub repo `cc-vb/dictator` today (see
+Releases are served from the public GitHub repo `mynk03/dictator` today (see
 [`releasing.md`](releasing.md#where-releases-live)). Everything needed to serve
 them from a Cloudflare R2 bucket instead is already in the code and switched
 off. This page is how to switch it on, and back off.

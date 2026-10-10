@@ -16,7 +16,7 @@ You need an Apple silicon Mac with macOS 14 or newer, and:
 - Python 3 (CI runs 3.12)
 
 ```bash
-git clone https://github.com/cc-vb/dictator-app.git ~/dictator
+git clone https://github.com/cc-vb/dictator.git ~/dictator
 cd ~/dictator && scripts/install.sh
 ```
 

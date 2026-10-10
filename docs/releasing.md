@@ -5,12 +5,15 @@ offer as an update. This is for maintainers.
 
 ## Where releases live
 
-The code is in a private repo, `cc-vb/dictator-app`. Releases are published to
-a public repo that holds no code, `cc-vb/dictator`, named by the
-`DICTATOR_RELEASES_REPO` variable. It has the name the code repo used to have,
-so every installed app, which checks
-`github.com/cc-vb/dictator/releases/latest/download/appcast.xml`, keeps
-finding its updates without a release that moves it.
+The code is in a private repo, `cc-vb/dictator`. Releases are published to a
+public repo that holds no code, `mynk03/dictator`, named by the
+`DICTATOR_RELEASES_REPO` variable. `tools/build_dmg.sh` writes the same repo
+into the app as its update feed
+(`github.com/<repo>/releases/latest/download/appcast.xml`).
+
+Moving releases to another repo later means one release published to both:
+apps installed before it still check the old repo, and that release is what
+moves them to the new one.
 
 The website reads the newest release from the same repo when it builds.
 
@@ -53,7 +56,7 @@ The same material is in the repository secrets for CI:
 | `CF_PAGES_DEPLOY_HOOK` | optional: rebuilds the website after a release |
 | `CF_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET` | Cloudflare R2, only used when the `DICTATOR_DOWNLOAD_BASE` repository variable is set |
 
-And one repository variable: `DICTATOR_RELEASES_REPO` = `cc-vb/dictator`.
+And one repository variable: `DICTATOR_RELEASES_REPO` = `mynk03/dictator`.
 
 Local runs read the same names from `.env`. `.env.example` lists all of them.
 

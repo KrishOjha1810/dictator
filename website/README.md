@@ -26,7 +26,7 @@ in the environment wins over `.env`.
 |---|---|
 | `DICTATOR_SITE_URL` | the site's public address, for canonical and share links. On Cloudflare Pages without it, the deployment's own address is used |
 | `DICTATOR_DOWNLOAD_BASE` | the R2 bucket's public URL. Set, the release comes from its `latest.json`, and `/download/mac` and `/appcast.xml` redirect into it |
-| `DICTATOR_RELEASES_REPO` | the public GitHub repo that holds the releases (`cc-vb/dictator`). Read when `DICTATOR_DOWNLOAD_BASE` is not set; see [`docs/cloudflare-r2.md`](../docs/cloudflare-r2.md) for the bucket |
+| `DICTATOR_RELEASES_REPO` | the public GitHub repo that holds the releases (`mynk03/dictator`). Read when `DICTATOR_DOWNLOAD_BASE` is not set; see [`docs/cloudflare-r2.md`](../docs/cloudflare-r2.md) for the bucket |
 | `GITHUB_TOKEN` | optional; the releases repo is public |
 
 ## Where the version number comes from

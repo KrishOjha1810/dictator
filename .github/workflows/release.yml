@@ -21,7 +21,7 @@
 #
 # Where the release goes: the repository variable DICTATOR_RELEASES_REPO
 # (owner/name), a public repo that holds releases and no code, so this repo
-# can stay private while installed apps keep reading their feed from it.
+# can stay private. tools/build_dmg.sh points the app's update feed at it.
 # Publishing there needs the secret RELEASES_TOKEN, a fine-grained token with
 # Contents: read and write on that repo only. Unset, the release goes to this
 # repo, as it did before the split.
@@ -49,7 +49,7 @@ env:
   # a release is GitHub only and the app keeps its current feed address.
   DICTATOR_SITE_URL: ${{ vars.DICTATOR_SITE_URL }}
   DICTATOR_DOWNLOAD_BASE: ${{ vars.DICTATOR_DOWNLOAD_BASE }}
-  RELEASES_REPO: ${{ vars.DICTATOR_RELEASES_REPO || github.repository }}
+  DICTATOR_RELEASES_REPO: ${{ vars.DICTATOR_RELEASES_REPO || github.repository }}
 
 jobs:
   # The gate. ubuntu-latest costs a tenth of a macOS minute, and this is the
@@ -72,11 +72,11 @@ jobs:
             git merge-base --is-ancestor "$GITHUB_SHA" "origin/$b" 2>/dev/null && ok="$b"
           done
           [ -n "$ok" ] || { echo "::error::$GITHUB_REF_NAME is not on any of: $RELEASE_BRANCHES"; exit 1; }
-          if [ "$RELEASES_REPO" != "$GITHUB_REPOSITORY" ] && [ -z "$RELEASES_TOKEN" ]; then
-            echo "::error::No RELEASES_TOKEN secret; it is needed to publish to $RELEASES_REPO"
+          if [ "$DICTATOR_RELEASES_REPO" != "$GITHUB_REPOSITORY" ] && [ -z "$RELEASES_TOKEN" ]; then
+            echo "::error::No RELEASES_TOKEN secret; it is needed to publish to $DICTATOR_RELEASES_REPO"
             exit 1
           fi
-          echo "Releasing $GITHUB_REF_NAME from $ok to $RELEASES_REPO"
+          echo "Releasing $GITHUB_REF_NAME from $ok to $DICTATOR_RELEASES_REPO"
           echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
 
   tests:
@@ -216,7 +216,7 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.RELEASES_TOKEN || github.token }}
         run: |
-          if gh release view "$GITHUB_REF_NAME" -R "$RELEASES_REPO" --json assets --jq '.assets[].name' 2>/dev/null \
+          if gh release view "$GITHUB_REF_NAME" -R "$DICTATOR_RELEASES_REPO" --json assets --jq '.assets[].name' 2>/dev/null \
                | grep -qx appcast.xml; then
             echo "Release $GITHUB_REF_NAME already has its feed; not publishing again"
             echo "skip=true" >> "$GITHUB_OUTPUT"
@@ -229,7 +229,7 @@ jobs:
         run: |
           KEYFILE="$RUNNER_TEMP/sparkle.key"
           ( umask 077; printf '%s' "$ED_KEY" > "$KEYFILE" )
-          tools/appcast.sh "${{ steps.v.outputs.version }}" "$RELEASES_REPO" "$KEYFILE"
+          tools/appcast.sh "${{ steps.v.outputs.version }}" "$DICTATOR_RELEASES_REPO" "$KEYFILE"
           rm -f "$KEYFILE"
 
       - name: Release notes
@@ -259,7 +259,7 @@ jobs:
         with:
           # The tag is made in the releases repo, on its default branch: the
           # commit it names here does not exist there.
-          repository: ${{ env.RELEASES_REPO }}
+          repository: ${{ env.DICTATOR_RELEASES_REPO }}
           token: ${{ secrets.RELEASES_TOKEN || github.token }}
           make_latest: true
           files: |
