@@ -148,17 +148,18 @@ struct SettingsPage: View {
                 .labelsHidden().fixedSize()
             }
             Hairline()
-            SettingRow("When not dictating",
-                       "While the microphone is open the pill always shows, dark with moving "
-                       + "bars. Show on hover: nothing until the pointer comes to its place, "
-                       + "then the pill and its buttons.") {
+            SettingRow("Show the pill",
+                       "On hover: nothing until the pointer comes to its place, then the pill "
+                       + "and its buttons. While dictating, it shows with moving bars unless "
+                       + "set to Never; macOS's orange microphone dot still shows either way.") {
                 Picker("", selection: Binding(get: { st.idle }, set: { v in
                     st.idle = v
                     setIndicator(["idle", v])
                 })) {
-                    Text("Show on hover").tag("hover")
-                    Text("Always show").tag("always")
-                    Text("Hide").tag("hide")
+                    Text("On hover").tag("hover")
+                    Text("Always").tag("always")
+                    Text("Only while dictating").tag("hide")
+                    Text("Never").tag("never")
                 }
                 .labelsHidden().fixedSize()
             }
@@ -176,7 +177,7 @@ struct SettingsPage: View {
                     }
                 }
                 .foregroundColor(Theme.secondary)
-                .disabled(st.idle == "hide")
+                .disabled(st.idle == "hide" || st.idle == "never")
             }
             Hairline()
             SettingRow("Notetaker shortcut",

@@ -54,7 +54,9 @@ and it fades in with its buttons:
 Hovering a button shows its name and shortcut. Drag the pill to any of eight
 places: at the top and bottom centre it lies flat, at the side edges and in
 the corners it stands up. Settings → General chooses whether it shows on
-hover, always, or only while dictating, which buttons it has, and whether the
+hover, always, only while dictating, or never (not even while dictating; the
+orange microphone dot macOS puts in the menu bar still shows), which buttons
+it has, and whether the
 two shortcuts are on. From a terminal: `dictator indicator`,
 `dictator hands-free`, `dictator notes`.
 

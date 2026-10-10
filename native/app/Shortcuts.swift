@@ -114,7 +114,7 @@ struct IndicatorFile {
         if let p = o["position"] as? String, indicatorPositions.contains(where: { $0.0 == p }) {
             position = p
         }
-        if let i = o["idle"] as? String, ["hover", "always", "hide"].contains(i) { idle = i }
+        if let i = o["idle"] as? String, ["hover", "always", "hide", "never"].contains(i) { idle = i }
         else if o["hide_idle"] as? Bool == true { idle = "hide" }
         if let c = o["controls"] as? [String] {
             controls = ["dictate", "notetaker", "scratchpad"].filter { c.contains($0) }

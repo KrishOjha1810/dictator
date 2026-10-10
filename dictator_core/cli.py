@@ -891,7 +891,8 @@ def indicator(rest) -> int:
         return _json(now)
     idle = {"hover": "hidden, shown when the pointer comes to its place",
             "always": "a small faint pill stays on screen",
-            "hide": "hidden, no buttons"}[now["idle"]]
+            "hide": "hidden, no buttons",
+            "never": "never shown, not even while dictating"}[now["idle"]]
     print(f"  position: {now['position']}")
     print(f"  when not dictating: {now['idle']} ({idle})")
     print(f"  buttons on hover: {', '.join(now['controls']) or 'none'}")

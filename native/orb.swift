@@ -24,6 +24,8 @@
 //   always  the small faint grey pill stays on screen, as before; hovering it
 //           shows the buttons.
 //   hide    nothing, and no buttons; it appears only while dictating.
+//   never   nothing, ever, not even while dictating: the one setting that
+//           hides listening. For people who go by macOS's microphone dot.
 //
 // So no pill means our microphone is closed, or this helper is not running. It
 // says nothing about OTHER apps: another program may have the microphone while
@@ -313,7 +315,9 @@ let STATE: URL = {
     return FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".dictator")
 }()
 
-enum IdleMode: String { case hover, always, hide }
+/// "never" is not about idle only: no pill at all, not even while
+/// dictating. The person chose to go by macOS's own microphone dot.
+enum IdleMode: String { case hover, always, hide, never }
 
 /// indicator.json, as orbnative.settings() reads it.
 struct IndicatorSettings: Equatable {
@@ -1050,6 +1054,9 @@ struct Scene: Equatable {
 /// can be read in one place: listening is never hidden and never replaced.
 func scene(look: Look, handsFree: Bool, revealed: Bool, idle: IdleMode,
            controls: [Control], loop: Bool, app: Bool, spot: Spot) -> Scene? {
+    // The one exception to "listening is never hidden": the person turned
+    // the pill off in Settings.
+    if idle == .never { return nil }
     let o = spot.orientation
     let extra = controls.filter {
         $0 != .dictate && app && (idle != .hide)
@@ -1346,7 +1353,7 @@ final class App: NSObject, NSApplicationDelegate, OrbDelegate {
         } else if revealed && Date().timeIntervalSince(lastNear) > 1.0 {
             revealed = false
         }
-        if settings.idle == .hide { revealed = false }
+        if settings.idle == .hide || settings.idle == .never { revealed = false }
 
         let sc = scene(look: look, handsFree: handsFree, revealed: revealed, idle: settings.idle,
                        controls: settings.controls, loop: loopUp, app: appURL != nil,
