@@ -12,7 +12,10 @@
 #      is refused, whoever hosts it
 #   3. writes build/appcast.xml, the feed the app reads
 #   4. creates the GitHub release v<VERSION> with the .dmg (under its own name
-#      and as Dictator.dmg, for the README link) and appcast.xml
+#      and as Dictator.dmg, for the README link) and appcast.xml, in
+#      DICTATOR_RELEASES_REPO: the public repo that holds releases and no
+#      code. The tag is also pushed here, so the code repo records what
+#      shipped; CI then finds the release complete and does not publish again
 #   5. with DICTATOR_DOWNLOAD_BASE set (environment or .env), uploads the same .dmg and
 #      feed to the R2 bucket the website serves (tools/publish_r2.sh)
 #
@@ -29,7 +32,9 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 VERSION="${1:?usage: tools/release.sh VERSION [notes.md]}"
 NOTES="${2:-}"
-REPO="${DICTATOR_REPO:-cc-vb/dictator}"
+# shellcheck source=env.sh
+. "$ROOT/tools/env.sh"
+REPO="${DICTATOR_RELEASES_REPO:-cc-vb/dictator}"
 KEYDIR="${DICTATOR_RELEASE_DIR:-$HOME/.dictator-release}"
 DMG="$ROOT/build/Dictator-$VERSION.dmg"
 FEED="$ROOT/build/appcast.xml"
@@ -72,13 +77,21 @@ tools/appcast.sh "$VERSION" "$REPO" "$KEYDIR/sparkle_ed25519.key"
 cp "$DMG" build/Dictator.dmg
 notes_args=(--generate-notes)
 [ -n "$NOTES" ] && notes_args=(--notes-file "$NOTES")
-gh release create "v$VERSION" -R "$REPO" --target "$(git rev-parse HEAD)" \
+# The code repo's own owner/name, from origin's address.
+ORIGIN="$(git remote get-url origin | sed -E 's#^(git@github\.com:|https://github\.com/)##; s#\.git$##')"
+target_args=(--target "$(git rev-parse HEAD)")
+if [ "$REPO" != "$ORIGIN" ]; then
+    # This commit does not exist in the releases repo, so its tag goes on that
+    # repo's default branch, and the code repo gets the tag that matches.
+    target_args=()
+    git tag "v$VERSION" && git push origin "v$VERSION"
+fi
+gh release create "v$VERSION" -R "$REPO" ${target_args[@]+"${target_args[@]}"} \
     --title "Dictator $VERSION" --latest "${notes_args[@]}" \
     "$DMG" build/Dictator.dmg "$DMG.sha256" "$FEED"
 echo "published v$VERSION: https://github.com/$REPO/releases/tag/v$VERSION"
 
 # 5. the website's copy, and the feed apps on the new address read
-. tools/env.sh
 if [ -n "${DICTATOR_DOWNLOAD_BASE:-}" ]; then
     tools/publish_r2.sh "$VERSION"
 fi

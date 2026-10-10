@@ -40,7 +40,7 @@ and does not mean, is in [`platforms.md`](platforms.md).
 ## From source
 
 ```bash
-git clone https://github.com/cc-vb/dictator.git ~/dictator
+git clone https://github.com/cc-vb/dictator-app.git ~/dictator
 cd ~/dictator && scripts/install.sh
 ```
 

@@ -16,7 +16,7 @@ You need an Apple silicon Mac with macOS 14 or newer, and:
 - Python 3 (CI runs 3.12)
 
 ```bash
-git clone https://github.com/cc-vb/dictator.git ~/dictator
+git clone https://github.com/cc-vb/dictator-app.git ~/dictator
 cd ~/dictator && scripts/install.sh
 ```
 
@@ -30,7 +30,8 @@ python3 -m pip install pytest jellyfish
 python3 -m pytest -q tests
 ```
 
-CI runs the same command on every push and pull request. The tests never touch
+CI runs the same command only inside a release (pushing a `v*` tag on
+`main`), so run it yourself before you open a pull request. The tests never touch
 your real `~/.dictator`: `tests/conftest.py` points the state directory at a
 temporary folder. Keep it that way in any test you add.
 
@@ -72,7 +73,7 @@ These are the things that are easy to break and expensive to get wrong.
 ## Branches and pull requests
 
 - Branch off `main`. Name branches `feat/...`, `fix/...`, `docs/...` and so on.
-- Open a pull request into `main`. CI must pass.
+- Open a pull request into `main`. The tests must pass locally.
 - **Merge with a merge commit, never squash.** The app's build number is the
   commit count of `main`; a squash lowers it, and installed copies then ignore
   every later update.

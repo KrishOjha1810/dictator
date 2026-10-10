@@ -44,7 +44,7 @@ Anyway**. This happens once. Full steps: [`docs/install.md`](docs/install.md).
 **From source.** Needs Homebrew and Apple's command line tools.
 
 ```bash
-git clone https://github.com/cc-vb/dictator.git ~/dictator
+git clone https://github.com/cc-vb/dictator-app.git ~/dictator
 cd ~/dictator && scripts/install.sh
 ```
 
@@ -88,6 +88,7 @@ Every command: [`docs/usage.md`](docs/usage.md).
 | [Platforms](docs/platforms.md) | Windows, iOS, Android, and Mac distribution |
 | [Contributing](docs/CONTRIBUTING.md) | dev setup, tests, rules, branches and commits |
 | [Releasing](docs/releasing.md) | publishing a signed, self-updating release |
+| [Cloudflare R2](docs/cloudflare-r2.md) | serving releases from R2 instead of GitHub, switched off for now |
 
 ## Development
 

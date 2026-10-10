@@ -19,6 +19,13 @@
 # rather than publish an ad-hoc signed app: a new identity per build means
 # every user's Microphone and Accessibility grants stop applying on update.
 #
+# Where the release goes: the repository variable DICTATOR_RELEASES_REPO
+# (owner/name), a public repo that holds releases and no code, so this repo
+# can stay private while installed apps keep reading their feed from it.
+# Publishing there needs the secret RELEASES_TOKEN, a fine-grained token with
+# Contents: read and write on that repo only. Unset, the release goes to this
+# repo, as it did before the split.
+#
 # Every action is pinned to a commit, not a tag: a tag can be moved, and the
 # dmg job holds the release key, the one identity every user's permission
 # grants depend on. The keychain holding it is also deleted straight after
@@ -42,6 +49,7 @@ env:
   # a release is GitHub only and the app keeps its current feed address.
   DICTATOR_SITE_URL: ${{ vars.DICTATOR_SITE_URL }}
   DICTATOR_DOWNLOAD_BASE: ${{ vars.DICTATOR_DOWNLOAD_BASE }}
+  RELEASES_REPO: ${{ vars.DICTATOR_RELEASES_REPO || github.repository }}
 
 jobs:
   # The gate. ubuntu-latest costs a tenth of a macOS minute, and this is the
@@ -56,13 +64,19 @@ jobs:
           fetch-depth: 0
       - name: Tag is on a release branch
         id: v
+        env:
+          RELEASES_TOKEN: ${{ secrets.RELEASES_TOKEN }}
         run: |
           ok=""
           for b in $RELEASE_BRANCHES; do
             git merge-base --is-ancestor "$GITHUB_SHA" "origin/$b" 2>/dev/null && ok="$b"
           done
           [ -n "$ok" ] || { echo "::error::$GITHUB_REF_NAME is not on any of: $RELEASE_BRANCHES"; exit 1; }
-          echo "Releasing $GITHUB_REF_NAME from $ok"
+          if [ "$RELEASES_REPO" != "$GITHUB_REPOSITORY" ] && [ -z "$RELEASES_TOKEN" ]; then
+            echo "::error::No RELEASES_TOKEN secret; it is needed to publish to $RELEASES_REPO"
+            exit 1
+          fi
+          echo "Releasing $GITHUB_REF_NAME from $ok to $RELEASES_REPO"
           echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
 
   tests:
@@ -200,9 +214,9 @@ jobs:
       - name: Already published?
         id: done
         env:
-          GH_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ secrets.RELEASES_TOKEN || github.token }}
         run: |
-          if gh release view "$GITHUB_REF_NAME" --json assets --jq '.assets[].name' 2>/dev/null \
+          if gh release view "$GITHUB_REF_NAME" -R "$RELEASES_REPO" --json assets --jq '.assets[].name' 2>/dev/null \
                | grep -qx appcast.xml; then
             echo "Release $GITHUB_REF_NAME already has its feed; not publishing again"
             echo "skip=true" >> "$GITHUB_OUTPUT"
@@ -215,7 +229,7 @@ jobs:
         run: |
           KEYFILE="$RUNNER_TEMP/sparkle.key"
           ( umask 077; printf '%s' "$ED_KEY" > "$KEYFILE" )
-          tools/appcast.sh "${{ steps.v.outputs.version }}" "$GITHUB_REPOSITORY" "$KEYFILE"
+          tools/appcast.sh "${{ steps.v.outputs.version }}" "$RELEASES_REPO" "$KEYFILE"
           rm -f "$KEYFILE"
 
       - name: Release notes
@@ -243,6 +257,10 @@ jobs:
       - uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64  # v3
         if: steps.done.outputs.skip != 'true'
         with:
+          # The tag is made in the releases repo, on its default branch: the
+          # commit it names here does not exist there.
+          repository: ${{ env.RELEASES_REPO }}
+          token: ${{ secrets.RELEASES_TOKEN || github.token }}
           make_latest: true
           files: |
             build/Dictator.dmg
@@ -268,3 +286,16 @@ jobs:
             exit 0
           fi
           tools/publish_r2.sh "${{ steps.v.outputs.version }}"
+
+      # The website reads the newest release when it builds, so a release asks
+      # Cloudflare Pages for a fresh build. publish_r2.sh already did, with
+      # the bucket; this is for releases served from GitHub.
+      - name: Rebuild the website
+        if: steps.done.outputs.skip != 'true'
+        env:
+          CF_PAGES_DEPLOY_HOOK: ${{ secrets.CF_PAGES_DEPLOY_HOOK }}
+        run: |
+          if [ -n "$DICTATOR_DOWNLOAD_BASE" ] || [ -z "$CF_PAGES_DEPLOY_HOOK" ]; then
+            exit 0
+          fi
+          curl -fsS -X POST "$CF_PAGES_DEPLOY_HOOK" >/dev/null && echo "website rebuild requested"

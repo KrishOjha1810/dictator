@@ -282,12 +282,14 @@ plutil -replace LSMinimumSystemVersion -string "$MIN_MACOS" "$C/Info.plist"
 # only ever point at somebody else's install.
 plutil -remove DictatorCLI "$C/Info.plist" 2>/dev/null || true
 plutil -remove DictatorLog "$C/Info.plist" 2>/dev/null || true
-# Where the app checks for updates. DICTATOR_SITE_URL (environment or .env,
-# a repository variable in CI) moves it to the website; unset, the app keeps
-# the address native/app/Info.plist already has, so a build without it never
-# strands anyone.
+# Where the app checks for updates. With releases served from the R2 bucket
+# (DICTATOR_DOWNLOAD_BASE) and the website in front of it (DICTATOR_SITE_URL),
+# both from the environment or .env, repository variables in CI, it moves to
+# the website, which redirects /appcast.xml into the bucket. Without the
+# bucket the site has no feed to redirect to, so the app keeps the GitHub
+# address native/app/Info.plist already has, and a build never strands anyone.
 . "$ROOT/tools/env.sh"
-if [ -n "${DICTATOR_SITE_URL:-}" ]; then
+if [ -n "${DICTATOR_SITE_URL:-}" ] && [ -n "${DICTATOR_DOWNLOAD_BASE:-}" ]; then
     plutil -replace SUFeedURL -string "${DICTATOR_SITE_URL%/}/appcast.xml" "$C/Info.plist"
 fi
 if [ -f "$ROOT/native/app/AppIcon.icns" ]; then
