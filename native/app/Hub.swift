@@ -109,6 +109,24 @@ struct Sidebar: View {
             ForEach([Page.settings, .help]) { SidebarItem(page: $0) }
 
             VStack(alignment: .leading, spacing: 6) {
+                Rectangle().fill(Color.white.opacity(0.08)).frame(height: 1).padding(.bottom, 5)
+                // The key, so how to start is always on screen.
+                HStack(spacing: 9) {
+                    Text(Prefs.keyNames[model.key] ?? model.key)
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundColor(Theme.railText)
+                        .padding(.horizontal, 7).frame(height: 22)
+                        .background(RoundedRectangle(cornerRadius: 6, style: .continuous)
+                            .fill(Color.white.opacity(0.10)))
+                        .overlay(RoundedRectangle(cornerRadius: 6, style: .continuous)
+                            .strokeBorder(Color.white.opacity(0.20), lineWidth: 1))
+                    Text("hold to talk").font(.system(size: 12))
+                        .foregroundColor(Theme.railText)
+                }
+                Text("double tap for hands free")
+                    .font(.system(size: 11)).foregroundColor(Theme.railSecondary)
+                    .padding(.bottom, 2)
+                // Ready, or the model still downloading and how far it got.
                 StatusLine()
                 HStack(spacing: 5) {
                     Image(systemName: "lock.fill").font(.system(size: 9, weight: .bold))
