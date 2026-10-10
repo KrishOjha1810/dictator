@@ -423,6 +423,7 @@ struct HomePage: View {
         return HStack(alignment: .center, spacing: Theme.s5) {
             VStack(alignment: .leading, spacing: Theme.s2) {
                 Text(greeting).font(.display(30, .bold)).foregroundColor(.white)
+                    .lineLimit(1).minimumScaleFactor(0.75)
                 HStack(spacing: 6) {
                     Text("Hold")
                     Text(key).font(.system(size: 12, weight: .bold, design: .rounded))
@@ -480,7 +481,15 @@ struct HomePage: View {
 
     private var greeting: String {
         let h = Calendar.current.component(.hour, from: Date())
-        return h < 12 ? "Good morning" : h < 18 ? "Good afternoon" : "Good evening"
+        let part = h < 12 ? "Good morning" : h < 18 ? "Good afternoon" : "Good evening"
+        return firstName.map { "\(part), \($0)" } ?? part
+    }
+
+    /// The first word of the Mac's own account name ("Shivam" from "Shivam
+    /// Dhakad"). Nothing to set and nothing asked at first launch; with no
+    /// name on the account the greeting is just "Good evening".
+    private var firstName: String? {
+        NSFullUserName().split(separator: " ").first.map(String.init)
     }
 
     private func stat(_ symbol: String, _ big: String, _ small: String) -> some View {
