@@ -27,6 +27,9 @@
 //   1  it never started. Nothing was recorded and stderr says why.
 //   5  it started, recorded, and then something stopped it early. The file
 //      holds PART of what was said.
+//   6  the caller asked it to stop before the microphone was open. Nothing
+//      was recorded and nothing was lost: the key was down for less time
+//      than it takes to open a device.
 //
 // The third one is the reason this section exists. AVAudioRecorder stops on
 // its own when the input device changes underneath it, which is what happens
@@ -43,6 +46,7 @@ import Foundation
 // share a constant across the two, so it is written down in both places and
 // tests/test_record.py asserts they agree.
 let CUT_SHORT: Int32 = 5
+let NEVER_OPENED: Int32 = 6
 
 let args = CommandLine.arguments
 
@@ -89,6 +93,41 @@ let maxSecs = args.count > 2 ? (Double(args[2]) ?? 120.0) : 120.0
 // meter that is one flush behind is a meter that lies about whether the mic is
 // open. Deleted on the way out so nothing can read a stale level.
 let levelFile = URL(fileURLWithPath: args[1] + ".lvl")
+
+// Refuse the default action for these signals NOW, before anything slow.
+//
+// This used to sit after `recorder.record()`, which left a window running
+// from process start, through the permission check, the AVAudioRecorder
+// init, prepareToRecord and record, in which SIGTERM still meant immediate
+// death. A hold shorter than that window was killed mid setup, and because
+// the WAV header is only written at stop, the caller found a file claiming
+// zero samples and nothing at all on stderr.
+//
+// That is not theoretical. In one real log five holds between 758ms and
+// 2521ms came back as "no audio captured (0 bytes). the recorder said
+// nothing", which is exactly the shape of this: no error, no audio, and a
+// hold long enough that the person had already started talking.
+//
+// `asked` is read below: a stop that arrives before the device is open has
+// nothing to finalise, so it exits saying so rather than pretending it
+// recorded an empty room.
+var open = false
+signal(SIGTERM, SIG_IGN)
+signal(SIGINT, SIG_IGN)
+let onTerm = DispatchSource.makeSignalSource(signal: SIGTERM, queue: .main)
+let onInt = DispatchSource.makeSignalSource(signal: SIGINT, queue: .main)
+
+// Resumed here, with a handler that only has to know the device is not open
+// yet. SIG_IGN alone is not enough: a dispatch source does not receive
+// anything until it is resumed, so blocking the default action and resuming
+// later means the signal is simply dropped and the process hangs with the
+// microphone held. That is worse than the crash it replaced.
+//
+// Replaced below with the real handler once there is a header to write.
+onTerm.setEventHandler { exit(NEVER_OPENED) }
+onInt.setEventHandler { exit(NEVER_OPENED) }
+onTerm.resume()
+onInt.resume()
 
 // Ask before recording, rather than recording silence and blaming the mic.
 // Already granted is the normal case: this process inherits the grant of
@@ -193,16 +232,11 @@ watcher.onStop = { ok, detail in
 }
 recorder.delegate = watcher
 
-// SIG_IGN first: the default action for SIGTERM kills us before the dispatch
-// source ever sees it, and the file would be left with an empty header.
-signal(SIGTERM, SIG_IGN)
-signal(SIGINT, SIG_IGN)
-let onTerm = DispatchSource.makeSignalSource(signal: SIGTERM, queue: .main)
-let onInt = DispatchSource.makeSignalSource(signal: SIGINT, queue: .main)
+// The device is up, so from here a stop has a header to write. The sources
+// are already running; this only swaps what they do.
+open = true
 onTerm.setEventHandler { finish(0) }
 onInt.setEventHandler { finish(0) }
-onTerm.resume()
-onInt.resume()
 
 // 0..1, on the same curve the indicator already expects. averagePower is dB
 // full scale (-160 to 0), so it becomes an amplitude first; the square root

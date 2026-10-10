@@ -10,6 +10,7 @@ either refused or transcribed as noise, and the symptom of getting it wrong is
 not an error, it is a key that produces nonsense.
 """
 import os
+import re
 import shutil
 import subprocess
 import time
@@ -362,3 +363,38 @@ def test_reaching_max_seconds_is_not_an_interruption(tmp_path, monkeypatch):
     assert recorder.why_it_stopped(p) == ""
     with wave.open(str(tmp_path / "capped.wav"), "rb") as w:
         assert w.getnframes() / 16000 > 1.0, "the cap closed the file too early"
+
+
+def test_the_swift_and_python_sides_agree_on_never_opened():
+    """Exit code 6 means the key came up before the microphone was open.
+
+    Kept in step by hand, like CUT_SHORT above, because there is nowhere for
+    Swift and Python to share a constant."""
+    src = (Path(__file__).resolve().parent.parent
+           / "native" / "record.swift").read_text()
+    m = re.search(r"let NEVER_OPENED: Int32 = (\d+)", src)
+    assert m, "record.swift no longer defines NEVER_OPENED"
+    assert int(m.group(1)) == recorder.NEVER_OPENED
+
+
+def test_the_signal_handlers_go_up_before_the_device_is_opened():
+    """They used to be installed after `recorder.record()`.
+
+    That left a window running from process start, through the permission
+    check and the device open, in which SIGTERM still meant immediate death,
+    and because the WAV header is only written at stop the caller found a
+    file claiming zero samples with nothing on stderr. Five holds between
+    758ms and 2521ms came back that way in one real log.
+
+    Resumed as well as installed: a dispatch source receives nothing until it
+    is resumed, so blocking the default action and resuming later drops the
+    signal and hangs with the microphone held, which is worse."""
+    src = (Path(__file__).resolve().parent.parent
+           / "native" / "record.swift").read_text()
+    guard = src.index("signal(SIGTERM, SIG_IGN)")
+    resume = src.index("onTerm.resume()")
+    opened = src.index("AVCaptureDevice.authorizationStatus")
+    record = src.index("recorder.record(forDuration:")
+    assert guard < opened, "the default action is still live while opening"
+    assert resume < opened, "the source is not receiving yet while opening"
+    assert resume < record

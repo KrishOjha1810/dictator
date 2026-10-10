@@ -31,6 +31,11 @@ BIN = core.helper_path("dictator-rec")
 # fails rather than quietly meaning something else.
 COULD_NOT_START = 1
 CUT_SHORT = 5
+# Terminated before the microphone was open. Nothing was recorded, and
+# nothing was lost: the key was down for less time than opening a device
+# takes. Only really reachable on the first hold after a boot, when the
+# audio frameworks are still coming off disk.
+NEVER_OPENED = 6
 
 
 def why_it_stopped(proc) -> str:
@@ -50,6 +55,10 @@ def why_it_stopped(proc) -> str:
     try:
         if not getattr(proc, "dictator_native", False):
             return ""
+        if proc.returncode == NEVER_OPENED:
+            return ("the key came up before the microphone was open, so "
+                    "there was nothing to record. This is almost always the "
+                    "first hold after a restart; hold it a moment longer")
         if proc.returncode == CUT_SHORT:
             return ("the recording was cut short: the input device changed, "
                     "or something else took the microphone, while you were "

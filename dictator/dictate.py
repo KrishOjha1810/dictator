@@ -387,9 +387,20 @@ class Dictation:
                 why = (core.STATE_DIR / "rec.err").read_text().strip()[:200]
             except Exception:
                 pass
+            # `cut` is read below, but a zero byte file is exactly the
+            # case where its reason is the whole story, so it is read here
+            # too rather than letting "the recorder said nothing" stand in
+            # for an explanation the process already gave us.
+            early = ""
+            try:
+                from . import recorder as _r
+                early = _r.why_it_stopped(p)
+            except Exception:
+                pass
             say(f"no audio captured ({size} bytes)."
-                + (f" the recorder said: {why}" if why
-                   else " the recorder said nothing."))
+                + (f" {early}" if early
+                   else (f" the recorder said: {why}" if why
+                         else " the recorder said nothing.")))
 
         # Keep saying "thinking" for as long as it is true. The indicator only
         # trusts a state written in the last second, and transcription takes
