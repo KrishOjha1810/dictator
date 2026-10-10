@@ -24,7 +24,9 @@
 # repository variable DICTATOR_DOWNLOAD_BASE and reached with the R2 secrets.
 # tools/build_dmg.sh points the app's update feed there. The same files also
 # go to a GitHub release in this repo, which is private: an archive of every
-# version for the maintainers, not something users read.
+# version for the maintainers, not something users read. Then the website is
+# built and published again (.github/workflows/website.yml), so it shows the
+# new version.
 #
 # Every action is pinned to a commit, not a tag: a tag can be moved, and the
 # dmg job holds the release key, the one identity every user's permission
@@ -269,7 +271,6 @@ jobs:
           R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
           R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
           R2_BUCKET: ${{ secrets.R2_BUCKET }}
-          CF_PAGES_DEPLOY_HOOK: ${{ secrets.CF_PAGES_DEPLOY_HOOK }}
         run: |
           tools/publish_r2.sh "${{ steps.v.outputs.version }}"
 
@@ -284,3 +285,10 @@ jobs:
             build/Dictator-*.dmg.sha256
             build/appcast.xml
           body_path: build/notes.md
+
+  # The website writes the version, size and download link into its pages when
+  # it is built, so every app release publishes it again.
+  website:
+    needs: dmg
+    uses: ./.github/workflows/website.yml
+    secrets: inherit

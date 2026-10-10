@@ -23,20 +23,27 @@ R2 asks for a card to turn it on, even on the free allowance.
 
 ## Set up Cloudflare
 
-You need a domain on Cloudflare. The bucket's free `r2.dev` address is rate
-limited and not meant for real traffic, and the feed address is written into
-every app, so it has to be one you keep.
+No domain is needed to start. The website gets a free `<name>.pages.dev`
+address and the bucket a free `pub-….r2.dev` one. Apps only ever see the
+website's address (its `/appcast.xml` redirects into the bucket), so the
+bucket can move to a custom domain later by changing `DICTATOR_DOWNLOAD_BASE`
+alone. Do that before the app has many users: `r2.dev` is rate limited and
+not meant for production traffic.
 
-1. **R2 → Create bucket**, for example `dictator-downloads`.
-2. **Bucket → Settings → Custom Domains → Connect Domain**, for example
-   `downloads.example.com`. That address is `DICTATOR_DOWNLOAD_BASE`.
-3. **R2 → Manage R2 API Tokens → Create API token**: Object Read & Write,
+1. **Workers & Pages → Create → Pages → Upload assets**: name the project
+   (it becomes `<name>.pages.dev`, and cannot be renamed) and upload a build
+   of the website (`pnpm build` in `website/`, then zip `dist/`). The name
+   is `CF_PAGES_PROJECT`, the address `DICTATOR_SITE_URL`.
+2. **R2 → Create bucket**, for example `dictator-downloads`.
+3. **Bucket → Settings → Public Development URL → Enable**. That
+   `https://pub-….r2.dev` address is `DICTATOR_DOWNLOAD_BASE`. With a domain
+   on Cloudflare, **Custom Domains → Connect Domain** instead.
+4. **R2 → API Tokens → Create Account API token**: Object Read & Write,
    limited to that bucket. Note the access key ID and the secret (shown once),
    and the account ID on the R2 overview page.
-4. **Workers & Pages → the website → Settings → Builds → Deploy hooks**:
-   create one for `main`. That URL is `CF_PAGES_DEPLOY_HOOK`.
-5. **The website → Settings → Variables**: `DICTATOR_DOWNLOAD_BASE`, and
-   `DICTATOR_SITE_URL` once the site has its address.
+5. **Manage Account → Account API Tokens → Create Token → Custom token**:
+   permission Account → Cloudflare Pages → Edit. That is `CF_PAGES_TOKEN`,
+   which publishes the website.
 
 ## Set up GitHub
 
@@ -44,20 +51,37 @@ In `cc-vb/dictator`, **Settings → Secrets and variables → Actions**:
 
 | Kind | Name | Value |
 |---|---|---|
-| Variable | `DICTATOR_DOWNLOAD_BASE` | `https://downloads.example.com` |
-| Variable | `DICTATOR_SITE_URL` | `https://example.com`, once the website has it |
+| Variable | `DICTATOR_SITE_URL` | `https://<name>.pages.dev` |
+| Variable | `DICTATOR_DOWNLOAD_BASE` | `https://pub-….r2.dev` |
+| Variable | `CF_PAGES_PROJECT` | the Pages project's name |
 | Secret | `CF_ACCOUNT_ID` | the account ID |
-| Secret | `R2_ACCESS_KEY_ID` | from step 3 |
-| Secret | `R2_SECRET_ACCESS_KEY` | from step 3 |
+| Secret | `R2_ACCESS_KEY_ID` | from step 4 |
+| Secret | `R2_SECRET_ACCESS_KEY` | from step 4 |
 | Secret | `R2_BUCKET` | `dictator-downloads` |
-| Secret | `CF_PAGES_DEPLOY_HOOK` | from step 4 |
+| Secret | `CF_PAGES_TOKEN` | from step 5 |
 
 For releases made from your Mac, put the same names in `.env`.
 
 Decide on `DICTATOR_SITE_URL` before the first release anyone installs. With
-it, apps check `https://example.com/appcast.xml`, which the website redirects
-into the bucket, so the storage can change later without moving any app.
-Without it they check the bucket directly.
+it, apps check `<site>/appcast.xml`, which the website redirects into the
+bucket, so the storage can change later without moving any app. Without it
+they check the bucket directly.
+
+## Publishing the website
+
+`.github/workflows/website.yml` builds the site and publishes it to the Pages
+project. It runs after every app release, because the site writes the
+version, size and download link into its pages when it is built, and on a
+`website-*` tag on `main` for a change to the site alone:
+
+```bash
+git tag website-2026-10-10 && git push origin website-2026-10-10
+```
+
+It costs nothing: about a minute of a Linux runner, and Pages does not charge
+for publishing or serving a static site. The bucket keeps the previous
+release's `.dmg` too, so the old site's download link still works in the
+minute before the new site is up.
 
 ## The first release
 

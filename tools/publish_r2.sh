@@ -1,24 +1,25 @@
 #!/usr/bin/env bash
 # Publish a built release to the Cloudflare R2 bucket the website and the
-# installed apps read, then ask Cloudflare Pages to rebuild the site.
+# installed apps read.
 #
 #   tools/publish_r2.sh VERSION
 #
-# The bucket only ever holds the newest release:
+# The bucket holds the newest release and the .dmg of the one before it:
 #   Dictator-VERSION.dmg   what the website's download button serves, named
 #                          with its version so people know what they have
-#   latest.json            version, file name, size and SHA256 the site shows
+#   latest.json            version, file name, size and SHA256 the site shows,
+#                          and the previous release's file
 #   appcast.xml            the update feed installed apps read
 #
 # The feed goes up after the .dmg, so no app is told about an update before
-# its file is in place. The previous .dmg is deleted only after that, once
-# nothing points at it any more.
+# its file is in place. The previous .dmg is kept until the next release:
+# the website is redeployed after this, and until it is, its download button
+# still points at that file.
 #
 # Needs build/Dictator-VERSION.dmg and build/appcast.xml (tools/build_dmg.sh,
 # tools/appcast.sh), and in the environment or .env (see .env.example):
 #   DICTATOR_DOWNLOAD_BASE
 #   CF_ACCOUNT_ID  R2_ACCESS_KEY_ID  R2_SECRET_ACCESS_KEY  R2_BUCKET
-#   CF_PAGES_DEPLOY_HOOK (optional: without it the site rebuilds on its next deploy)
 #
 # Used by tools/release.sh and by the dmg job in .github/workflows/release.yml.
 set -euo pipefail
@@ -55,9 +56,13 @@ put() {
 }
 
 FILE="Dictator-$VERSION.dmg"
-# What the bucket holds now, so its .dmg can be removed once this one is live.
-PREVIOUS="$(curl -fsS --max-time 30 "$DOWNLOAD_BASE/latest.json" 2>/dev/null \
-    | sed -n 's/.*"file": *"\(Dictator-[0-9][0-9.]*\.dmg\)".*/\1/p' | head -1 || true)"
+# What the bucket holds now: its .dmg becomes the previous one, and the one
+# before that is no longer pointed at by anything.
+CURRENT="$(curl -fsS --max-time 30 "$DOWNLOAD_BASE/latest.json" 2>/dev/null || true)"
+field() { printf '%s' "$CURRENT" | sed -n "s/.*\"$1\": *\"\(Dictator-[0-9][0-9.]*\.dmg\)\".*/\1/p" | head -1; }
+PREVIOUS="$(field file)"
+OLDER="$(field previous)"
+[ "$PREVIOUS" != "$FILE" ] || PREVIOUS="$OLDER"
 
 SIZE="$(stat -f %z "$DMG")"
 SHA="$(shasum -a 256 "$DMG" | awk '{print $1}')"
@@ -74,7 +79,8 @@ cat > "$LATEST" <<EOF
     "sha256": "$SHA",
     "minOS": "14.0",
     "arch": "Apple silicon"
-  }
+  },
+  "previous": "$PREVIOUS"
 }
 EOF
 
@@ -84,15 +90,10 @@ put "$DMG" "$FILE" application/x-apple-diskimage "public, max-age=31536000, immu
 put "$LATEST" latest.json application/json "no-cache"
 put "$FEED" appcast.xml application/xml "no-cache"
 
-if [ -n "$PREVIOUS" ] && [ "$PREVIOUS" != "$FILE" ]; then
+if [ -n "$OLDER" ] && [ "$OLDER" != "$FILE" ] && [ "$OLDER" != "$PREVIOUS" ]; then
     curl -fsS --retry 3 -X DELETE \
         --aws-sigv4 "aws:amz:auto:s3" \
         --user "$R2_ACCESS_KEY_ID:$R2_SECRET_ACCESS_KEY" \
-        "$ENDPOINT/$PREVIOUS" >/dev/null && echo "removed $PREVIOUS"
-fi
-
-if [ -n "${CF_PAGES_DEPLOY_HOOK:-}" ]; then
-    curl -fsS -X POST "$CF_PAGES_DEPLOY_HOOK" >/dev/null
-    echo "site rebuild requested"
+        "$ENDPOINT/$OLDER" >/dev/null && echo "removed $OLDER"
 fi
 echo "published $VERSION to $DOWNLOAD_BASE"
