@@ -18,6 +18,8 @@ struct HubView: View {
     var body: some View {
         HStack(spacing: 0) {
             Sidebar()
+            VStack(spacing: 0) {
+            TopBar()
             Group {
                 switch model.page {
                 case .home: HomePage()
@@ -41,6 +43,7 @@ struct HubView: View {
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            }
             .background(Theme.background)
         }
         .frame(minWidth: 820, minHeight: 560)
@@ -51,100 +54,72 @@ struct HubView: View {
 }
 
 // ---------------------------------------------------------------------------
-// Sidebar: an ink rail with the mark, the palette, and the pages in groups.
+// Sidebar: the wordmark, the pages, and at its foot the key and the privacy
+// promise. A step below the canvas in both appearances; the selected page is
+// the one solid blue thing in it.
 
 struct Sidebar: View {
     @EnvironmentObject var model: AppModel
 
-    /// What each group is for, in the order a day goes: say things, teach
-    /// it, keep things.
-    static let groups: [(String, [Page])] = [
-        ("", [.home]),
-        ("Teach", [.words, .snippets, .style]),
-        ("Keep", [.scratchpad, .meetings, .review]),
-    ]
+    /// In the order a day goes: say things, teach it, keep things.
+    static let pages: [Page] = [.home, .words, .snippets, .style, .scratchpad, .meetings, .review]
 
     var body: some View {
         VStack(alignment: .leading, spacing: 2) {
-            HStack(spacing: 10) {
-                BrandMark(size: 26)
-                Text("Dictator").font(.display(16, .bold))
-                    .foregroundColor(Theme.railText)
-            }
-            .padding(.horizontal, 6)
-            .padding(.bottom, Theme.s3)
+            Wordmark(size: 19)
+                .padding(.horizontal, 8)
+                .padding(.bottom, Theme.s4)
 
-            Button { model.paletteOpen = true } label: {
-                HStack(spacing: Theme.s2) {
-                    Image(systemName: "magnifyingglass").font(.system(size: 11, weight: .semibold))
-                    Text("Search or jump").font(.system(size: 12.5))
-                    Spacer()
-                    Text("⌘K").font(.system(size: 11, weight: .semibold, design: .rounded))
-                        .padding(.horizontal, 5).padding(.vertical, 1)
-                        .background(RoundedRectangle(cornerRadius: 4).fill(Color.white.opacity(0.08)))
-                }
-                .foregroundColor(Theme.railSecondary)
-                .padding(.horizontal, 10)
-                .frame(height: 30)
-                .background(RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .fill(Color.white.opacity(0.06)))
-                .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .strokeBorder(Color.white.opacity(0.08), lineWidth: 1))
-                .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-            .padding(.bottom, Theme.s3)
-
-            ForEach(Self.groups, id: \.0) { title, pages in
-                if !title.isEmpty {
-                    Text(title).font(.system(size: 11.5, weight: .semibold))
-                        .foregroundColor(Theme.railSecondary.opacity(0.8))
-                        .padding(.leading, 10)
-                        .padding(.top, Theme.s3)
-                        .padding(.bottom, 2)
-                }
-                ForEach(pages) { SidebarItem(page: $0) }
-            }
+            ForEach(Self.pages) { SidebarItem(page: $0) }
             Spacer()
             ForEach([Page.settings, .help]) { SidebarItem(page: $0) }
 
             VStack(alignment: .leading, spacing: 6) {
-                Rectangle().fill(Color.white.opacity(0.08)).frame(height: 1).padding(.bottom, 5)
                 // The key, so how to start is always on screen.
-                HStack(spacing: 9) {
-                    Text(Prefs.keyNames[model.key] ?? model.key)
-                        .font(.system(size: 11, weight: .semibold))
-                        .foregroundColor(Theme.railText)
-                        .padding(.horizontal, 7).frame(height: 22)
-                        .background(RoundedRectangle(cornerRadius: 6, style: .continuous)
-                            .fill(Color.white.opacity(0.10)))
-                        .overlay(RoundedRectangle(cornerRadius: 6, style: .continuous)
-                            .strokeBorder(Color.white.opacity(0.20), lineWidth: 1))
+                HStack(spacing: 8) {
+                    KeyCap(label: Prefs.keyNames[model.key] ?? model.key)
                     Text("hold to talk").font(.system(size: 12))
                         .foregroundColor(Theme.railText)
                 }
                 Text("double tap for hands free")
                     .font(.system(size: 11)).foregroundColor(Theme.railSecondary)
-                    .padding(.bottom, 2)
                 // Ready, or the model still downloading and how far it got.
                 StatusLine()
-                HStack(spacing: 5) {
-                    Image(systemName: "lock.fill").font(.system(size: 9, weight: .bold))
-                    Text("Local only, on this Mac")
-                        .font(.system(size: 11, weight: .medium))
-                }
-                .foregroundColor(Color(nsColor: Palette.cursorGlow).opacity(0.85))
-                .help("Speech is turned into text here. Nothing you say is uploaded.")
+                    .padding(.bottom, 4)
+                LocalCard()
             }
-            .padding(.horizontal, 10)
+            .padding(.horizontal, 4)
             .padding(.top, Theme.s3)
         }
         .padding(.horizontal, Theme.s3)
         .padding(.top, 50)   // under the traffic lights
-        .padding(.bottom, Theme.s4)
+        .padding(.bottom, Theme.s3)
         .frame(width: 216)
         .frame(maxHeight: .infinity)
         .background(Theme.rail)
+        .overlay(alignment: .trailing) { Rectangle().fill(Theme.border).frame(width: 1) }
+    }
+}
+
+/// The privacy promise in the sidebar's corner, in the live colour.
+struct LocalCard: View {
+    var body: some View {
+        HStack(spacing: 10) {
+            Image(systemName: "lock.fill")
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundColor(Theme.live)
+            VStack(alignment: .leading, spacing: 1) {
+                Text("Local on this Mac").font(.system(size: 12, weight: .semibold))
+                    .foregroundColor(Theme.live)
+                Text("No audio is uploaded.").font(.system(size: 11))
+                    .foregroundColor(Theme.secondary)
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 8)
+        .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(Theme.liveSoft))
+        .help("Speech is turned into text here. Nothing you say is uploaded.")
     }
 }
 
@@ -159,29 +134,69 @@ struct SidebarItem: View {
             HStack(spacing: 10) {
                 Image(systemName: page.symbol)
                     .font(.system(size: 12.5, weight: .medium))
-                    .foregroundColor(on ? Theme.railText : Theme.railSecondary)
+                    .foregroundColor(on ? .white : Theme.railSecondary)
                     .frame(width: 18)
                 Text(page.rawValue)
                     .font(.system(size: 13, weight: on ? .semibold : .regular))
-                    .foregroundColor(on ? Theme.railText : Theme.railText.opacity(0.82))
+                    .foregroundColor(on ? .white : Theme.railText)
                 Spacer()
             }
             .padding(.horizontal, 10)
-            .frame(height: 30)
+            .frame(height: 32)
             .background(RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .fill(on ? Theme.railSelected : (hover.on ? Theme.railHover : .clear)))
-            // The selected page carries the icon's cursor: a teal bar.
-            .overlay(alignment: .leading) {
-                if on {
-                    Capsule().fill(Theme.cursorGlow).frame(width: 3, height: 16)
-                        .shadow(color: Theme.cursorGlow.opacity(0.7), radius: 3)
-                        .offset(x: -1)
-                }
-            }
+                .fill(on ? Theme.accentFill : (hover.on ? Theme.railHover : .clear)))
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .onHover { hover.on = $0 && !snapshotRun }
+    }
+}
+
+/// Over every page: the command palette's field, and the light and dark
+/// switch. The switch sets the same preference as Settings > Appearance.
+struct TopBar: View {
+    @EnvironmentObject var model: AppModel
+    @Environment(\.colorScheme) private var scheme
+
+    var body: some View {
+        HStack(spacing: Theme.s3) {
+            Button { model.paletteOpen = true } label: {
+                HStack(spacing: Theme.s2) {
+                    Image(systemName: "magnifyingglass").font(.system(size: 12, weight: .medium))
+                    Text("Search or jump…").font(.system(size: 13))
+                    Spacer()
+                    Text("⌘ K").font(.system(size: 11, weight: .semibold))
+                        .padding(.horizontal, 6).padding(.vertical, 2)
+                        .background(RoundedRectangle(cornerRadius: 5, style: .continuous)
+                            .fill(Theme.raised))
+                }
+                .foregroundColor(Theme.tertiary)
+                .padding(.horizontal, Theme.s3)
+                .frame(height: 34)
+                .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(Theme.card))
+                .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .strokeBorder(Theme.border, lineWidth: 1))
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+
+            Button { Appearance.set(scheme == .dark ? .light : .dark) } label: {
+                Image(systemName: scheme == .dark ? "moon" : "sun.max")
+                    .font(.system(size: 14, weight: .medium))
+                    .foregroundColor(Theme.secondary)
+                    .frame(width: 34, height: 34)
+                    .background(RoundedRectangle(cornerRadius: 10, style: .continuous)
+                        .fill(Theme.card))
+                    .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous)
+                        .strokeBorder(Theme.border, lineWidth: 1))
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .help(scheme == .dark ? "Switch to light" : "Switch to dark")
+        }
+        .padding(.horizontal, Theme.s5)
+        .padding(.top, 10)
+        .padding(.bottom, 2)
     }
 }
 
@@ -241,7 +256,7 @@ struct PageScroll<Content: View>: View {
             VStack(alignment: .leading, spacing: Theme.s5) { content }
                 .frame(maxWidth: 760, alignment: .leading)
                 .padding(.horizontal, Theme.s7)
-                .padding(.top, 48)
+                .padding(.top, Theme.s5)
                 .padding(.bottom, Theme.s6)
                 .frame(maxWidth: .infinity)
         }
@@ -317,8 +332,8 @@ struct Placeholder: View {
 }
 
 // ---------------------------------------------------------------------------
-// Home: today. A hero with the brand gradient and the time saved, the
-// numbers, the privacy promise, then history by day, with search.
+// Home: today. A greeting with the key and the language, four numbers, then
+// what was said, by day, with search.
 
 struct Said: Identifiable {
     var id: String
@@ -369,18 +384,26 @@ struct HomePage: View {
     var body: some View {
         PageScroll {
             if let r = model.clash { RivalBanner(running: r) }
-            hero
+            header
             HStack(spacing: Theme.s3) {
-                stat("text.word.spacing", st.words.map { $0.formatted() } ?? "–", "words, all time")
-                stat("hourglass", st.saved.map(duration) ?? "–", "saved against typing")
-                stat("speedometer", st.wpm.map { "\(Int($0.rounded()))" } ?? "–", "words a minute")
-                stat("flame", st.streak.map { "\($0)" } ?? "–", "day streak")
+                stat("doc.text.fill", Theme.accent, Theme.accentSoft,
+                     (st.todayWords ?? 0).formatted(), "words today",
+                     st.words.map { "\($0.formatted()) all time" })
+                stat("clock", Theme.coral, Theme.coralSoft,
+                     duration(st.todaySaved ?? 0), "time saved today",
+                     st.saved.map { "\(duration($0)) all time" })
+                stat("waveform", Theme.live, Theme.liveSoft,
+                     st.wpm.map { "\(Int($0.rounded()))" } ?? "–", "words a minute",
+                     "typing is about 40")
+                stat("flame.fill", Theme.coral, Theme.coralSoft,
+                     st.streak.map { "\($0)" } ?? "–", "day streak",
+                     model.last?.ms.map { "last pasted in \(waited($0))" })
             }
-            PrivacyPromise()
+            .fixedSize(horizontal: false, vertical: true)
 
             VStack(alignment: .leading, spacing: Theme.s3) {
                 HStack {
-                    Text("History").font(.sectionTitle).foregroundColor(Theme.text)
+                    Text("Recent dictation").font(.sectionTitle).foregroundColor(Theme.text)
                     Spacer()
                     SearchField(prompt: "Search what you said", text: $st.query)
                         .frame(width: 260)
@@ -409,6 +432,7 @@ struct HomePage: View {
         .onAppear {
             if let q = model.takeSeed(.home) { st.query = q }
             load()
+            model.loadLanguage()
             model.checkRivals()
         }
         // A hold writes its history row before last.json, and the app reads
@@ -417,66 +441,30 @@ struct HomePage: View {
         .onChange(of: model.last?.at) { load() }
     }
 
-    /// The brand moment: the gradient, today's words, and the time they saved.
-    private var hero: some View {
-        let key = Prefs.keyNames[model.key] ?? model.key
-        return HStack(alignment: .center, spacing: Theme.s5) {
+    /// The greeting, how to start, and what language to expect.
+    private var header: some View {
+        HStack(alignment: .top) {
             VStack(alignment: .leading, spacing: Theme.s2) {
-                Text(greeting).font(.display(30, .bold)).foregroundColor(.white)
+                Text(greeting + " 👋").font(.display(26, .bold)).tracking(-0.4)
+                    .foregroundColor(Theme.text)
                     .lineLimit(1).minimumScaleFactor(0.75)
                 HStack(spacing: 6) {
                     Text("Hold")
-                    Text(key).font(.system(size: 12, weight: .bold, design: .rounded))
-                        .padding(.horizontal, 7).frame(minHeight: 22)
-                        .background(RoundedRectangle(cornerRadius: 6, style: .continuous)
-                            .fill(Color.white.opacity(0.18)))
-                        .overlay(RoundedRectangle(cornerRadius: 6, style: .continuous)
-                            .strokeBorder(Color.white.opacity(0.35), lineWidth: 1))
-                    Text("and talk. Double-tap it to go hands free.")
+                    KeyCap(label: Prefs.keyNames[model.key] ?? model.key)
+                    Text("and speak. Your words appear wherever the cursor is.")
                 }
-                .font(.system(size: 14, weight: .medium))
-                .foregroundColor(.white.opacity(0.88))
-                HStack(spacing: Theme.s2) {
-                    heroChip("text.cursor", st.todayWords.map { "\($0.formatted()) words today" }
-                             ?? "No words yet today")
-                    if let ms = model.last?.ms {
-                        heroChip("bolt.fill", "last pasted in \(waited(ms))")
-                    }
-                }
-                .padding(.top, Theme.s2)
+                .font(.system(size: 13.5))
+                .foregroundColor(Theme.secondary)
             }
-            Spacer(minLength: 0)
-            VStack(alignment: .trailing, spacing: 2) {
-                HStack(alignment: .firstTextBaseline, spacing: 6) {
-                    Text(st.todaySaved.map(duration) ?? "0 s")
-                        .font(.display(40, .bold))
-                        .foregroundColor(.white)
-                        .lineLimit(1).minimumScaleFactor(0.6)
-                    Capsule().fill(Theme.cursorGlow).frame(width: 4, height: 34)
-                        .shadow(color: Theme.cursorGlow.opacity(0.9), radius: 6)
-                }
-                Text("saved today against typing")
-                    .font(.system(size: 12.5, weight: .medium)).foregroundColor(.white.opacity(0.8))
-                Text("at 40 words a minute")
-                    .font(.system(size: 11)).foregroundColor(.white.opacity(0.6))
+            Spacer(minLength: Theme.s4)
+            Picker("", selection: Binding(get: { model.language },
+                                          set: { model.setLanguage($0) })) {
+                Text("English").tag("english")
+                Text("Hinglish").tag("hinglish")
             }
+            .labelsHidden().fixedSize()
+            .help("Hinglish skips the English-only engine.")
         }
-        .padding(.horizontal, Theme.s5 + 4)
-        .padding(.vertical, Theme.s5)
-        .background(RoundedRectangle(cornerRadius: Theme.heroRadius, style: .continuous)
-            .fill(Theme.brand))
-        .overlay(RoundedRectangle(cornerRadius: Theme.heroRadius, style: .continuous)
-            .strokeBorder(Color.white.opacity(0.14), lineWidth: 1))
-    }
-
-    private func heroChip(_ symbol: String, _ s: String) -> some View {
-        HStack(spacing: 5) {
-            Image(systemName: symbol).font(.system(size: 10, weight: .bold))
-            Text(s).font(.system(size: 12, weight: .semibold))
-        }
-        .foregroundColor(.white)
-        .padding(.horizontal, 10).padding(.vertical, 5)
-        .background(Capsule().fill(Color.black.opacity(0.18)))
     }
 
     private var greeting: String {
@@ -492,16 +480,28 @@ struct HomePage: View {
         NSFullUserName().split(separator: " ").first.map(String.init)
     }
 
-    private func stat(_ symbol: String, _ big: String, _ small: String) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
+    /// A number with its icon in a tinted tile, and a quieter line under it.
+    private func stat(_ symbol: String, _ tint: Color, _ soft: Color, _ big: String,
+                      _ small: String, _ note: String?) -> some View {
+        VStack(alignment: .leading, spacing: 0) {
             Image(systemName: symbol)
-                .font(.system(size: 11, weight: .semibold))
-                .foregroundColor(Theme.accent)
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundColor(tint)
+                .frame(width: 30, height: 30)
+                .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(soft))
+                .padding(.bottom, Theme.s3)
             Text(big).font(.statNumber).foregroundColor(Theme.text)
                 .lineLimit(1).minimumScaleFactor(0.6)
             Text(small).font(.caption12).foregroundColor(Theme.secondary)
+                .padding(.top, 2)
+            Spacer(minLength: 0)
+            if let n = note {
+                Text(n).font(.system(size: 11)).foregroundColor(Theme.tertiary)
+                    .lineLimit(1).minimumScaleFactor(0.8)
+                    .padding(.top, Theme.s2)
+            }
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
         .card()
     }
 
@@ -582,26 +582,24 @@ struct HistoryRow: View {
     @StateObject private var st = RowState()
 
     var body: some View {
-        HStack(alignment: .top, spacing: Theme.s4) {
+        HStack(alignment: .firstTextBaseline, spacing: Theme.s4) {
             Text(said.at.formatted(date: .omitted, time: .shortened))
                 .font(.system(size: 12).monospacedDigit())
                 .foregroundColor(Theme.tertiary)
                 .frame(width: 64, alignment: .leading)
-                .padding(.top, 2)
-            VStack(alignment: .leading, spacing: 6) {
-                Text(said.text).font(.body14).foregroundColor(Theme.text)
-                    .textSelection(.enabled)
-                    .fixedSize(horizontal: false, vertical: true)
-                HStack(spacing: Theme.s3) {
-                    if let l = spokenIn(lang: said.lang, engine: said.engine) {
-                        Pill(text: l, tint: l == "Hinglish" ? Theme.live : Theme.accent)
-                    }
-                    if !said.app.isEmpty { meta("macwindow", said.app) }
-                    if said.secs > 0 { meta("waveform", String(format: "%.1f s spoken", said.secs)) }
-                    if let ms = ms { meta("bolt.fill", "pasted in \(waited(ms))", Theme.live) }
-                }
+            Text(said.text).font(.body14).foregroundColor(Theme.text)
+                .textSelection(.enabled)
+                .fixedSize(horizontal: false, vertical: true)
+            Spacer(minLength: Theme.s3)
+            if let l = spokenIn(lang: said.lang, engine: said.engine) {
+                Text(l).font(.system(size: 11, weight: .medium))
+                    .foregroundColor(Theme.secondary)
+                    .padding(.horizontal, 8).padding(.vertical, 3)
+                    .background(RoundedRectangle(cornerRadius: 6, style: .continuous)
+                        .fill(Theme.raised))
+                    .overlay(RoundedRectangle(cornerRadius: 6, style: .continuous)
+                        .strokeBorder(Theme.border, lineWidth: 1))
             }
-            Spacer(minLength: Theme.s2)
             Button {
                 copyToPasteboard(said.text)
                 st.copied = true
@@ -615,18 +613,20 @@ struct HistoryRow: View {
             .help("Copy")
         }
         .padding(.horizontal, Theme.s4)
-        .padding(.vertical, Theme.s3)
+        .padding(.vertical, 11)
         .background(st.hover ? Theme.raised.opacity(0.6) : Color.clear)
         .contentShape(Rectangle())
         .onHover { st.hover = $0 && !snapshotRun }
+        .help(details)
     }
 
-    private func meta(_ symbol: String, _ text: String, _ tint: Color = Theme.tertiary) -> some View {
-        HStack(spacing: 4) {
-            Image(systemName: symbol).font(.system(size: 10))
-            Text(text).font(.caption12)
-        }
-        .foregroundColor(tint)
+    /// Where it went, how long it was, and how fast it landed, on hover.
+    private var details: String {
+        var d: [String] = []
+        if !said.app.isEmpty { d.append("Typed in \(said.app)") }
+        if said.secs > 0 { d.append(String(format: "%.1f s spoken", said.secs)) }
+        if let ms = ms { d.append("pasted in \(waited(ms))") }
+        return d.joined(separator: " · ")
     }
 }
 

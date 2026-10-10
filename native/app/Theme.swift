@@ -2,28 +2,27 @@
 // chrome (cards, buttons, page headers, the brand mark) the windows are built
 // from.
 //
-// The identity comes from the app icon (tools/make_icon.swift): a white
-// microphone whose grille is lines of text, on an indigo to violet to teal
-// gradient, with a glowing teal cursor. Voice becomes text. So:
+// The identity is the mark (BrandMark below, and tools/make_icon.swift for
+// the Dock): a lowercase "d" in cobalt blue whose bowl holds a voice
+// waveform, with a text cursor beside it. Voice becomes text. So:
 //
-//   - Indigo ink and violet are the brand. Violet is the one accent for
-//     controls, selection and links.
-//   - Teal means live: the cursor, the status dot, "listening", time saved.
-//     It is used sparingly, the way the icon uses it once.
-//   - The full gradient is kept for brand moments only: the mark, the Home
-//     hero, the onboarding welcome. Never as a wash behind ordinary content.
-//   - Large headings are SF Pro Rounded. Every stroke in the icon has a round
-//     cap, and the rounded face carries that into the type; it also keeps the
-//     app well away from the serif display other dictation apps use. Body
-//     text stays SF Pro, which is what a Mac reads best at 13 and 14 points.
+//   - Cobalt blue is the brand and the one accent: controls, the selected
+//     page, links.
+//   - Mint means live and local: the status dot, "listening", the privacy
+//     promise. Coral is the warm second colour, for time and streaks. Both
+//     are used sparingly, as small icon tiles, never as a wash.
+//   - The canvas is a warm off-white in light and a blue-black in dark,
+//     with plain white or slate cards on it. No gradients behind content.
+//   - Headings are SF Pro, bold and slightly tight, like the wordmark. Body
+//     text is SF Pro at 13 and 14 points.
 //
 // Every colour has a light and a dark value, resolved by the appearance of
 // the view drawing it (NSColor(name:dynamicProvider:)), so Settings >
-// Appearance switches the whole app at once with NSApp.appearance. The dark
-// palette is designed, not inverted: a deep indigo ink background, surfaces
-// that get lighter as they rise, borders as low-alpha white, and a lighter
-// violet so the accent keeps its contrast. Body text is at least 4.5:1 on
-// its background in both.
+// Appearance and the sun button in the top bar switch the whole app at once
+// with NSApp.appearance. The dark palette is designed, not inverted: surfaces
+// get lighter as they rise, borders are low-alpha white, and the blue is
+// lighter so it keeps its contrast. Body text is at least 4.5:1 on its
+// background in both.
 
 import AppKit
 import SwiftUI
@@ -43,47 +42,48 @@ func hex(_ v: UInt32, _ alpha: CGFloat = 1) -> NSColor {
 
 enum Palette {
     // Surfaces, from the bottom up.
-    static let background = dynamic(hex(0xF5F4FA), hex(0x121124))
-    static let card = dynamic(hex(0xFFFFFF), hex(0x1B1A31))
-    static let raised = dynamic(hex(0xF0EFF7), hex(0x25233F))
-    static let sunken = dynamic(hex(0xEEEDF5), hex(0x0E0D1D))
-    static let border = dynamic(hex(0xE2E0EE), NSColor.white.withAlphaComponent(0.10))
-    static let hairline = dynamic(hex(0xECEBF4), NSColor.white.withAlphaComponent(0.06))
+    static let background = dynamic(hex(0xF7F7F2), hex(0x10141B))
+    static let card = dynamic(hex(0xFFFFFF), hex(0x1B212B))
+    static let raised = dynamic(hex(0xF1F1EB), hex(0x252C38))
+    static let sunken = dynamic(hex(0xEEEEE8), hex(0x0B0E13))
+    static let border = dynamic(hex(0xE4E4DC), NSColor.white.withAlphaComponent(0.09))
+    static let hairline = dynamic(hex(0xEDEDE7), NSColor.white.withAlphaComponent(0.06))
 
-    // The rail is ink in both appearances: the one dark band in a light
-    // window, and the deepest layer in a dark one.
-    static let rail = dynamic(hex(0x1C1A45), hex(0x0B0A18))
-    static let railText = dynamic(hex(0xECEAFB), hex(0xE6E4F4))
-    static let railSecondary = dynamic(hex(0xA9A5D4), hex(0x9591B4))
-    static let railHover = NSColor.white.withAlphaComponent(0.06)
-    static let railSelected = NSColor.white.withAlphaComponent(0.11)
+    // The sidebar sits a step below the canvas in both appearances.
+    static let rail = dynamic(hex(0xF0F0EA), hex(0x0C1016))
+    static let railText = dynamic(hex(0x141820), hex(0xF4F5F0))
+    static let railSecondary = dynamic(hex(0x545A66), hex(0xA3A9B5))
+    static let railHover = dynamic(hex(0x141820, 0.05), NSColor.white.withAlphaComponent(0.05))
 
-    // Text. Contrast on `background`: text 15:1 / 15:1, secondary 6.4:1 /
-    // 7.6:1, tertiary 4.6:1 / 4.7:1.
-    static let text = dynamic(hex(0x1A1838), hex(0xECEAF6))
-    static let secondary = dynamic(hex(0x57536F), hex(0xACA8C6))
-    static let tertiary = dynamic(hex(0x726E8C), hex(0x8682A3))
+    // Text. Contrast on `background`: text 16.5:1 / 16.8:1, secondary
+    // 6.5:1 / 8.4:1, tertiary 4.8:1 / 5.5:1.
+    static let text = dynamic(hex(0x141820), hex(0xF4F5F0))
+    static let secondary = dynamic(hex(0x545A66), hex(0xA9AFBA))
+    static let tertiary = dynamic(hex(0x676D79), hex(0x868D99))
 
-    // Violet: controls, selection, links. The lighter dark value keeps 7:1
-    // on the ink background; the fill behind white button text is its own
-    // colour, because a fill wants to be darker than a text colour.
-    static let accent = dynamic(hex(0x5631C9), hex(0xB3A2FF))
-    static let accentFill = dynamic(hex(0x5631C9), hex(0x6E4FF0))
-    static let accentSoft = dynamic(hex(0x5631C9, 0.09), hex(0xB3A2FF, 0.14))
+    // Cobalt: controls, selection, links. The lighter dark value keeps 6:1
+    // on the dark canvas; the fill behind white text is its own colour,
+    // because a fill wants to be deeper than a text colour (white on it is
+    // 5.1:1 in both).
+    static let accent = dynamic(hex(0x315CFF), hex(0x6F8BFF))
+    static let accentFill = dynamic(hex(0x315CFF), hex(0x3D5EF5))
+    static let accentSoft = dynamic(hex(0x315CFF, 0.09), hex(0x6F8BFF, 0.15))
 
-    // Teal: live.
-    static let live = dynamic(hex(0x0A8580), hex(0x3FE0CF))
-    static let liveSoft = dynamic(hex(0x0A8580, 0.10), hex(0x3FE0CF, 0.14))
+    // Mint: live and local.
+    static let live = dynamic(hex(0x087A5C), hex(0x70E1C1))
+    static let liveSoft = dynamic(hex(0x70E1C1, 0.22), hex(0x70E1C1, 0.13))
+
+    // Coral: time and streaks. Icons only in light, where it is 3.4:1.
+    static let coral = dynamic(hex(0xE8603F), hex(0xFF8B78))
+    static let coralSoft = dynamic(hex(0xFF775E, 0.13), hex(0xFF8B78, 0.14))
 
     static let good = dynamic(hex(0x1E8A4C), hex(0x5AD48A))
     static let warn = dynamic(hex(0xB8650A), hex(0xF2A649))
     static let bad = dynamic(hex(0xC23A30), hex(0xFF7A6E))
 
-    // The icon's gradient stops.
-    static let gradTeal = hex(0x18AFAB)
-    static let gradViolet = hex(0x5C33C7)
-    static let gradDeep = hex(0x1D1852)
-    static let cursorGlow = hex(0x8CFFEB)
+    // The mark's blue, light at the top of the bowl to deep at the stem.
+    static let markTop = hex(0x4F78FF)
+    static let markBottom = hex(0x2348E8)
 }
 
 enum Theme {
@@ -98,7 +98,6 @@ enum Theme {
     static let railText = Color(nsColor: Palette.railText)
     static let railSecondary = Color(nsColor: Palette.railSecondary)
     static let railHover = Color(nsColor: Palette.railHover)
-    static let railSelected = Color(nsColor: Palette.railSelected)
     /// Kept for the Scratchpad window's notes list, which is a light panel.
     static let sidebar = Color(nsColor: Palette.raised)
 
@@ -113,20 +112,21 @@ enum Theme {
 
     static let live = Color(nsColor: Palette.live)
     static let liveSoft = Color(nsColor: Palette.liveSoft)
-    static let cursorGlow = Color(nsColor: Palette.cursorGlow)
+    static let coral = Color(nsColor: Palette.coral)
+    static let coralSoft = Color(nsColor: Palette.coralSoft)
 
     static let good = Color(nsColor: Palette.good)
     static let warn = Color(nsColor: Palette.warn)
     static let bad = Color(nsColor: Palette.bad)
 
-    /// The icon's gradient, for brand moments only.
+    /// The mark's blue, for brand moments only: the mark itself and the
+    /// onboarding welcome.
     static let brand = LinearGradient(
-        colors: [Color(nsColor: Palette.gradTeal), Color(nsColor: Palette.gradViolet),
-                 Color(nsColor: Palette.gradDeep)],
+        colors: [Color(nsColor: Palette.markTop), Color(nsColor: Palette.markBottom)],
         startPoint: .topLeading, endPoint: .bottomTrailing)
-    /// The grille's lines: violet into teal.
+    /// Lines of text in the empty-state drawings and progress bars.
     static let ink = LinearGradient(
-        colors: [Color(nsColor: Palette.gradViolet), Color(nsColor: Palette.gradTeal)],
+        colors: [Color(nsColor: Palette.accentFill), Color(nsColor: Palette.accent)],
         startPoint: .leading, endPoint: .trailing)
 
     // Spacing on a 4 point grid.
@@ -139,8 +139,8 @@ enum Theme {
     static let s7: CGFloat = 40
 
     /// Large containers are rounder than the controls inside them.
-    static let heroRadius: CGFloat = 20
-    static let radius: CGFloat = 14
+    static let heroRadius: CGFloat = 18
+    static let radius: CGFloat = 12
     static let smallRadius: CGFloat = 8
 
     static let hubSize = NSSize(width: 980, height: 660)
@@ -148,16 +148,16 @@ enum Theme {
 }
 
 extension Font {
-    /// SF Pro Rounded for display sizes; see the top of this file.
+    /// SF Pro for display sizes; see the top of this file.
     static func display(_ size: CGFloat, _ weight: Font.Weight = .bold) -> Font {
-        .system(size: size, weight: weight, design: .rounded)
+        .system(size: size, weight: weight)
     }
     static let pageTitle = Font.display(28)
     static let sectionTitle = Font.display(17, .semibold)
     static let cardTitle = Font.system(size: 13, weight: .semibold)
     static let body14 = Font.system(size: 14)
     static let caption12 = Font.system(size: 12)
-    static let statNumber = Font.display(26, .semibold)
+    static let statNumber = Font.display(24, .bold)
 }
 
 // ---------------------------------------------------------------------------
@@ -195,40 +195,97 @@ enum Appearance: String, CaseIterable {
 
 // ---------------------------------------------------------------------------
 // The brand mark, drawn rather than loaded, so it is crisp at every size and
-// a bare build without the icon file still has it.
+// a bare build without the icon file still has it. tools/make_icon.swift
+// draws the same shape for the Dock.
 
-/// The icon in miniature: gradient tile, white grille of text lines, teal
-/// cursor.
+/// The "d": a round bowl and a thick stem on its right, with rounded ends.
+/// Drawn in a box 0.86 wide for every 1 tall.
+struct DShape: Shape {
+    func path(in r: CGRect) -> Path {
+        let u = r.height
+        var p = Path()
+        p.addEllipse(in: CGRect(x: r.minX, y: r.minY + u * 0.26, width: u * 0.74, height: u * 0.74))
+        p.addRoundedRect(in: CGRect(x: r.minX + u * 0.56, y: r.minY, width: u * 0.30, height: u),
+                         cornerSize: CGSize(width: u * 0.15, height: u * 0.15),
+                         style: .continuous)
+        return p
+    }
+}
+
+/// The mark: the blue "d" with a waveform in its bowl, and a text cursor
+/// beside it. `size` is its height; it is a little wider than tall.
+/// `tile` puts it on the app icon's white rounded square.
 struct BrandMark: View {
     var size: CGFloat = 28
+    var tile = false
+
+    /// Bar heights, as a share of the glyph's height, left to right.
+    static let bars: [CGFloat] = [0.14, 0.28, 0.42, 0.30, 0.20, 0.10]
 
     var body: some View {
-        let r = size * 0.27
-        ZStack {
-            RoundedRectangle(cornerRadius: r, style: .continuous).fill(Theme.brand)
-            RoundedRectangle(cornerRadius: r, style: .continuous)
-                .strokeBorder(Color.white.opacity(0.18), lineWidth: max(0.5, size / 64))
-            HStack(alignment: .center, spacing: size * 0.08) {
-                // The grille: a white capsule with four lines in it.
-                ZStack {
-                    Capsule().fill(Color.white)
-                    VStack(alignment: .leading, spacing: size * 0.05) {
-                        ForEach([0.62, 0.86, 0.5, 0.74], id: \.self) { w in
-                            Capsule().fill(Theme.ink)
-                                .frame(width: size * 0.26 * w, height: max(1, size * 0.045))
-                        }
+        if tile {
+            let r = size * 0.23
+            ZStack {
+                RoundedRectangle(cornerRadius: r, style: .continuous).fill(Color.white)
+                RoundedRectangle(cornerRadius: r, style: .continuous)
+                    .strokeBorder(Color.black.opacity(0.06), lineWidth: max(0.5, size / 96))
+                glyph(size * 0.52).offset(x: size * 0.02)
+            }
+            .frame(width: size, height: size)
+            .shadow(color: .black.opacity(0.10), radius: size * 0.06, y: size * 0.02)
+            .accessibilityHidden(true)
+        } else {
+            glyph(size).accessibilityHidden(true)
+        }
+    }
+
+    private func glyph(_ g: CGFloat) -> some View {
+        HStack(alignment: .center, spacing: g * 0.08) {
+            ZStack(alignment: .topLeading) {
+                DShape().fill(Theme.brand)
+                // The waveform, centred on the bowl and running into the stem.
+                HStack(alignment: .center, spacing: g * 0.045) {
+                    ForEach(Array(Self.bars.enumerated()), id: \.offset) { _, b in
+                        Capsule().fill(Color.white)
+                            .frame(width: max(1, g * 0.055), height: g * b)
                     }
                 }
-                .frame(width: size * 0.36, height: size * 0.5)
-                Capsule().fill(Theme.cursorGlow)
-                    .frame(width: max(1.5, size * 0.055), height: size * 0.32)
-                    .shadow(color: Color(nsColor: Palette.gradTeal).opacity(0.9),
-                            radius: size * 0.06)
+                .frame(width: g * 0.78, height: g * 0.74)
+                .offset(x: g * 0.0, y: g * 0.26)
             }
-            .offset(x: size * 0.02)
+            .frame(width: g * 0.86, height: g)
+            // The cursor: a stem with short caps, as tall as the bowl.
+            ZStack {
+                Rectangle().frame(width: max(1, g * 0.07), height: g * 0.70)
+                VStack(spacing: 0) {
+                    Capsule().frame(width: g * 0.22, height: max(1, g * 0.07))
+                    Spacer(minLength: 0)
+                    Capsule().frame(width: g * 0.22, height: max(1, g * 0.07))
+                }
+            }
+            .foregroundStyle(Theme.brand)
+            .frame(width: g * 0.22, height: g * 0.70)
+            .offset(y: g * 0.15)
         }
-        .frame(width: size, height: size)
-        .accessibilityHidden(true)
+        .frame(height: g)
+    }
+}
+
+/// The mark and the lowercase name beside it, as in the sidebar.
+struct Wordmark: View {
+    var size: CGFloat = 20
+
+    var body: some View {
+        HStack(spacing: size * 0.35) {
+            BrandMark(size: size * 1.3)
+            Text("dictator")
+                .font(.system(size: size, weight: .bold))
+                .tracking(-size * 0.03)
+                .foregroundColor(Theme.text)
+                .offset(y: size * 0.04)
+        }
+        .accessibilityElement()
+        .accessibilityLabel("Dictator")
     }
 }
 
@@ -306,7 +363,7 @@ struct Card: ViewModifier {
             .padding(padding)
             .background(RoundedRectangle(cornerRadius: radius, style: .continuous)
                 .fill(Theme.card)
-                .shadow(color: Color(nsColor: dynamic(hex(0x1A1838, 0.05), .clear)),
+                .shadow(color: Color(nsColor: dynamic(hex(0x141820, 0.05), .clear)),
                         radius: 8, x: 0, y: 2))
             .overlay(RoundedRectangle(cornerRadius: radius, style: .continuous)
                 .strokeBorder(Theme.border, lineWidth: 1))

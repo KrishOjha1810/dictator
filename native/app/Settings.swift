@@ -507,12 +507,12 @@ struct AppearanceChoice: View {
         .buttonStyle(.plain)
     }
 
-    /// The rail, a page, and two lines of text.
+    /// The sidebar, a page, and two lines of text.
     private func thumb(dark: Bool) -> some View {
         HStack(spacing: 0) {
-            Color(nsColor: dark ? hex(0x0B0A18) : hex(0x1C1A45)).frame(width: 14)
+            Color(nsColor: dark ? hex(0x0C1016) : hex(0xF0F0EA)).frame(width: 14)
             ZStack(alignment: .topLeading) {
-                Color(nsColor: dark ? hex(0x121124) : hex(0xF5F4FA))
+                Color(nsColor: dark ? hex(0x10141B) : hex(0xF7F7F2))
                 VStack(alignment: .leading, spacing: 4) {
                     RoundedRectangle(cornerRadius: 2).fill(Theme.brand).frame(width: 34, height: 9)
                     Capsule().fill(dark ? Color.white.opacity(0.5) : Color.black.opacity(0.35))
