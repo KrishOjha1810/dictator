@@ -1,39 +1,30 @@
 #!/usr/bin/env node
 // Writes src/data/latest.json (the newest release: version, date, size,
-// SHA256) and public/_redirects, so the site never hard-codes a version. The
-// site offers only the newest build.
+// SHA256) and public/_redirects, so the site never hard-codes a version or an
+// address. Both files are generated on every build and are not committed.
 //
 //   node scripts/sync-latest.mjs
 //
-// Where the release comes from:
-//   DOWNLOAD_BASE set   the R2 bucket's latest.json (tools/publish_r2.sh writes
-//                       it). The redirects send /download/mac to its
-//                       Dictator.dmg and /appcast.xml to its feed, the address
-//                       installed apps check for updates.
-//   unset               the latest GitHub release, as before the move.
+// Where the release comes from, all from the environment or the root .env:
+//   DICTATOR_DOWNLOAD_BASE   the R2 bucket's latest.json (tools/publish_r2.sh
+//                            writes it). /download/mac goes to its Dictator.dmg
+//                            and /appcast.xml to its feed, the address
+//                            installed apps check for updates.
+//   DICTATOR_RELEASES_REPO   otherwise, the latest GitHub release of owner/name
+//                            (GITHUB_TOKEN once the repo is private).
 //
-// DOWNLOAD_BASE defaults to the value in ../tools/hosting.env, the same file
-// the release scripts read, so the address is set in one place.
-//
-// Env: DOWNLOAD_BASE, RELEASES_REPO (default cc-vb/dictator), GITHUB_TOKEN.
-//
-// If the API cannot be reached the existing latest.json is kept, so an
-// offline build still works with the last known release.
+// If neither can be reached, a latest.json left by an earlier run is kept, so
+// an offline rebuild still works.
 
 import { readFile, writeFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
+import { envUrl, loadRootEnv } from "./env.mjs";
 
-const HOSTING = fileURLToPath(new URL("../../tools/hosting.env", import.meta.url));
+loadRootEnv();
 
-async function hostingValue(name) {
-  const text = await readFile(HOSTING, "utf8").catch(() => "");
-  const line = text.split("\n").find((l) => l.startsWith(`${name}=`));
-  return line ? line.slice(name.length + 1).trim() : "";
-}
-
-const REPO = process.env.RELEASES_REPO || "cc-vb/dictator";
+const BASE = envUrl("DICTATOR_DOWNLOAD_BASE");
+const REPO = (process.env.DICTATOR_RELEASES_REPO || "").trim();
 const TOKEN = process.env.GITHUB_TOKEN || "";
-const BASE = (process.env.DOWNLOAD_BASE ?? (await hostingValue("DOWNLOAD_BASE"))).replace(/\/$/, "");
 
 const DATA = fileURLToPath(new URL("../src/data/latest.json", import.meta.url));
 const REDIRECTS = fileURLToPath(new URL("../public/_redirects", import.meta.url));
@@ -71,6 +62,10 @@ async function fetchFromGitHub() {
 }
 
 async function main() {
+  if (!BASE && !REPO) {
+    throw new Error("sync-latest: set DICTATOR_DOWNLOAD_BASE or DICTATOR_RELEASES_REPO (environment or .env)");
+  }
+
   let latest;
   try {
     latest = BASE ? await fetchFromBucket() : await fetchFromGitHub();
@@ -87,7 +82,7 @@ async function main() {
   ];
   if (BASE) redirects.push(`/appcast.xml  ${BASE}/appcast.xml  302`);
   await writeFile(REDIRECTS, redirects.join("\n") + "\n");
-  console.log(`sync-latest: ${latest.version}`);
+  console.log(`sync-latest: ${latest.version} from ${BASE || REPO}`);
 }
 
 main().catch((err) => {

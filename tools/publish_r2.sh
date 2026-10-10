@@ -13,8 +13,8 @@
 # no app is told about an update before its .dmg is in place.
 #
 # Needs build/Dictator-VERSION.dmg and build/appcast.xml (tools/build_dmg.sh,
-# tools/appcast.sh), DOWNLOAD_BASE in tools/hosting.env, and in the
-# environment (or ~/.dictator-release/r2.env on the maintainer's Mac):
+# tools/appcast.sh), and in the environment or .env (see .env.example):
+#   DICTATOR_DOWNLOAD_BASE
 #   CF_ACCOUNT_ID  R2_ACCESS_KEY_ID  R2_SECRET_ACCESS_KEY  R2_BUCKET
 #   CF_PAGES_DEPLOY_HOOK (optional: without it the site rebuilds on its next deploy)
 #
@@ -26,18 +26,13 @@ VERSION="${1:?usage: tools/publish_r2.sh VERSION}"
 DMG="$ROOT/build/Dictator-$VERSION.dmg"
 FEED="$ROOT/build/appcast.xml"
 
-# shellcheck source=hosting.env
-. "$ROOT/tools/hosting.env"
-ENVFILE="${DICTATOR_RELEASE_DIR:-$HOME/.dictator-release}/r2.env"
-if [ -z "${R2_ACCESS_KEY_ID:-}" ] && [ -f "$ENVFILE" ]; then
-    # shellcheck disable=SC1090
-    . "$ENVFILE"
-fi
+# shellcheck source=env.sh
+. "$ROOT/tools/env.sh"
 
-[ -n "${DOWNLOAD_BASE:-}" ] || { echo "no DOWNLOAD_BASE in tools/hosting.env" >&2; exit 1; }
-for v in CF_ACCOUNT_ID R2_ACCESS_KEY_ID R2_SECRET_ACCESS_KEY R2_BUCKET; do
-    [ -n "${!v:-}" ] || { echo "no $v (environment or $ENVFILE)" >&2; exit 1; }
+for v in DICTATOR_DOWNLOAD_BASE CF_ACCOUNT_ID R2_ACCESS_KEY_ID R2_SECRET_ACCESS_KEY R2_BUCKET; do
+    [ -n "${!v:-}" ] || { echo "no $v (environment or .env)" >&2; exit 1; }
 done
+DOWNLOAD_BASE="${DICTATOR_DOWNLOAD_BASE%/}"
 [ -f "$DMG" ] || { echo "no $DMG" >&2; exit 1; }
 [ -f "$FEED" ] || { echo "no $FEED; run tools/appcast.sh first" >&2; exit 1; }
 grep -q "<sparkle:shortVersionString>$VERSION<" "$FEED" \

@@ -12,7 +12,7 @@
 # the same release is what makes the update reach them; a latest release
 # without a feed breaks updates for everyone until the next one.
 #
-# With DOWNLOAD_BASE set in tools/hosting.env, the feed points at the .dmg in
+# With DICTATOR_DOWNLOAD_BASE set (environment or .env), the feed points at the .dmg in
 # the R2 bucket (tools/publish_r2.sh) instead, and the build-number check below
 # reads the feed published there. The same feed is still attached to the
 # GitHub release, so apps on the old feed address follow it to the same file.
@@ -32,8 +32,10 @@ FEED="$ROOT/build/appcast.xml"
 [ -f "$DMG" ] || { echo "no $DMG; run tools/build_dmg.sh $VERSION first" >&2; exit 1; }
 [ -s "$KEY" ] || { echo "no update key at $KEY" >&2; exit 1; }
 SPARKLE="$("$ROOT/tools/fetch_sparkle.sh")/bin"
-# shellcheck source=hosting.env
-. "$ROOT/tools/hosting.env"
+# shellcheck source=env.sh
+. "$ROOT/tools/env.sh"
+DOWNLOAD_BASE="${DICTATOR_DOWNLOAD_BASE:-}"; DOWNLOAD_BASE="${DOWNLOAD_BASE%/}"
+SITE_URL="${DICTATOR_SITE_URL:-}"; SITE_URL="${SITE_URL%/}"
 
 # The build number Sparkle compares, from the app that went into this .dmg.
 BUILD="$(plutil -extract CFBundleVersion raw "$APP/Contents/Info.plist")"

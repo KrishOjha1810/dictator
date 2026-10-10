@@ -1,9 +1,15 @@
 import { defineConfig } from "astro/config";
+import { envUrl, loadRootEnv } from "./scripts/env.mjs";
 
-// SITE_URL is the public address once a domain exists. Until then the
-// Cloudflare Pages subdomain stands in. It feeds canonical URLs and og tags.
+loadRootEnv();
+
+// The public address, for canonical and share links. DICTATOR_SITE_URL from
+// the environment or the root .env; on Cloudflare Pages without it, the
+// deployment's own address. Unset, pages are built without absolute links.
+const site = envUrl("DICTATOR_SITE_URL") || envUrl("CF_PAGES_URL") || undefined;
+
 export default defineConfig({
-  site: process.env.SITE_URL || "https://dictator.pages.dev",
+  site,
   output: "static",
   build: { format: "directory" },
 });

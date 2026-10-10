@@ -15,43 +15,50 @@ pnpm install
 pnpm dev            # http://localhost:4321
 ```
 
+## Configuration
+
+Nothing about where the site or the downloads live is written in the code.
+Every address comes from the environment, or locally from the repo's root
+`.env` (never committed; `../.env.example` lists every name). A variable set
+in the environment wins over `.env`.
+
+| Variable | Meaning |
+|---|---|
+| `DICTATOR_SITE_URL` | the site's public address, for canonical and share links. On Cloudflare Pages without it, the deployment's own address is used |
+| `DICTATOR_DOWNLOAD_BASE` | the R2 bucket's public URL. Set, the release comes from its `latest.json`, and `/download/mac` and `/appcast.xml` redirect into it |
+| `DICTATOR_RELEASES_REPO` | `owner/name` on GitHub, read when `DICTATOR_DOWNLOAD_BASE` is not set |
+| `GITHUB_TOKEN` | only for reading a private repo's releases |
+
 ## Where the version number comes from
 
-The site offers one download per platform: the newest build. There is no
-version history on the site.
-
-`scripts/sync-latest.mjs` reads the newest release and writes:
+The site offers one download per platform: the newest build. Every build runs
+`scripts/sync-latest.mjs` first, which writes two files that are generated,
+not committed:
 
 | File | What it holds |
 |---|---|
 | `src/data/latest.json` | version, date, size, SHA256, minimum macOS |
-| `public/_redirects` | `/download/mac`, pointed at the newest `Dictator.dmg` |
+| `public/_redirects` | `/download/mac` and, with the bucket, `/appcast.xml` |
 
-Every download button links to `/download/mac`, never to a file host directly,
-so a new release changes where that link points and no page has to change.
+Every download button links to `/download/mac`, never to a file host, so a
+release changes where that link points and no page has to change.
 
 ```bash
-pnpm sync-latest                   # refresh latest.json and _redirects
-pnpm build:ci                      # refresh, then build (what Cloudflare runs)
+pnpm dev                           # sync, then the dev server
+pnpm build                         # sync, then build (what Cloudflare runs)
 ```
 
-| Env | Meaning |
-|---|---|
-| `RELEASES_REPO` | `owner/name` to read the latest release from (default `cc-vb/dictator`) |
-| `GITHUB_TOKEN` | needed once the repo is private |
-| `DOWNLOAD_BASE` | where `Dictator.dmg` is served from. Unset, the link points at the GitHub release asset |
-| `SITE_URL` | the public address, for canonical and share links |
-
-If the release cannot be fetched, the last committed `latest.json` is kept, so
-a build never fails just because the network did.
+If the release cannot be fetched, a `latest.json` from an earlier run is kept,
+so an offline rebuild still works.
 
 ## Deploy (Cloudflare Pages)
 
 | Setting | Value |
 |---|---|
 | Root directory | `website` |
-| Build command | `pnpm build:ci` |
+| Build command | `pnpm build` |
 | Output directory | `dist` |
+| Environment variables | `NODE_VERSION=22`, plus the variables above |
 
 Cloudflare builds and serves the site itself; nothing has to stay running on
 anyone's machine.
@@ -65,5 +72,5 @@ src/
                 Platforms (the OS download cards), Faq, Nav, Footer
   styles/       global.css: colour, type and spacing tokens
   lib/          latest.ts: types and helpers over latest.json
-scripts/        sync-latest.mjs
+scripts/        sync-latest.mjs, env.mjs (loads the root .env)
 ```

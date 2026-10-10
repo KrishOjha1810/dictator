@@ -13,7 +13,7 @@
 #   3. writes build/appcast.xml, the feed the app reads
 #   4. creates the GitHub release v<VERSION> with the .dmg (under its own name
 #      and as Dictator.dmg, for the README link) and appcast.xml
-#   5. with DOWNLOAD_BASE set in tools/hosting.env, uploads the same .dmg and
+#   5. with DICTATOR_DOWNLOAD_BASE set (environment or .env), uploads the same .dmg and
 #      feed to the R2 bucket the website serves (tools/publish_r2.sh)
 #
 # The app looks for updates at releases/latest/download/appcast.xml, so the
@@ -78,7 +78,7 @@ gh release create "v$VERSION" -R "$REPO" --target "$(git rev-parse HEAD)" \
 echo "published v$VERSION: https://github.com/$REPO/releases/tag/v$VERSION"
 
 # 5. the website's copy, and the feed apps on the new address read
-. tools/hosting.env
-if [ -n "${DOWNLOAD_BASE:-}" ]; then
+. tools/env.sh
+if [ -n "${DICTATOR_DOWNLOAD_BASE:-}" ]; then
     tools/publish_r2.sh "$VERSION"
 fi

@@ -282,6 +282,14 @@ plutil -replace LSMinimumSystemVersion -string "$MIN_MACOS" "$C/Info.plist"
 # only ever point at somebody else's install.
 plutil -remove DictatorCLI "$C/Info.plist" 2>/dev/null || true
 plutil -remove DictatorLog "$C/Info.plist" 2>/dev/null || true
+# Where the app checks for updates. DICTATOR_SITE_URL (environment or .env,
+# a repository variable in CI) moves it to the website; unset, the app keeps
+# the address native/app/Info.plist already has, so a build without it never
+# strands anyone.
+. "$ROOT/tools/env.sh"
+if [ -n "${DICTATOR_SITE_URL:-}" ]; then
+    plutil -replace SUFeedURL -string "${DICTATOR_SITE_URL%/}/appcast.xml" "$C/Info.plist"
+fi
 if [ -f "$ROOT/native/app/AppIcon.icns" ]; then
     cp "$ROOT/native/app/AppIcon.icns" "$C/Resources/AppIcon.icns"
     plutil -replace CFBundleIconFile -string AppIcon "$C/Info.plist"
