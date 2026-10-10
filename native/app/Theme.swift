@@ -24,9 +24,49 @@
 // that get lighter as they rise, borders as low-alpha white, and a lighter
 // violet so the accent keeps its contrast. Body text is at least 4.5:1 on
 // its background in both.
+//
+// THE WINDOWS ARE GLASS. The surfaces below are translucent and the blur
+// comes from an NSVisualEffectView behind the whole window (MenuBar.show).
+// `Glass` holds the two numbers that decide how it looks, and both were
+// arrived at the hard way; the reasoning is in docs/ui/glass.html.
 
 import AppKit
 import SwiftUI
+
+/// The glass, in two numbers.
+enum Glass {
+    /// Off puts the solid surfaces back, for anyone who finds a translucent
+    /// window unreadable over their own desktop. It is one switch because a
+    /// half-translucent app looks like a bug rather than a setting.
+    static var on: Bool {
+        if let e = env["DICTATOR_GLASS"] { return e != "0" }
+        return (Prefs.store.object(forKey: "glass") as? Bool) ?? true
+    }
+
+    /// How much white sits over the blur. Six percent.
+    ///
+    /// Everything inside the window is drawn with hairlines rather than
+    /// fills, because three sheets of ten percent is thirty percent and the
+    /// window stops being see-through. If a surface needs a fill it gets
+    /// this one, not a second one on top of it.
+    static let tint: CGFloat = 0.06
+
+    /// The material, which is where the blur comes from.
+    ///
+    /// `.hudWindow` and not `.underWindowBackground`: the latter is tuned to
+    /// sit under an opaque window and comes out milky. The important part is
+    /// that it is a LIGHT blur. A heavy one dissolves the desktop into a
+    /// smooth wash, and a smooth wash reads as paint, so raising the blur to
+    /// look more frosted makes the window look more solid. That mistake took
+    /// three rounds to find.
+    static let material: NSVisualEffectView.Material = .hudWindow
+
+    /// White at this alpha, or `clear` when glass is off and the solid
+    /// surface underneath should show instead.
+    static func white(_ a: CGFloat) -> NSColor {
+        on ? NSColor.white.withAlphaComponent(a) : .clear
+    }
+}
 
 /// A colour with a light and a dark value.
 func dynamic(_ light: NSColor, _ dark: NSColor) -> NSColor {
@@ -43,26 +83,49 @@ func hex(_ v: UInt32, _ alpha: CGFloat = 1) -> NSColor {
 
 enum Palette {
     // Surfaces, from the bottom up.
-    static let background = dynamic(hex(0xF5F4FA), hex(0x121124))
-    static let card = dynamic(hex(0xFFFFFF), hex(0x1B1A31))
-    static let raised = dynamic(hex(0xF0EFF7), hex(0x25233F))
-    static let sunken = dynamic(hex(0xEEEDF5), hex(0x0E0D1D))
-    static let border = dynamic(hex(0xE2E0EE), NSColor.white.withAlphaComponent(0.10))
-    static let hairline = dynamic(hex(0xECEBF4), NSColor.white.withAlphaComponent(0.06))
+    //
+    // With glass on these are translucent and the desktop shows through all
+    // of them. The window itself carries the only fill; a panel inside it is
+    // drawn with `border`, not with `card`, so the layers do not stack up
+    // into something opaque. With glass off they fall back to the solid
+    // values this app shipped with.
+    static let background: NSColor =
+        Glass.on ? .clear : dynamic(hex(0xF5F4FA), hex(0x121124))
+    static let card: NSColor =
+        Glass.on ? Glass.white(0.07) : dynamic(hex(0xFFFFFF), hex(0x1B1A31))
+    static let raised: NSColor =
+        Glass.on ? Glass.white(0.12) : dynamic(hex(0xF0EFF7), hex(0x25233F))
+    static let sunken: NSColor =
+        Glass.on ? NSColor.black.withAlphaComponent(0.10) : dynamic(hex(0xEEEDF5), hex(0x0E0D1D))
+    static let border: NSColor =
+        Glass.on ? Glass.white(0.13) : dynamic(hex(0xE2E0EE), NSColor.white.withAlphaComponent(0.10))
+    static let hairline: NSColor =
+        Glass.on ? Glass.white(0.09) : dynamic(hex(0xECEBF4), NSColor.white.withAlphaComponent(0.06))
 
-    // The rail is ink in both appearances: the one dark band in a light
-    // window, and the deepest layer in a dark one.
-    static let rail = dynamic(hex(0x1C1A45), hex(0x0B0A18))
+    // The rail. Solid ink in the old look; with glass it is the same sheet
+    // as the window, told apart by one hairline down its right edge, which
+    // is all a sidebar on glass should be.
+    static let rail: NSColor =
+        Glass.on ? .clear : dynamic(hex(0x1C1A45), hex(0x0B0A18))
     static let railText = dynamic(hex(0xECEAFB), hex(0xE6E4F4))
     static let railSecondary = dynamic(hex(0xA9A5D4), hex(0x9591B4))
-    static let railHover = NSColor.white.withAlphaComponent(0.06)
-    static let railSelected = NSColor.white.withAlphaComponent(0.11)
+    static let railHover = NSColor.white.withAlphaComponent(0.09)
+    static let railSelected = NSColor.white.withAlphaComponent(0.17)
 
     // Text. Contrast on `background`: text 15:1 / 15:1, secondary 6.4:1 /
     // 7.6:1, tertiary 4.6:1 / 4.7:1.
-    static let text = dynamic(hex(0x1A1838), hex(0xECEAF6))
-    static let secondary = dynamic(hex(0x57536F), hex(0xACA8C6))
-    static let tertiary = dynamic(hex(0x726E8C), hex(0x8682A3))
+    //
+    // On glass there is no known background to measure against, so these go
+    // up rather than down: pure white for body, and the two quiet tints
+    // lifted enough to survive a pale desktop behind them. Type that is
+    // itself transparent is the fastest way to a window nobody can read at
+    // noon, so none of these is given an alpha.
+    static let text: NSColor =
+        Glass.on ? .white : dynamic(hex(0x1A1838), hex(0xECEAF6))
+    static let secondary: NSColor =
+        Glass.on ? hex(0xD8D4E4) : dynamic(hex(0x57536F), hex(0xACA8C6))
+    static let tertiary: NSColor =
+        Glass.on ? hex(0xADA9BE) : dynamic(hex(0x726E8C), hex(0x8682A3))
 
     // Violet: controls, selection, links. The lighter dark value keeps 7:1
     // on the ink background; the fill behind white button text is its own
