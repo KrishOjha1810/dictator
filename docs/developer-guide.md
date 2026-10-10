@@ -69,6 +69,30 @@ git tag website-2026-10-11 && git push origin website-2026-10-11
 
 That only rebuilds the site. Nothing else runs it.
 
+## What starts a build or a deployment
+
+Only a tag does. Everything else is quiet on purpose.
+
+| You do | What happens |
+|---|---|
+| Open a pull request, or push a branch | nothing: no CI, no website build |
+| Merge into `main` | nothing, until a tag asks for it |
+| Push a `v…` tag on `main` | the app release: tests, build, sign, upload to R2. Then, **only if all of that succeeded**, the website rebuilds and shows the new version |
+| Push a `website-…` tag on `main` | only the website rebuilds |
+| Push either tag anywhere but `main` | refused in the first minute |
+
+This depends on two settings in Cloudflare, under **Workers & Pages →
+dictator → Settings → Builds → Branch control**:
+
+- production branch `main`, **automatic deployments off**: a merge does not
+  rebuild the site; the deploy hook does;
+- preview branch **None**: branches and pull requests get no preview build.
+
+Cloudflare does not charge for builds, but the free plan allows 500 a month
+and every build counts, previews included. Past that, the site stays as it is
+until the next month. Turning previews back on would spend that allowance on
+every push.
+
 ## Limits that are there on purpose
 
 Everything public runs on free allowances (GitHub Actions minutes, Cloudflare
