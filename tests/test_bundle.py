@@ -29,7 +29,8 @@ from dictator import core, views  # noqa: E402
 
 def _fake_bundle(tmp_path, helpers=("dictator-hotkey", "dictator-rec",
                                     "dictator-paste", "dictator-orb",
-                                    "dictator-readback", "whisper-server",
+                                    "dictator-readback", "dictator-media",
+                                    "whisper-server",
                                     "whisper-cli", "parakeet-cli"),
                  ident="com.dictator.dictation"):
     app = tmp_path / "Dictator.app"
@@ -98,10 +99,11 @@ def test_every_module_looks_inside_the_bundle(tmp_path):
     probe = (
         "import json\n"
         "from dictator import hotkey, recorder, paste, orbnative, readback, "
-        "always, meeting\n"
+        "always, meeting, media\n"
         "print(json.dumps({'hotkey': str(hotkey.BIN), 'rec': str(recorder.BIN),"
         " 'paste': str(paste._HELPER), 'orb': str(orbnative.BIN),"
-        " 'readback': str(readback.BIN), 'app': str(always.APP),"
+        " 'readback': str(readback.BIN), 'media': str(media.BIN),"
+        " 'app': str(always.APP),"
         " 'meeting': str(meeting.APP)}))\n")
     env = dict(os.environ, DICTATOR_BUNDLE=str(app),
                DICTATOR_STATE=str(tmp_path / "state"),
@@ -111,7 +113,7 @@ def test_every_module_looks_inside_the_bundle(tmp_path):
     assert out.returncode == 0, out.stderr
     got = json.loads(out.stdout)
     helpers = str(app / "Contents" / "Helpers")
-    for name in ("hotkey", "rec", "paste", "orb", "readback", "meeting"):
+    for name in ("hotkey", "rec", "paste", "orb", "readback", "media", "meeting"):
         assert got[name].startswith(helpers + "/"), (name, got[name])
     assert got["meeting"].endswith("Dictator Meeting.app")
     assert got["app"] == str(app)
@@ -256,12 +258,15 @@ def test_model_progress_never_reads_full_before_the_file_lands(tmp_path,
     with open(tmp_path / (name + ".part"), "wb") as f:
         f.truncate(mb * 1024 * 1024 * 2)          # sparse, and oversized
     got = stt.model_status()
-    assert got["ggml-tiny.bin"] == {"have": True, "progress": 1.0,
-                                    "essential": True}
+    pick = lambda m: {k: m[k] for k in ("have", "progress", "essential")}
+    assert pick(got["ggml-tiny.bin"]) == {"have": True, "progress": 1.0,
+                                          "essential": True}
     assert got[name]["have"] is False and got[name]["progress"] == 0.99
     assert got[name]["essential"] is False
-    assert got[stt.SHIPPED[1][0]] == {"have": False, "progress": 0.0,
-                                      "essential": True}
+    # a .part nobody is fetching is a download that stopped, not one running
+    assert got[name]["downloading"] is False
+    assert pick(got[stt.SHIPPED[1][0]]) == {"have": False, "progress": 0.0,
+                                            "essential": True}
 
 
 def test_a_hold_is_published_as_it_happens(monkeypatch):
@@ -431,9 +436,16 @@ def test_a_model_that_lands_is_published_without_a_key_press(tmp_path,
     t = threading.Thread(target=dictate._watch_models, args=(stop, 0.05))
     t.start()
     (tmp_path / turbo).write_bytes(b"x")
-    t.join(timeout=3)
+    import time
+    until = time.time() + 3
+    while time.time() < until and not core.read_status()["models"][turbo]["have"]:
+        time.sleep(0.05)
+    # It keeps watching once everything is here: a model can be removed or
+    # downloaded again from Settings at any time.
+    assert t.is_alive()
     stop.set()
-    assert not t.is_alive(), "it stops once every model is there"
+    t.join(timeout=3)
+    assert not t.is_alive(), "it stops when the loop does"
     st = core.read_status()
     assert st["state"] == "ready" and st["models"][turbo]["have"] is True
 

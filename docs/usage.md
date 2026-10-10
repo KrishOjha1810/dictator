@@ -9,6 +9,8 @@
 - [What you said today](#what-you-said-today)
 - [Teaching it the words it got wrong](#teaching-it-the-words-it-got-wrong)
 - [Erasing it](#erasing-it)
+- [Speech models](#speech-models)
+- [Music while you dictate](#music-while-you-dictate)
 
 Meetings have their own page: [`meetings.md`](meetings.md).
 
@@ -73,6 +75,10 @@ two shortcuts are on. From a terminal: `dictator indicator`,
 | `dictator snippet "PHRASE" "TEXT"` | say the phrase, get the text |
 | `dictator review` | it asks you about the words it got wrong |
 | `dictator forget "WORDS"` | erase everything you said containing them |
+| `dictator models` | which speech models are here, and their state |
+| `dictator models remove NAME` | delete a model (`english`, `hinglish`, `quick`) to free disk space |
+| `dictator models fetch [NAME]` | download a model again, or retry one that failed |
+| `dictator quiet-media [on\|off]` | pause or mute music while the microphone is open |
 | `dictator log` | the last thing it did |
 | `dictator errors` | failures it noticed |
 
@@ -207,3 +213,46 @@ dictator forget all                # everything, and you have to type ERASE
 It searches what it heard as well as what it pasted, because the copy holding
 something that should not have been written down may be the one the recogniser
 produced.
+
+---
+
+## Speech models
+
+| Model | Size | Needed |
+|---|---|---|
+| Quick | 74 MB | yes: works out which language you spoke |
+| English | 638 MB | yes: fast English |
+| Hinglish | 1.5 GB | no: Hindi and Hinglish |
+
+**Settings → Language** lists them. Each one that is here has **Delete…**; one
+that is missing has **Download**, and one whose download failed or stopped has
+**Retry**, with the reason. From a terminal:
+
+```bash
+dictator models                    # what is here, downloading, failed or removed
+dictator models remove hinglish    # asks first; --yes skips the question
+dictator models fetch hinglish     # get it back, or retry it
+```
+
+A model you remove stays removed: the app does not download it again until
+you ask. Removing the English or Quick model stops dictation until it is back.
+Removing the Hinglish model while the language is Hinglish switches the
+language to English. Models shared with a voicebridge install are not removed,
+because that would break it.
+
+Models use memory only while a hold is being transcribed. Nothing stays
+loaded between holds, so there is nothing to unload, and quitting the app
+leaves nothing behind.
+
+---
+
+## Music while you dictate
+
+Music playing through your speakers reaches the microphone and ends up in the
+transcript. So while the microphone is open, Dictator pauses the player. If
+the player cannot be paused, it mutes the Mac's output instead. When you let
+go, the music comes back.
+
+It waits a fifth of a second after you press, so a stray tap never interrupts
+your music. Turn it off in **Settings → Microphone**, or with
+`dictator quiet-media off`.

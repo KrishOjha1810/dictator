@@ -19,6 +19,12 @@ final class SettingsState: ObservableObject {
     @Published var controls: [String] = ["dictate", "notetaker", "scratchpad"]
     @Published var shortcuts: [String: Bool] = ["notetaker": true, "scratchpad": true]
     @Published var autoUpdate = Updater.shared.automaticallyChecks
+    /// The model the Delete alert is asking about.
+    @Published var removing: Status.Model? = nil
+    /// What the last Delete said, under the models.
+    @Published var modelNote = ""
+    /// Pause or mute other audio while the microphone is open.
+    @Published var quietMedia = true
 }
 
 /// The eight places the pill can sit, as `dictator indicator` names them
@@ -244,22 +250,78 @@ struct SettingsPage: View {
             }
             ForEach(model.status.models, id: \.name) { m in
                 Hairline()
-                SettingRow(modelTitle(m.name), m.essential ? "Needed to dictate."
-                                                           : "Optional, for Hinglish.") {
-                    if m.have {
-                        Label("Ready", systemImage: "checkmark.circle.fill")
-                            .font(.system(size: 12, weight: .medium))
-                            .foregroundColor(Theme.good)
-                    } else {
-                        HStack(spacing: Theme.s2) {
-                            BrandProgress(value: m.progress).frame(width: 140)
-                            Text("\(Int((m.progress * 100).rounded()))%")
-                                .font(.system(size: 12).monospacedDigit())
-                                .foregroundColor(Theme.secondary)
-                        }
-                    }
-                }
+                SettingRow(modelTitle(m.name), modelDetail(m)) { modelControls(m) }
             }
+            if !st.modelNote.isEmpty {
+                Hairline()
+                SettingRow("", st.modelNote) { EmptyView() }
+            }
+        }
+        .alert(st.removing.map { "Delete the \(modelTitle($0.name))?" } ?? "",
+               isPresented: Binding(get: { st.removing != nil },
+                                    set: { if !$0 { st.removing = nil } })) {
+            Button("Delete", role: .destructive) {
+                if let m = st.removing { removeModel(m) }
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            if let m = st.removing {
+                Text(m.essential
+                     ? "Dictation stops working until you download it again. "
+                       + "Frees \(modelSize(m.mb))."
+                     : "Hinglish falls back to English until you download it again. "
+                       + "Frees \(modelSize(m.mb)).")
+            }
+        }
+    }
+
+    private func modelDetail(_ m: Status.Model) -> String {
+        let what = m.essential ? "Needed to dictate." : "Optional, for Hinglish."
+        if m.have || m.downloading { return "\(what) \(modelSize(m.mb))." }
+        return "\(what) \(modelProblem(m))"
+    }
+
+    /// Ready: a Delete button. Arriving: its progress. Anything else: the one
+    /// button that gets it back.
+    @ViewBuilder
+    private func modelControls(_ m: Status.Model) -> some View {
+        if m.have {
+            HStack(spacing: Theme.s3) {
+                Label("Ready", systemImage: "checkmark.circle.fill")
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundColor(Theme.good)
+                Button("Delete…") { st.removing = m }
+                    .buttonStyle(QuietButton())
+                    .foregroundColor(Theme.bad)
+            }
+        } else if m.downloading {
+            HStack(spacing: Theme.s2) {
+                BrandProgress(value: m.progress).frame(width: 140)
+                Text("\(Int((m.progress * 100).rounded()))%")
+                    .font(.system(size: 12).monospacedDigit())
+                    .foregroundColor(Theme.secondary)
+            }
+        } else {
+            Button(m.stuck ? "Retry" : "Download") {
+                st.modelNote = ""
+                downloadModel(m.name)
+            }
+            .buttonStyle(QuietButton())
+        }
+    }
+
+    /// `models remove` says what it freed, or why it would not; either way
+    /// the sentence goes under the list.
+    private func removeModel(_ m: Status.Model) {
+        CLI.load({ CLI.text(["models", "remove", m.name, "--yes"]) }) { out in
+            let line = out.split(separator: "\n")
+                .map { $0.trimmingCharacters(in: .whitespaces) }
+                .first { $0.hasPrefix("removed") || $0.hasPrefix("not removed") } ?? ""
+            st.modelNote = line.hasPrefix("removed")
+                ? "Deleted the \(modelTitle(m.name)). \(modelSize(m.mb)) freed."
+                : (line.isEmpty ? "Could not delete the \(modelTitle(m.name))." : line)
+            model.refresh()
+            model.loadLanguage()
         }
     }
 
@@ -281,6 +343,22 @@ struct SettingsPage: View {
                     }
                     .buttonStyle(QuietButton())
                 }
+            }
+            Hairline()
+            SettingRow("Pause music while dictating",
+                       "Music from your speakers ends up in what you say. It is paused while "
+                       + "the microphone is open, or muted when the player cannot be paused, "
+                       + "and comes back when you let go.") {
+                Toggle("", isOn: Binding(get: { st.quietMedia }, set: { on in
+                    st.quietMedia = on
+                    CLI.load({ CLI.act(["quiet-media", on ? "on" : "off"]) }) { _ in }
+                }))
+                .toggleStyle(BrandSwitch()).labelsHidden()
+            }
+        }
+        .onAppear {
+            CLI.load({ CLI.json(["quiet-media"]) }) { o in
+                if let on = (o as? [String: Any])?["on"] as? Bool { st.quietMedia = on }
             }
         }
     }

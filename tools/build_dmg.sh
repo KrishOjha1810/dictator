@@ -246,7 +246,7 @@ if [ -z "${DICTATOR_NATIVE_DIR:-}" ]; then
 fi
 cp -R "$NATIVE/Helpers/." "$C/Helpers/"
 [ -d "$NATIVE/Frameworks" ] && cp -R "$NATIVE/Frameworks/." "$C/Frameworks/"
-for h in dictator-hotkey dictator-rec dictator-paste dictator-orb dictator-readback \
+for h in dictator-hotkey dictator-rec dictator-paste dictator-orb dictator-readback dictator-media \
          whisper-server whisper-cli parakeet-cli "Dictator Meeting.app"; do
     [ -e "$C/Helpers/$h" ] || echo "  WARNING: helper missing: $h" >&2
 done

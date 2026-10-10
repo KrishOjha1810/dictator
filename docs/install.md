@@ -115,6 +115,17 @@ By hand: System Settings → Privacy & Security → Accessibility, click
 
 Why this happens at all is in [`architecture.md`](architecture.md#why-it-is-signed).
 
+### Every sentence is pasted twice
+
+Another app is listening to the same key. Dictator says so in its menu and on
+Home when it recognises the app: Wispr Flow, Superwhisper, MacWhisper, Aqua
+Voice, Willow, and Warp's voice input (`voice_input_toggle_key` in
+`~/.warp/settings.toml`, which is fn by default). Quit the other app, change
+its key, or change Dictator's key in Settings.
+
+If the second copy reads like a cleaned-up rewrite of the first, it came from
+the other app: `dictator history` shows the only copy Dictator wrote.
+
 ### Debugging another user account on the same Mac
 
 Every command reads `~/.dictator`. `DICTATOR_STATE` points one at a different

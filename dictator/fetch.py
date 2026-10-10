@@ -55,8 +55,10 @@ class Mismatch(Exception):
 
 
 def _order() -> list:
-    """Missing models, the ones English needs first."""
-    todo = stt.missing()
+    """Missing models, the ones English needs first. A model the user removed
+    is not missing, it is gone on purpose, and is left out."""
+    gone = stt.removed()
+    todo = [m for m in stt.missing() if m[0] not in gone]
     return ([m[0] for m in todo if m[3]]
             + [m[0] for m in todo if not m[3]])
 
@@ -115,19 +117,27 @@ def fetch(name: str, timeout: float = 60.0) -> None:
     os.replace(part, final)
 
 
-def fetch_missing(names: "list|None" = None) -> list:
+def fetch_missing(names: "list|None" = None, wait: bool = False) -> list:
     """Download every missing model, one process at a time.
 
     Returns what was downloaded. If another process holds the lock it is
-    already doing this, so returns [] at once rather than waiting behind it.
-    A model that fails is reported through surface_error and the rest are
-    still tried: no Hinglish is no reason for no English."""
+    already doing this, so returns [] at once rather than waiting behind it,
+    unless `wait`: a Retry the user pressed while another model is arriving
+    queues behind it instead of being dropped.
+
+    Naming a model is asking for it, so it is no longer "removed". A model
+    that fails is recorded (stt.note_failure, for the app's Retry) and
+    reported through surface_error, and the rest are still tried: no
+    Hinglish is no reason for no English."""
     d = stt.MODEL_DIR
     d.mkdir(parents=True, exist_ok=True)
+    for name in names or ():
+        stt._set_removed(name, False)
     lock = open(d / ".fetch.lock", "w")
+    pidfile = d / ".fetch.pid"
     try:
         try:
-            fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            fcntl.flock(lock, fcntl.LOCK_EX | (0 if wait else fcntl.LOCK_NB))
         except OSError:
             return []
         done = []
@@ -135,34 +145,43 @@ def fetch_missing(names: "list|None" = None) -> list:
             if name not in SOURCES or (d / name).exists():
                 continue
             core.log(f"fetch: downloading {name}")
+            pidfile.write_text(f"{os.getpid()} {name}")
+            stt.note_failure(name, None)
             try:
                 fetch(name)
                 done.append(name)
                 core.log(f"fetch: {name} verified and in place")
             except Exception as e:
+                stt.note_failure(name, str(e))
                 core.surface_error(
                     "models", f"could not download {name}: {e}",
-                    hint="check the connection; it is tried again on the "
-                         "next start")
+                    hint="press Retry in Settings, or run "
+                         f"`dictator models fetch {name}`")
         return done
     finally:
+        try:
+            pidfile.unlink()
+        except FileNotFoundError:
+            pass
         lock.close()
 
 
-def in_background() -> "subprocess.Popen|None":
+def in_background(names: "list|None" = None) -> "subprocess.Popen|None":
     """Start `dictator models fetch` as its own process, if anything is missing.
 
     Its own process and its own session, not a thread of the dictation loop:
     the app restarts the loop whenever the key changes, and a thread died
     with it, mid-download. The lock in fetch_missing keeps a second one from
-    doing anything, so starting it again is harmless."""
-    if not stt.missing():
+    doing anything, so starting it again is harmless. With `names` (a Retry,
+    or a download of a removed model) only those are fetched, and the process
+    waits for any download already running instead of giving up."""
+    if names is None and not _order():
         return None
     cli = Path(__file__).resolve().parent.parent / "bin" / "dictator"
     try:
         with open(core.LOG_FILE, "a") as log:
             return subprocess.Popen(
-                [sys.executable, str(cli), "models", "fetch"],
+                [sys.executable, str(cli), "models", "fetch"] + list(names or []),
                 stdin=subprocess.DEVNULL, stdout=log, stderr=log,
                 start_new_session=True)
     except Exception as e:

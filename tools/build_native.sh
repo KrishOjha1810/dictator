@@ -5,7 +5,7 @@
 #
 # Leaves:
 #   OUT_DIR/Helpers/dictator-hotkey, dictator-rec, dictator-paste, dictator-orb,
-#                   dictator-readback        the Swift helpers, native/*.swift
+#                   dictator-readback, dictator-media   the Swift helpers, native/*.swift
 #   OUT_DIR/Helpers/Dictator Meeting.app     the meeting recorder, its own bundle
 #   OUT_DIR/Helpers/whisper-server, whisper-cli, parakeet-cli
 #   OUT_DIR/Frameworks/                      empty when ggml links static
@@ -73,6 +73,7 @@ record.swift   dictator-rec
 paste.swift    dictator-paste
 orb.swift      dictator-orb
 readback.swift dictator-readback
+media.swift    dictator-media
 "
 
 # Rebuild when the source, or this script (its flags), is newer than the

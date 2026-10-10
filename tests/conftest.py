@@ -129,4 +129,14 @@ def _own_state_dir(tmp_path, monkeypatch):
         monkeypatch.setattr(snippets, "_shared", None)
     except Exception:
         pass
+    # Every simulated hold would otherwise pause the music playing on the
+    # machine running the suite, or mute it, through the real helper. Off as
+    # a setting too, so no hold starts a quieting thread that outlives its
+    # test and fires inside the next one; test_media turns it back on.
+    (tmp_path / "quiet-media").write_text("off")
+    try:
+        from dictator import media
+        monkeypatch.setattr(media, "_run", lambda *a, **k: "")
+    except Exception:
+        pass
     yield

@@ -44,7 +44,7 @@ final class AppModel: ObservableObject {
     @Published var running = false
     @Published var page: Page = .home
     @Published var language = "english"
-    @Published var key = Prefs.key
+    @Published var key = Prefs.key { didSet { checkRivals() } }
     /// The last hold, from last.json. Read every second with the rest.
     @Published var last: Last? = Last.read()
     /// Another dictation app that is running, if any (Rivals.swift). Checked
@@ -70,12 +70,12 @@ final class AppModel: ObservableObject {
         return q
     }
 
-    /// The warning applies only while our key is fn: on another key the two
-    /// apps do not hear the same press.
-    var clash: Rivals.Running? { key == "fn" ? rival : nil }
+    /// Only a rival on our own key is a clash: on another key the two apps
+    /// do not hear the same press. Rivals.running already asks that.
+    var clash: Rivals.Running? { rival }
 
     func checkRivals() {
-        let r = Rivals.running()
+        let r = Rivals.running(key: key)
         if r != rival { rival = r }
     }
 
@@ -484,15 +484,17 @@ final class UI: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWindowDelegat
         if let r = model.clash {
             let warn = NSMenuItem(title: "", action: nil, keyEquivalent: "")
             warn.attributedTitle = NSAttributedString(
-                string: Rivals.warning(r.rival).replacingOccurrences(of: ", so both", with: ",\nso both")
-                    .replacingOccurrences(of: ". Quit it", with: ".\nQuit it"),
+                string: Rivals.warning(r.rival, key: model.key)
+                    .replacingOccurrences(of: ", so both", with: ",\nso both")
+                    .replacingOccurrences(of: ". Quit it", with: ".\nQuit it")
+                    .replacingOccurrences(of: ". In ", with: ".\nIn "),
                 attributes: [.font: NSFont.menuFont(ofSize: 12),
                              .foregroundColor: NSColor.systemOrange])
             warn.image = NSImage(systemSymbolName: "exclamationmark.triangle.fill",
                                  accessibilityDescription: "Warning")
             warn.isEnabled = false
             menu.addItem(warn)
-            add(menu, "Quit \(r.rival.name)", #selector(quitRival))
+            if r.rival.quittable { add(menu, "Quit \(r.rival.name)", #selector(quitRival)) }
             add(menu, "Change key…", #selector(changeKey))
         }
         menu.addItem(.separator())
@@ -514,15 +516,17 @@ final class UI: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWindowDelegat
         lang.submenu = sub
         menu.addItem(lang)
 
-        // Only the models that are not there yet. A list of things that are
-        // fine is noise in a menu.
-        let missing = s.models.filter { !$0.have }
+        // Only the models that are not there yet, and not the ones the user
+        // removed on purpose. A list of things that are fine is noise in a menu.
+        let missing = s.models.filter { !$0.have && !$0.removed }
         if !missing.isEmpty {
             menu.addItem(.separator())
             for m in missing {
                 let pct = Int((m.progress * 100).rounded())
-                let i = NSMenuItem(title: "\(modelTitle(m.name))   "
-                                   + (m.progress > 0 ? "downloading \(pct)%" : "waiting"),
+                let state = m.downloading ? "downloading \(pct)%"
+                    : m.error != nil ? "download failed, retry in Settings"
+                    : m.progress > 0 ? "stopped at \(pct)%, retry in Settings" : "waiting"
+                let i = NSMenuItem(title: "\(modelTitle(m.name))   " + state,
                                    action: nil, keyEquivalent: "")
                 i.isEnabled = false
                 menu.addItem(i)

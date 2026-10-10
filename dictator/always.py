@@ -168,13 +168,14 @@ def build_all(force: bool = False) -> dict:
     Returns {name: path or ""}. Order matters: the app bundle goes last,
     because it is the one whose rebuild costs a permission, and build_app
     skips it when nothing changed."""
-    from . import hotkey, orbnative, paste, readback, recorder
+    from . import hotkey, media, orbnative, paste, readback, recorder
     built = {
         "hotkey": hotkey.build(force),
         "orb": orbnative.build(force),
         "recorder": recorder.build(force),
         "paste": paste.helper(),
         "readback": readback.build(force),
+        "media": media.build(force),
     }
     # Deliberately NOT forced. Every rebuild of the bundle is, to macOS, an
     # application that has never been granted anything, so forcing it here
