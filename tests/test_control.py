@@ -14,7 +14,7 @@ from pathlib import Path
 
 import pytest
 
-from dictator import control, core, dictate
+from dictator_core import control, core, dictate
 
 
 @pytest.fixture
@@ -141,9 +141,9 @@ def test_a_listener_that_is_gone_is_not_written_to():
 # ---- the command line
 
 def _cli():
-    # The CLI body lives in dictator.cli now; bin/dictator is just a launcher.
+    # The CLI body lives in dictator_core.cli now; bin/dictator is just a launcher.
     import importlib
-    return importlib.import_module("dictator.cli")
+    return importlib.import_module("dictator_core.cli")
 
 
 def test_cli_says_when_nothing_is_running(short_state, capsys):

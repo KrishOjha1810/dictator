@@ -11,7 +11,7 @@ from unittest import mock
 
 import pytest
 
-from dictator import always, signing
+from dictator_core import always, signing
 
 
 def _requirement():
@@ -176,7 +176,7 @@ def test_the_app_is_not_rebuilt_when_nothing_changed():
     `dictator on`. That is why a fresh install spent its first few minutes
     losing a permission it had just been given."""
     import inspect
-    from dictator import always
+    from dictator_core import always
     src = inspect.getsource(always.build_app)
     assert "st_mtime" in src, "build_app rebuilds unconditionally again"
 
@@ -192,7 +192,7 @@ def test_a_rebuild_leaves_the_binary_alone(tmp_path, monkeypatch):
     was the one three checks further down. Same shape as the STATE_DIR
     leakage the conftest exists for: a test reaching a real path."""
     import shutil
-    from dictator import always
+    from dictator_core import always
     if not shutil.which("swiftc"):
         pytest.skip("no swiftc here")
     monkeypatch.setattr(always, "APP", tmp_path / "Dictator.app")

@@ -103,7 +103,7 @@ PY="$C/Resources/python/bin/python3"
 # The package as it is in the repo, without bytecode left over from whichever
 # Python ran it last. tests/ is beside dictator/, not in it, so it never comes.
 rsync -a --exclude '__pycache__' --exclude '*.pyc' --exclude '.DS_Store' \
-    "$ROOT/dictator/" "$C/Resources/dictator/"
+    "$ROOT/dictator_core/" "$C/Resources/dictator_core/"
 cp "$ROOT/bin/dictator" "$C/Resources/bin/dictator"
 chmod +x "$C/Resources/bin/dictator"
 
@@ -155,7 +155,7 @@ fi
 PYTHONPATH="$NUITKA_DIR" "$PY" -s -c 'import nuitka' \
     || { echo "  nuitka unavailable; refusing to ship readable .py" >&2; exit 1; }
 
-D="$C/Resources/dictator"
+D="$C/Resources/dictator_core"
 n=0
 for f in "$D"/*.py; do
     [ "$(basename "$f")" = "__init__.py" ] && continue
@@ -215,7 +215,7 @@ echo "  runtime trimmed: $(mb "$before") -> $(mb "$after"), saved $(mb $((before
 # one written file is enough for the signature to stop verifying. Unchecked
 # hashes are valid whatever the file dates are after a copy or a drag.
 "$PY" -I -m compileall -q -j 0 --invalidation-mode unchecked-hash \
-    "$C/Resources/python/lib" "$C/Resources/dictator" "$C/Resources/site-packages" >/dev/null
+    "$C/Resources/python/lib" "$C/Resources/dictator_core" "$C/Resources/site-packages" >/dev/null
 
 # Does the bundle's Python find its own package and jellyfish, the way the app
 # will start it? -P, or the current directory, which is this repo, answers the
@@ -225,15 +225,15 @@ echo "  runtime trimmed: $(mb "$before") -> $(mb "$after"), saved $(mb $((before
 SMOKE="$(mktemp -d "$BUILD/smoke.XXXXXX")"
 env -i HOME="$SMOKE" DICTATOR_STATE="$SMOKE/state" DICTATOR_BUNDLE="$APP" \
     PYTHONPATH="$C/Resources:$C/Resources/site-packages" PYTHONDONTWRITEBYTECODE=1 \
-    "$PY" -B -P -c 'import dictator.core, dictator.vocab, dictator.cli, dictator.roman, jellyfish, sys
-assert dictator.vocab.jellyfish is not None, "jellyfish did not load"
-assert dictator.__file__.startswith(sys.argv[1]), dictator.__file__
+    "$PY" -B -P -c 'import dictator_core.core, dictator_core.vocab, dictator_core.cli, dictator_core.roman, jellyfish, sys
+assert dictator_core.vocab.jellyfish is not None, "jellyfish did not load"
+assert dictator_core.__file__.startswith(sys.argv[1]), dictator_core.__file__
 # The compiled modules, not source: Nuitka reports __file__ as the original
 # name, so the proof the module came from a .so and not a .py is its loader.
-assert type(dictator.core.__loader__).__name__ == "nuitka_module_loader", \
-    type(dictator.core.__loader__).__name__
+assert type(dictator_core.core.__loader__).__name__ == "nuitka_module_loader", \
+    type(dictator_core.core.__loader__).__name__
 # Path(__file__) data lookup still resolves beside the compiled module.
-assert dictator.roman._LEX.exists(), "data file not found beside compiled module"' "$C/Resources"
+assert dictator_core.roman._LEX.exists(), "data file not found beside compiled module"' "$C/Resources"
 rm -rf "$SMOKE"
 echo "  bundled python imports the compiled dictator package and jellyfish"
 
@@ -375,7 +375,7 @@ run_bundled() {
         PYTHONPATH="$C/Resources:$C/Resources/site-packages" "$PY" "$@")
 }
 run_bundled -P -c 'import importlib, pkgutil, dictator
-for m in pkgutil.iter_modules(dictator.__path__):
+for m in pkgutil.iter_modules(dictator_core.__path__):
     importlib.import_module("dictator." + m.name)'
 run_bundled "$C/Resources/bin/dictator" help >/dev/null
 rm -rf "$SMOKE"
@@ -408,7 +408,7 @@ printf '\n'
 printf '  app        %s\n' "$(mb "$app_kb")"
 printf '    python   %s\n' "$(mb "$(kb "$C/Resources/python")")"
 printf '    site-pkg %s\n' "$(mb "$(kb "$C/Resources/site-packages")")"
-printf '    dictator %s\n' "$(mb "$(kb "$C/Resources/dictator")")"
+printf '    dictator %s\n' "$(mb "$(kb "$C/Resources/dictator_core")")"
 printf '    helpers  %s\n' "$(mb "$(kb "$C/Helpers")")"
 printf '    frmwrks  %s\n' "$(mb "$(kb "$C/Frameworks")")"
 printf '  dmg        %s (%s bytes)\n' "$(mb $((dmg_bytes / 1024)))" "$dmg_bytes"

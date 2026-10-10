@@ -27,7 +27,7 @@ from pathlib import Path
 
 import pytest
 
-from dictator import meeting, recap
+from dictator_core import meeting, recap
 
 ROOT = Path(__file__).resolve().parent.parent
 
@@ -584,7 +584,7 @@ def test_a_meeting_can_be_transcribed_after_the_fact(monkeypatch, capsys):
     monkeypatch.setattr(meeting, "notes", lambda m: meeting.load(m))
     monkeypatch.setattr(meeting, "render", lambda r, **k: "notes here\n")
 
-    cli = importlib.import_module("dictator.cli")
+    cli = importlib.import_module("dictator_core.cli")
     assert cli.meeting(["transcribe"]) == 0
     assert done == [mid]
 
@@ -603,7 +603,7 @@ def test_a_failure_while_transcribing_says_how_to_pick_it_up(monkeypatch,
     monkeypatch.setattr(meeting, "chunks_expected", lambda m: 1)
     monkeypatch.setattr(meeting, "transcribe", boom)
 
-    cli = importlib.import_module("dictator.cli")
+    cli = importlib.import_module("dictator_core.cli")
     assert cli.meeting(["transcribe"]) == 1
     out = capsys.readouterr().out
     assert "recording is safe" in out

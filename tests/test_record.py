@@ -18,7 +18,7 @@ from pathlib import Path
 
 import pytest
 
-from dictator import always, recorder, stt, swiftbuild
+from dictator_core import always, recorder, stt, swiftbuild
 
 ROOT = Path(__file__).resolve().parent.parent
 HAVE_SWIFTC = bool(shutil.which("swiftc"))
@@ -232,7 +232,7 @@ def test_every_helper_is_built_before_first_use(monkeypatch):
     """Built lazily, swiftc runs in the middle of the first few holds, which is
     where somebody decides whether this works (issue #1)."""
     calls = []
-    from dictator import hotkey, media, orbnative, paste, readback
+    from dictator_core import hotkey, media, orbnative, paste, readback
     for mod, attr in ((hotkey, "build"), (orbnative, "build"),
                       (recorder, "build"), (readback, "build"), (media, "build")):
         monkeypatch.setattr(mod, attr,
@@ -242,8 +242,8 @@ def test_every_helper_is_built_before_first_use(monkeypatch):
     built = always.build_all()
     assert set(built) == {"hotkey", "orb", "recorder", "paste", "readback",
                           "media", "app"}
-    for name in ("dictator.hotkey", "dictator.orbnative", "dictator.recorder",
-                 "dictator.readback", "dictator.media", "paste", "app"):
+    for name in ("dictator_core.hotkey", "dictator_core.orbnative", "dictator_core.recorder",
+                 "dictator_core.readback", "dictator_core.media", "paste", "app"):
         assert name in calls, calls
 
 

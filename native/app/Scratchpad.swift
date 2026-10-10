@@ -1,7 +1,7 @@
 // The Scratchpad: a window with a big text area for notes you dictate into,
 // and a Hub page listing them.
 //
-// The notes are Markdown files in STATE/notes, one per note; dictator/notes.py
+// The notes are Markdown files in STATE/notes, one per note; dictator_core/notes.py
 // decides the format and `dictator notes` is the only thing that reads or
 // writes them, as everywhere else in the app (see Backend.swift). Typing is
 // saved a moment after it stops, when another note is picked, and when the

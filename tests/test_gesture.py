@@ -11,7 +11,7 @@ import subprocess
 
 import pytest
 
-from dictator import hotkey
+from dictator_core import hotkey
 
 ROOT = hotkey.SRC.parent.parent
 
@@ -220,7 +220,7 @@ def test_the_two_caps_are_the_same_number():
     microphone is open."""
     import ast
     from pathlib import Path
-    src = (Path(__file__).resolve().parent.parent / "dictator" / "dictate.py").read_text()
+    src = (Path(__file__).resolve().parent.parent / "dictator_core" / "dictate.py").read_text()
     assert "max_session_ms=int(MAX_SECS * 1000)" in src, \
         "the listener's session cap no longer follows the recorder's"
     tree = ast.parse(src)
@@ -235,6 +235,6 @@ def test_a_discarded_session_says_why():
     audio away. Silently dropping a long dictation is the kind of thing people
     assume is a crash."""
     from pathlib import Path
-    src = (Path(__file__).resolve().parent.parent / "dictator" / "dictate.py").read_text()
+    src = (Path(__file__).resolve().parent.parent / "dictator_core" / "dictate.py").read_text()
     for why in ("cap", "tap", "exit", "lock"):
         assert f'"{why}":' in src, f"no explanation for a session ending on {why}"

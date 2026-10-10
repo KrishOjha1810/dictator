@@ -11,7 +11,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from dictator.shape import shape, drop_fillers
+from dictator_core.shape import shape, drop_fillers
 
 
 def on(text):
@@ -341,7 +341,7 @@ import pytest as _pytest
     ("yaar k kya hua", "yaar kya hua"),
 ])
 def test_stutters_are_removed(said, want):
-    from dictator.shape import drop_stutters
+    from dictator_core.shape import drop_stutters
     assert drop_stutters(said) == want
 
 
@@ -352,11 +352,11 @@ def test_stutters_are_removed(said, want):
     "a apple a day",
 ])
 def test_real_doubles_and_words_are_kept(said):
-    from dictator.shape import drop_stutters
+    from dictator_core.shape import drop_stutters
     assert drop_stutters(said) == said
 
 
 def test_stutters_can_be_turned_off():
-    from dictator.shape import shape
+    from dictator_core.shape import shape
     assert "is is" in shape("it is is fine", stutters=False)
     assert "is is" not in shape("it is is fine")

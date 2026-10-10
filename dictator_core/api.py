@@ -8,7 +8,7 @@ That order used to live inside the key listener, so anything else wanting the
 same result had to reproduce it, and a reproduction drifts. Now there is one
 pipeline and the key listener is just its first caller.
 
-    from dictator import Dictator
+    from dictator_core import Dictator
 
     d = Dictator()
     said = d.transcribe("recording.wav")

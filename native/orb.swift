@@ -71,7 +71,7 @@
 // (stop and throw away, as Escape) and check (stop, transcribe and paste).
 //
 // HOW A CLICK GETS ANYWHERE. Dictation commands go to the loop as one datagram
-// on STATE/dictate.sock (dictator/control.py), which hands them to the key
+// on STATE/dictate.sock (dictator_core/control.py), which hands them to the key
 // listener, so a session started by a click and one started by a double tap
 // are the same session. Notetaker and Scratchpad open dictator://notetaker and
 // dictator://scratchpad in the app whose path is in STATE/app.lock, and only
@@ -508,7 +508,7 @@ func lockHeld(_ name: String) -> Bool {
     return errno == EWOULDBLOCK
 }
 
-/// One command to the dictation loop (dictator/control.py): toggle, finish or
+/// One command to the dictation loop (dictator_core/control.py): toggle, finish or
 /// cancel. A datagram: nobody bound means it fails at once, never reaches a
 /// stranger.
 @discardableResult

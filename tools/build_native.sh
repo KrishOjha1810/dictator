@@ -65,7 +65,7 @@ say() { echo "build_native: $*" >&2; }
 
 # ---- Swift helpers ---------------------------------------------------------
 
-# source file -> binary name. The names are the ones dictator/*.py looks for
+# source file -> binary name. The names are the ones dictator_core/*.py looks for
 # (hotkey.BIN, recorder.BIN, paste._HELPER, orbnative.BIN, readback.BIN).
 SWIFT_HELPERS="
 hotkey.swift   dictator-hotkey

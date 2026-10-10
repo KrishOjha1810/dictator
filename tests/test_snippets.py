@@ -7,7 +7,7 @@ here are the refusals.
 """
 import pytest
 
-from dictator import snippets
+from dictator_core import snippets
 
 
 @pytest.fixture
@@ -92,7 +92,7 @@ def test_you_can_add_it_anyway(box, monkeypatch):
 
 def test_the_familiarity_check_reads_your_own_history(monkeypatch, tmp_path):
     monkeypatch.setattr(snippets, "STORE", tmp_path / "snippets.json")
-    from dictator import history
+    from dictator_core import history
     for _ in range(3):
         history.add(heard="raw", shown="please check the loop again")
     assert snippets.Snippets().said_before("check the loop") == 3

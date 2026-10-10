@@ -6,7 +6,7 @@ is one thing somebody wishes they had not said out loud, and an irreversible
 delete of every word they have ever dictated should take more than four
 letters and a Return.
 """
-from dictator import history
+from dictator_core import history
 
 
 def _said(text, heard=None):

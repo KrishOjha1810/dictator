@@ -8,7 +8,7 @@ import time
 
 import pytest
 
-from dictator import history, search
+from dictator_core import history, search
 
 
 def _said(text, app="", at=None, heard=None, kept=""):

@@ -40,7 +40,7 @@ import wave
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-from dictator import hindi, roman, stt          # noqa: E402
+from dictator_core import hindi, roman, stt          # noqa: E402
 
 _WORD = re.compile(r"[A-Za-zऀ-ॿ']+")
 # A word is treated as English if it is ASCII and the romanisation lexicon has

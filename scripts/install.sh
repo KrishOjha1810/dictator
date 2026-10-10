@@ -75,7 +75,7 @@ step "4/6  Speech models"
 # and had no callers anywhere, and would have fetched the wrong model anyway,
 # so a fresh machine had nothing to transcribe with and the key simply did
 # nothing. Models already on the machine are found, not fetched again.
-MODEL_DIR="$(python3 -c "import sys; sys.path.insert(0, '$HERE'); from dictator import stt; print(stt.MODEL_DIR)")"
+MODEL_DIR="$(python3 -c "import sys; sys.path.insert(0, '$HERE'); from dictator_core import stt; print(stt.MODEL_DIR)")"
 mkdir -p "$MODEL_DIR"
 echo "  models live in $MODEL_DIR"
 

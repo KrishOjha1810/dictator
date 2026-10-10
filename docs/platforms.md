@@ -1100,7 +1100,7 @@ Latin-script product.
 
 Two things carry over from our side for free:
 
-- `dictator/data/hi_roman.tsv`, 25,002 entries from Google Dakshina, becomes an
+- `dictator_core/data/hi_roman.tsv`, 25,002 entries from Google Dakshina, becomes an
   Android asset unchanged. It is the single most directly reusable thing in the
   codebase. **Its CC BY-SA 4.0 attribution and share-alike terms start to bite
   the moment it is distributed in an app**, which `roman.py`'s own docstring

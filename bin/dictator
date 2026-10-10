@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Launcher. The CLI lives in dictator.cli so the shipped app can carry it as
+"""Launcher. The CLI lives in dictator_core.cli so the shipped app can carry it as
 a compiled module instead of readable source; this stub stays plain because it
 reveals nothing. In a repo install it puts the checkout on the path so the
 package imports; in the bundle the app already sets PYTHONPATH."""
@@ -8,6 +8,6 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from dictator.cli import main
+from dictator_core.cli import main
 
 sys.exit(main(sys.argv))
