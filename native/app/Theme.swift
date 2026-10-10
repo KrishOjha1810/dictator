@@ -24,60 +24,9 @@
 // that get lighter as they rise, borders as low-alpha white, and a lighter
 // violet so the accent keeps its contrast. Body text is at least 4.5:1 on
 // its background in both.
-//
-// THE WINDOWS ARE GLASS. The surfaces below are translucent and the blur
-// comes from an NSVisualEffectView behind the whole window (MenuBar.show).
-// `Glass` holds the two numbers that decide how it looks, and both were
-// arrived at the hard way; the reasoning is in docs/ui/glass.html.
 
 import AppKit
 import SwiftUI
-
-/// The glass, in two numbers.
-enum Glass {
-    /// Off puts the solid surfaces back, for anyone who finds a translucent
-    /// window unreadable over their own desktop. It is one switch because a
-    /// half-translucent app looks like a bug rather than a setting.
-    static var on: Bool {
-        if let e = env["DICTATOR_GLASS"] { return e != "0" }
-        return (Prefs.store.object(forKey: "glass") as? Bool) ?? true
-    }
-
-    /// How much white sits over the blur. Six percent.
-    ///
-    /// Everything inside the window is drawn with hairlines rather than
-    /// fills, because three sheets of ten percent is thirty percent and the
-    /// window stops being see-through. If a surface needs a fill it gets
-    /// this one, not a second one on top of it.
-    static let tint: CGFloat = 0.06
-
-    /// How far the scene behind the panels is softened. Fourteen points.
-    ///
-    /// Small on purpose, and this is the thing that took longest to learn: a
-    /// heavy blur dissolves the scene into a smooth wash, a smooth wash reads
-    /// as paint, and so every instinct to raise the blur and look more
-    /// frosted makes the window look more solid. At fourteen the ridge behind
-    /// a panel is still recognisable, which is the only thing that proves
-    /// glass is glass.
-    static let blur: CGFloat = 14
-
-    /// The window carries its own sky (Backdrop.swift) rather than blurring
-    /// the user's desktop.
-    ///
-    /// Blurring the desktop is how a Mac app normally does this, and it was
-    /// the first version. It is wrong here: half the look is the soft ridge
-    /// showing through the panels, and behind somebody with a white wallpaper
-    /// there is no ridge. The design would then fall apart differently for
-    /// every person, which is not something that can be designed for or
-    /// tested. Ours looks the same on every Mac.
-    static let ownBackdrop = true
-
-    /// White at this alpha, or `clear` when glass is off and the solid
-    /// surface underneath should show instead.
-    static func white(_ a: CGFloat) -> NSColor {
-        on ? NSColor.white.withAlphaComponent(a) : .clear
-    }
-}
 
 /// A colour with a light and a dark value.
 func dynamic(_ light: NSColor, _ dark: NSColor) -> NSColor {
@@ -94,49 +43,26 @@ func hex(_ v: UInt32, _ alpha: CGFloat = 1) -> NSColor {
 
 enum Palette {
     // Surfaces, from the bottom up.
-    //
-    // With glass on these are translucent and the desktop shows through all
-    // of them. The window itself carries the only fill; a panel inside it is
-    // drawn with `border`, not with `card`, so the layers do not stack up
-    // into something opaque. With glass off they fall back to the solid
-    // values this app shipped with.
-    static let background: NSColor =
-        Glass.on ? .clear : dynamic(hex(0xF5F4FA), hex(0x121124))
-    static let card: NSColor =
-        Glass.on ? Glass.white(0.07) : dynamic(hex(0xFFFFFF), hex(0x1B1A31))
-    static let raised: NSColor =
-        Glass.on ? Glass.white(0.12) : dynamic(hex(0xF0EFF7), hex(0x25233F))
-    static let sunken: NSColor =
-        Glass.on ? NSColor.black.withAlphaComponent(0.10) : dynamic(hex(0xEEEDF5), hex(0x0E0D1D))
-    static let border: NSColor =
-        Glass.on ? Glass.white(0.13) : dynamic(hex(0xE2E0EE), NSColor.white.withAlphaComponent(0.10))
-    static let hairline: NSColor =
-        Glass.on ? Glass.white(0.09) : dynamic(hex(0xECEBF4), NSColor.white.withAlphaComponent(0.06))
+    static let background = dynamic(hex(0xF5F4FA), hex(0x121124))
+    static let card = dynamic(hex(0xFFFFFF), hex(0x1B1A31))
+    static let raised = dynamic(hex(0xF0EFF7), hex(0x25233F))
+    static let sunken = dynamic(hex(0xEEEDF5), hex(0x0E0D1D))
+    static let border = dynamic(hex(0xE2E0EE), NSColor.white.withAlphaComponent(0.10))
+    static let hairline = dynamic(hex(0xECEBF4), NSColor.white.withAlphaComponent(0.06))
 
-    // The rail. Solid ink in the old look; with glass it is the same sheet
-    // as the window, told apart by one hairline down its right edge, which
-    // is all a sidebar on glass should be.
-    static let rail: NSColor =
-        Glass.on ? .clear : dynamic(hex(0x1C1A45), hex(0x0B0A18))
+    // The rail is ink in both appearances: the one dark band in a light
+    // window, and the deepest layer in a dark one.
+    static let rail = dynamic(hex(0x1C1A45), hex(0x0B0A18))
     static let railText = dynamic(hex(0xECEAFB), hex(0xE6E4F4))
     static let railSecondary = dynamic(hex(0xA9A5D4), hex(0x9591B4))
-    static let railHover = NSColor.white.withAlphaComponent(0.09)
-    static let railSelected = NSColor.white.withAlphaComponent(0.17)
+    static let railHover = NSColor.white.withAlphaComponent(0.06)
+    static let railSelected = NSColor.white.withAlphaComponent(0.11)
 
     // Text. Contrast on `background`: text 15:1 / 15:1, secondary 6.4:1 /
     // 7.6:1, tertiary 4.6:1 / 4.7:1.
-    //
-    // On glass there is no known background to measure against, so these go
-    // up rather than down: pure white for body, and the two quiet tints
-    // lifted enough to survive a pale desktop behind them. Type that is
-    // itself transparent is the fastest way to a window nobody can read at
-    // noon, so none of these is given an alpha.
-    static let text: NSColor =
-        Glass.on ? .white : dynamic(hex(0x1A1838), hex(0xECEAF6))
-    static let secondary: NSColor =
-        Glass.on ? hex(0xD8D4E4) : dynamic(hex(0x57536F), hex(0xACA8C6))
-    static let tertiary: NSColor =
-        Glass.on ? hex(0xADA9BE) : dynamic(hex(0x726E8C), hex(0x8682A3))
+    static let text = dynamic(hex(0x1A1838), hex(0xECEAF6))
+    static let secondary = dynamic(hex(0x57536F), hex(0xACA8C6))
+    static let tertiary = dynamic(hex(0x726E8C), hex(0x8682A3))
 
     // Violet: controls, selection, links. The lighter dark value keeps 7:1
     // on the ink background; the fill behind white button text is its own
@@ -153,14 +79,10 @@ enum Palette {
     static let warn = dynamic(hex(0xB8650A), hex(0xF2A649))
     static let bad = dynamic(hex(0xC23A30), hex(0xFF7A6E))
 
-    // The brand's stops. These were teal, violet and deep indigo, and the
-    // violet is gone: a saturated violet to teal ramp is the single most
-    // recognisable mark of a generated interface, and over a photograph it
-    // fights everything behind it. Teal into slate keeps the one colour the
-    // product means something by and drops the one it did not.
-    static let gradTeal = hex(0x19B3AD)
-    static let gradViolet = hex(0x1E5F6B)
-    static let gradDeep = hex(0x12242B)
+    // The icon's gradient stops.
+    static let gradTeal = hex(0x18AFAB)
+    static let gradViolet = hex(0x5C33C7)
+    static let gradDeep = hex(0x1D1852)
     static let cursorGlow = hex(0x8CFFEB)
 }
 
@@ -221,10 +143,7 @@ enum Theme {
     static let radius: CGFloat = 14
     static let smallRadius: CGFloat = 8
 
-    /// Three columns need the room for three columns. At 980 the middle
-    /// one came out about 500 points wide and every line in it truncated to
-    /// a word per row.
-    static let hubSize = NSSize(width: 1180, height: 760)
+    static let hubSize = NSSize(width: 980, height: 660)
     static let onboardingSize = NSSize(width: 660, height: 500)
 }
 
@@ -283,42 +202,33 @@ enum Appearance: String, CaseIterable {
 struct BrandMark: View {
     var size: CGFloat = 28
 
-    /// On glass the tile is a sheet of the same glass, not a painted square.
-    ///
-    /// It used to be the icon's indigo to violet to teal gradient. A
-    /// saturated gradient is the first thing that makes an interface look
-    /// generated, and over a photograph it fights everything behind it, so
-    /// in the app the mark is drawn in white and keeps only the teal of the
-    /// cursor. The installed icon is unchanged: a Dock icon has to carry at
-    /// 32 points against every other icon, where a sidebar mark does not.
     var body: some View {
-        let r = size * 0.30
+        let r = size * 0.27
         ZStack {
-            if Glass.on {
-                RoundedRectangle(cornerRadius: r, style: .continuous)
-                    .fill(Color.white.opacity(0.13))
-                RoundedRectangle(cornerRadius: r, style: .continuous)
-                    .strokeBorder(Color.white.opacity(0.26), lineWidth: max(0.5, size / 52))
-            } else {
-                RoundedRectangle(cornerRadius: r, style: .continuous).fill(Theme.brand)
-                RoundedRectangle(cornerRadius: r, style: .continuous)
-                    .strokeBorder(Color.white.opacity(0.18), lineWidth: max(0.5, size / 64))
+            RoundedRectangle(cornerRadius: r, style: .continuous).fill(Theme.brand)
+            RoundedRectangle(cornerRadius: r, style: .continuous)
+                .strokeBorder(Color.white.opacity(0.18), lineWidth: max(0.5, size / 64))
+            HStack(alignment: .center, spacing: size * 0.08) {
+                // The grille: a white capsule with four lines in it.
+                ZStack {
+                    Capsule().fill(Color.white)
+                    VStack(alignment: .leading, spacing: size * 0.05) {
+                        ForEach([0.62, 0.86, 0.5, 0.74], id: \.self) { w in
+                            Capsule().fill(Theme.ink)
+                                .frame(width: size * 0.26 * w, height: max(1, size * 0.045))
+                        }
+                    }
+                }
+                .frame(width: size * 0.36, height: size * 0.5)
+                Capsule().fill(Theme.cursorGlow)
+                    .frame(width: max(1.5, size * 0.055), height: size * 0.32)
+                    .shadow(color: Color(nsColor: Palette.gradTeal).opacity(0.9),
+                            radius: size * 0.06)
             }
-            mic
+            .offset(x: size * 0.02)
         }
         .frame(width: size, height: size)
         .accessibilityHidden(true)
-    }
-
-    /// A microphone, because the mark before it (a grille of text lines with
-    /// a cursor) turns to mush below about 24 points and the sidebar draws
-    /// it at 25. Drawn with SF Symbols rather than by hand: the hand drawn
-    /// one came out as a circle at small sizes, and this is a glyph Apple
-    /// has already hinted for every size.
-    private var mic: some View {
-        Image(systemName: "mic.fill")
-            .font(.system(size: size * 0.46, weight: .medium))
-            .foregroundColor(.white)
     }
 }
 

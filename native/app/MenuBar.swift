@@ -10,30 +10,24 @@ import AppKit
 import SwiftUI
 
 enum Page: String, CaseIterable, Identifiable {
-    case home = "Home", history = "History", words = "Words", snippets = "Snippets"
-    case scratchpad = "Scratchpad", style = "Style"
+    case home = "Home", words = "Words", snippets = "Snippets", scratchpad = "Scratchpad"
+    case style = "Style"
     case review = "Review", meetings = "Meetings", settings = "Settings", help = "Help"
     var id: String { rawValue }
 
-    /// The sidebar, in the order of a day: see what just happened, go back
-    /// through it, teach it, keep things.
-    ///
-    /// Six, because a list long enough to read is a list nobody reads. The
-    /// four that are not here (Scratchpad, Style, Review, Help) are a key
-    /// press away in the palette, which indexes every page by name.
-    static let main: [Page] = [.home, .history, .words, .snippets, .meetings, .settings]
+    /// The pages in the top of the sidebar; Settings and Help sit at the bottom.
+    static let main: [Page] = [.home, .words, .snippets, .scratchpad, .style, .review, .meetings]
 
     var symbol: String {
         switch self {
         case .home: return "house"
-        case .history: return "magnifyingglass"
         case .words: return "character.book.closed"
-        case .snippets: return "chevron.left.forwardslash.chevron.right"
+        case .snippets: return "text.badge.plus"
         case .scratchpad: return "note.text"
         case .style: return "textformat"
         case .review: return "checkmark.seal"
-        case .meetings: return "calendar"
-        case .settings: return "sun.max"
+        case .meetings: return "person.2"
+        case .settings: return "gearshape"
         case .help: return "questionmark.circle"
         }
     }
@@ -619,13 +613,7 @@ final class UI: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWindowDelegat
         w.titlebarAppearsTransparent = true
         w.titleVisibility = .hidden
         w.isMovableByWindowBackground = true
-        // The glass is inside the window, not behind it: the view carries
-        // its own sky (Backdrop.swift) and the panels sit on that. So the
-        // window is opaque like any other, and unlike a window that blurs
-        // the desktop, it looks the same on every Mac. It also means a
-        // snapshot run photographs the real thing rather than a grey
-        // rectangle, which the earlier version could not.
-        w.backgroundColor = Glass.on ? .black : Palette.background
+        w.backgroundColor = Palette.background
         w.isReleasedWhenClosed = false
         w.delegate = self
         w.contentViewController = NSHostingController(
@@ -654,7 +642,7 @@ final class UI: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWindowDelegat
         var size = Theme.hubSize
         if fake, let s = env["DICTATOR_HUB_SIZE"]?.split(separator: "x").compactMap({ Double($0) }),
            s.count == 2 { size = NSSize(width: s[0], height: s[1]) }
-        _ = show("hub", "Dictator", size, min: NSSize(width: 640, height: 520)) {
+        _ = show("hub", "Dictator", size, min: NSSize(width: 820, height: 560)) {
             HubView()
         }
     }
