@@ -1299,7 +1299,29 @@ def _looks_indic(text: str) -> bool:
 
 def _transcribe_ex(wav: str) -> "tuple[str, float]":
     global LAST_ENGINE, _force_multilingual
-    if language() != "hinglish" and parakeet_ready():
+    # Parakeet is tried first in BOTH modes, not only in English.
+    #
+    # This used to read `language() != "hinglish"`, so anyone who had asked
+    # for Hinglish sent every hold straight to the 1.6GB multilingual model
+    # and paid its load each time. That looked like the safe reading of the
+    # setting. It was not: the machinery to try an English-only model on
+    # possibly-Hindi audio is right below, four guards and a fallback that
+    # reruns the hold multilingual the moment any of them fires.
+    #
+    # Measured on the 40 written references, interleaved, two passes each:
+    #
+    #                             WER     WER-sound  ENG-exact  median
+    #   always multilingual     10.32%      10.05%      96.1%    4.12s
+    #   parakeet first           3.60%       3.32%      98.7%    1.27s
+    #
+    # Better on the words and three times faster, with 31 of the 40 holds
+    # answered by Parakeet and 9 falling through to turbo. The guards are
+    # doing their job; the gate was stopping them from getting the chance.
+    #
+    # The setting still decides the fallback: `stt_lang_mode` picks the
+    # multilingual model and the Hindi flag for the holds Parakeet declines,
+    # which is what asking for Hinglish should mean.
+    if parakeet_ready():
         got = _parakeet(wav)
         if got and not _parakeet_lost(got) and not _too_little(got, wav) \
                 and not _not_english(got) and not _mangled_stretch(got):

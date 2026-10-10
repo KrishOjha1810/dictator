@@ -1,0 +1,725 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Dictator</title>
+<style>
+/* ===========================================================
+   Defaults are tint 6% and blur 14px, which is where this landed.
+
+   Low blur on purpose: at 30px and up the scene behind dissolves
+   into a smooth wash, and a smooth wash reads as paint. The grain
+   on the wallpaper is there for the same reason. Fine detail is
+   what makes a blur visible, and a visible blur is what makes
+   glass look like glass.
+
+   Structure comes from hairlines. The only saturated colour in the
+   interface is the teal that means the microphone is live.
+   =========================================================== */
+:root {
+  --tint: 0.06;
+  --blur: 14px;
+
+  --text:  #FFFFFF;
+  --dim:   rgba(255,255,255,0.76);
+  --faint: rgba(255,255,255,0.50);
+  --hair:  rgba(255,255,255,0.13);
+
+  --live:  #7BFFE8;
+  --rough: #FFC978;
+  --sand:  225, 186, 120;
+  --moss:  150, 196, 170;
+  --sky:   150, 184, 212;
+
+  --rounded: ui-rounded, "SF Pro Rounded", -apple-system, system-ui, sans-serif;
+  --sans: -apple-system, system-ui, "Segoe UI", sans-serif;
+  --mono: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+* { box-sizing: border-box; }
+body {
+  margin: 0; min-height: 100vh;
+  font-family: var(--sans); color: var(--text);
+  background: #0f1113;
+  display: flex; flex-direction: column; align-items: center;
+  padding: 48px 24px 60px; gap: 24px;
+  -webkit-font-smoothing: antialiased;
+  text-shadow: 0 1px 2px rgba(0,0,0,0.32);
+}
+
+.scene { position: fixed; inset: 0; z-index: 0; }
+.scene svg { width: 100%; height: 100%; display: block; }
+
+/* ---------- controls ---------- */
+.bar { position: relative; z-index: 3; display: flex; gap: 14px; align-items: center; flex-wrap: wrap; justify-content: center; }
+.seg, .slider {
+  display: flex; align-items: center; border-radius: 13px;
+  background: rgba(255,255,255,0.10);
+  backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,0.22);
+}
+.seg { gap: 3px; padding: 3px; }
+.seg button {
+  font: 500 13px var(--sans); color: var(--dim);
+  padding: 8px 17px; min-height: 36px; border: 0; border-radius: 10px;
+  background: transparent; cursor: pointer; transition: background 170ms ease, color 170ms ease;
+}
+.seg button:hover { color: #fff; }
+.seg button[aria-pressed="true"] { background: rgba(255,255,255,0.24); color: #fff; }
+.slider { gap: 10px; padding: 0 15px; min-height: 42px; font-size: 12.5px; color: var(--dim); }
+.slider input { width: 96px; accent-color: #fff; }
+.slider output { font: 11.5px var(--mono); min-width: 34px; color: var(--faint); }
+.reset {
+  font: 500 12.5px var(--sans); color: var(--dim); cursor: pointer;
+  padding: 0 15px; min-height: 42px; border-radius: 13px; border: 0;
+  background: rgba(255,255,255,0.10);
+  backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,0.22);
+}
+.reset:hover { color: #fff; background: rgba(255,255,255,0.18); }
+:focus-visible { outline: 2px solid var(--live); outline-offset: 3px; }
+
+/* ---------- the window ---------- */
+.win {
+  position: relative; z-index: 1;
+  width: min(1140px, 100%);
+  border-radius: 24px; overflow: hidden;
+  display: grid; grid-template-columns: 210px minmax(0,1fr) 274px;
+  background: rgba(255, 255, 255, var(--tint));
+  backdrop-filter: blur(var(--blur)) saturate(118%);
+  -webkit-backdrop-filter: blur(var(--blur)) saturate(118%);
+  box-shadow:
+    inset 0 0 0 1px rgba(255,255,255,0.20),
+    inset 0 1px 0 rgba(255,255,255,0.30),
+    0 40px 90px rgba(0,0,0,0.42);
+}
+
+/* ---------- rail ---------- */
+.rail {
+  padding: 18px 12px 16px; display: flex; flex-direction: column; gap: 24px;
+  border-right: 1px solid var(--hair);
+}
+.traffic { display: flex; gap: 8px; padding: 0 8px; }
+.traffic i { width: 11px; height: 11px; border-radius: 999px; display: block; }
+
+.brand { display: flex; align-items: center; gap: 10px; padding: 0 8px; }
+.mark {
+  width: 25px; height: 25px; border-radius: 8px; flex-shrink: 0;
+  display: grid; place-items: center;
+  background: rgba(255,255,255,0.14);
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,0.28);
+}
+.brandname { font-family: var(--rounded); font-size: 15px; font-weight: 650; letter-spacing: -0.2px; }
+
+nav { display: flex; flex-direction: column; gap: 2px; }
+.nav {
+  display: flex; align-items: center; gap: 12px;
+  padding: 10px 12px; border-radius: 10px;
+  font-size: 13.5px; color: var(--dim);
+  background: none; border: 0; width: 100%; text-align: left;
+  cursor: pointer; font-family: var(--sans);
+  transition: background 170ms ease, color 170ms ease;
+}
+.nav:hover { background: rgba(255,255,255,0.09); color: #fff; }
+.nav[aria-current="page"] { background: rgba(255,255,255,0.17); color: #fff; font-weight: 550; }
+.nav svg { flex-shrink: 0; opacity: 0.8; }
+.n { margin-left: auto; font: 11px var(--mono); color: var(--faint); }
+
+.railhead { font-size: 11px; color: var(--faint); padding: 0 12px 10px; }
+.taught { display: flex; flex-direction: column; gap: 2px; }
+.w { display: flex; align-items: center; gap: 11px; padding: 7px 12px; border-radius: 9px; font-size: 13px; color: var(--dim); }
+.w:hover { background: rgba(255,255,255,0.08); }
+.ini {
+  width: 20px; height: 20px; border-radius: 6px; flex-shrink: 0;
+  display: grid; place-items: center; font: 700 10px var(--sans); color: #fff;
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,0.3);
+}
+
+/* the key, pinned to the bottom of the rail: the one thing a new
+   user forgets, and the one thing a lapsed user comes back for */
+.keyfoot {
+  margin-top: auto; padding: 11px 12px 2px; border-top: 1px solid var(--hair);
+  display: flex; flex-direction: column; gap: 5px;
+}
+.keyrow { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--dim); }
+kbd {
+  font: 600 11px var(--sans); color: #fff;
+  padding: 3px 7px; border-radius: 6px;
+  background: rgba(255,255,255,0.12); box-shadow: inset 0 0 0 1px rgba(255,255,255,0.22);
+}
+.keyhint { font-size: 11px; color: var(--faint); padding-left: 1px; }
+
+/* ---------- main ---------- */
+.main { padding: 24px 28px 28px; display: flex; flex-direction: column; gap: 22px; min-width: 0; }
+.pane { display: flex; flex-direction: column; gap: 22px; min-width: 0; }
+.pane.hide { display: none; }
+
+.top { display: flex; align-items: center; justify-content: space-between; gap: 22px; }
+.hello { font-family: var(--rounded); font-size: 23px; font-weight: 600; letter-spacing: -0.5px; margin: 0; }
+.sub { margin: 4px 0 0; font-size: 13px; color: var(--faint); display: flex; align-items: center; gap: 7px; }
+.find {
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px 15px; border-radius: 11px; width: 230px;
+  box-shadow: inset 0 0 0 1px var(--hair);
+  font-size: 13px; color: var(--faint);
+}
+.find input { background: none; border: 0; outline: 0; color: #fff; font: 13px var(--sans); width: 100%; }
+.find input::placeholder { color: var(--faint); }
+
+/* small chips that carry real facts */
+.chip {
+  display: inline-flex; align-items: center; gap: 5px;
+  font-size: 10.5px; font-weight: 550; letter-spacing: 0.01em;
+  padding: 3px 8px; border-radius: 999px; color: var(--dim);
+  box-shadow: inset 0 0 0 1px var(--hair); white-space: nowrap;
+}
+.chip.eng { color: rgba(var(--sky),1); box-shadow: inset 0 0 0 1px rgba(var(--sky),0.38); }
+.chip.hin { color: rgba(var(--moss),1); box-shadow: inset 0 0 0 1px rgba(var(--moss),0.38); }
+.chip.rough { color: var(--rough); box-shadow: inset 0 0 0 1px rgba(255,201,120,0.42); }
+.chip.lock { color: var(--faint); }
+
+/* the hero */
+.said { border-radius: 18px; padding: 22px 26px 16px; box-shadow: inset 0 0 0 1px var(--hair); }
+.saidtop { display: flex; align-items: center; gap: 10px; margin-bottom: 15px; }
+.core { width: 7px; height: 7px; border-radius: 999px; background: var(--live); box-shadow: 0 0 11px rgba(123,255,232,0.95); flex-shrink: 0; }
+.saidtop span.when { font-size: 11.5px; color: var(--live); }
+.quote { font-size: 27px; font-weight: 280; line-height: 1.42; letter-spacing: -0.4px; margin: 0; max-width: 32ch; }
+.quote mark {
+  background: none; color: var(--live); padding-bottom: 1px;
+  border-bottom: 1px solid rgba(123,255,232,0.5); cursor: pointer;
+}
+.quote mark:hover { background: rgba(123,255,232,0.12); border-radius: 4px; }
+.saidfoot {
+  display: flex; align-items: center; gap: 16px; flex-wrap: wrap;
+  margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--hair);
+  font-size: 12px; color: var(--faint);
+}
+.saidfoot b { color: var(--dim); font-weight: 500; }
+.act { margin-left: auto; display: flex; gap: 8px; }
+.act button {
+  font: 500 12px var(--sans); color: var(--dim); cursor: pointer;
+  padding: 7px 14px; min-height: 32px; border-radius: 9px;
+  background: none; border: 0; box-shadow: inset 0 0 0 1px var(--hair);
+  transition: background 170ms ease, color 170ms ease;
+}
+.act button:hover { background: rgba(255,255,255,0.14); color: #fff; }
+
+/* cards: tinted glass, not paint */
+.cards { display: grid; grid-template-columns: 1.6fr 1fr 1fr; gap: 12px; }
+.card {
+  border-radius: 18px; padding: 16px 18px 15px; min-height: 126px;
+  display: flex; flex-direction: column; justify-content: space-between;
+  backdrop-filter: blur(5px); -webkit-backdrop-filter: blur(5px); color: #fff;
+}
+.clab { font-size: 10.5px; font-weight: 600; letter-spacing: 0.09em; opacity: 0.72; }
+.ctop { display: flex; align-items: center; justify-content: space-between; }
+.cnum { font-family: var(--rounded); font-size: 34px; font-weight: 700; letter-spacing: -1.3px; line-height: 1; }
+.cnum small { font-size: 17px; font-weight: 600; letter-spacing: -0.2px; }
+.ccap { font-size: 11.5px; opacity: 0.74; margin-top: 6px; }
+.spark { display: flex; align-items: flex-end; gap: 4px; height: 26px; margin-top: 10px; }
+.spark i { flex: 1; border-radius: 2px; background: currentColor; opacity: 0.35; display: block; }
+.spark i.hi { opacity: 0.85; }
+
+/* learned */
+.lhead { display: flex; align-items: center; justify-content: space-between; margin-bottom: 2px; }
+.lhead h2 { font-family: var(--rounded); font-size: 14.5px; font-weight: 600; margin: 0; letter-spacing: -0.2px; }
+.more { font: 12px var(--sans); color: var(--faint); background: none; border: 0; cursor: pointer; }
+.more:hover { color: #fff; }
+.lrow { display: flex; align-items: center; gap: 14px; padding: 9px 0; border-top: 1px solid var(--hair); font-size: 13.5px; }
+.heard { color: var(--faint); text-decoration: line-through; text-decoration-color: rgba(255,255,255,0.3); }
+.arrow { color: rgba(255,255,255,0.3); font-size: 10px; }
+.howmany { margin-left: auto; font: 11.5px var(--mono); color: var(--faint); }
+
+/* ---------- right ---------- */
+.side { padding: 20px 16px 22px; display: flex; flex-direction: column; gap: 12px; border-left: 1px solid var(--hair); }
+.sidetop { display: flex; align-items: center; justify-content: space-between; }
+.sidetop h2 { font-family: var(--rounded); font-size: 14px; font-weight: 600; margin: 0; }
+
+/* the live level meter. It moves only while the microphone is open,
+   which is the one promise the interface has to keep. */
+.meter { display: flex; align-items: center; gap: 7px; font-size: 11px; color: var(--live); }
+.bars { display: flex; align-items: center; gap: 2px; height: 13px; }
+.bars i {
+  width: 2.5px; height: 13px; border-radius: 2px; background: var(--live); display: block;
+  transform-origin: center; animation: lvl 820ms ease-in-out infinite;
+}
+.bars i:nth-child(2) { animation-duration: 600ms; animation-delay: 70ms; }
+.bars i:nth-child(3) { animation-duration: 1000ms; animation-delay: 150ms; }
+.bars i:nth-child(4) { animation-duration: 720ms; animation-delay: 30ms; }
+@keyframes lvl { 0%,100% { transform: scaleY(0.25); } 50% { transform: scaleY(1); } }
+@media (prefers-reduced-motion: reduce) { .bars i { animation: none; transform: scaleY(0.7); } }
+
+.feed { display: flex; flex-direction: column; }
+.item { border-radius: 12px; padding: 11px 12px; transition: background 170ms ease; }
+.item + .item { border-top: 1px solid var(--hair); }
+.item:hover { background: rgba(255,255,255,0.11); }
+.imeta { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+.app {
+  width: 18px; height: 18px; border-radius: 5px; flex-shrink: 0;
+  display: grid; place-items: center; font: 700 9px var(--sans); color: #fff;
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,0.3);
+}
+.aname { font-size: 11.5px; font-weight: 550; color: var(--dim); }
+.ago { margin-left: auto; font: 11px var(--mono); color: var(--faint); }
+.itext { font-size: 12.5px; line-height: 1.5; color: rgba(255,255,255,0.88); }
+.ifoot { display: flex; align-items: center; gap: 7px; margin-top: 7px; }
+.fix {
+  font: 550 10.5px var(--sans); color: var(--rough); cursor: pointer;
+  background: none; border: 0; padding: 0; text-decoration: underline;
+  text-underline-offset: 2px; text-decoration-color: rgba(255,201,120,0.45);
+}
+.fix:hover { color: #fff; }
+
+/* ---------- history ---------- */
+.filters { display: flex; gap: 8px; flex-wrap: wrap; }
+.filters button {
+  font: 500 12px var(--sans); color: var(--dim); cursor: pointer;
+  padding: 7px 14px; min-height: 32px; border-radius: 999px;
+  background: none; border: 0; box-shadow: inset 0 0 0 1px var(--hair);
+}
+.filters button[aria-pressed="true"] { background: rgba(255,255,255,0.22); color: #fff; }
+.hits { display: flex; flex-direction: column; }
+.hit { border-radius: 14px; padding: 15px 17px; transition: background 170ms ease; }
+.hit + .hit { border-top: 1px solid var(--hair); }
+.hit:hover { background: rgba(255,255,255,0.11); }
+.hittop { display: flex; align-items: center; gap: 9px; margin-bottom: 7px; font-size: 11.5px; color: var(--faint); }
+.hittext { font-size: 16px; line-height: 1.55; font-weight: 280; color: #fff; }
+.hittext mark { background: none; color: var(--live); border-bottom: 1px solid rgba(123,255,232,0.5); }
+
+/* ---------- words ---------- */
+.addrow { display: flex; gap: 11px; }
+.addrow .find { flex-grow: 1; width: auto; }
+.go {
+  font: 550 13px var(--sans); color: #fff; cursor: pointer;
+  padding: 0 22px; min-height: 42px; border-radius: 11px; border: 0;
+  background: rgba(123,255,232,0.18); box-shadow: inset 0 0 0 1px rgba(123,255,232,0.5);
+}
+.grid { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 11px; }
+.wcard { border-radius: 15px; padding: 15px 17px; box-shadow: inset 0 0 0 1px var(--hair); }
+.wtop { display: flex; align-items: center; gap: 11px; margin-bottom: 8px; }
+.wname { font-size: 15px; font-weight: 550; }
+.wwas { font-size: 12.5px; color: var(--faint); line-height: 1.55; }
+.wwas b { color: var(--dim); font-weight: 500; }
+
+.cap { position: relative; z-index: 1; font-size: 12.5px; color: rgba(255,255,255,0.45); text-align: center; }
+
+@media (max-width: 1040px) {
+  .win { grid-template-columns: 1fr; }
+  .rail, .side { border: 0; border-bottom: 1px solid var(--hair); }
+  .cards, .grid { grid-template-columns: 1fr; }
+  .keyfoot { margin-top: 12px; }
+}
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+</head>
+<body>
+
+<div class="scene" aria-hidden="true">
+  <svg viewBox="0 0 1600 1000" preserveAspectRatio="xMidYMid slice">
+    <defs>
+      <linearGradient id="air" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0%"   stop-color="#171b1f"/>
+        <stop offset="38%"  stop-color="#343d44"/>
+        <stop offset="66%"  stop-color="#6a747c"/>
+        <stop offset="86%"  stop-color="#949da3"/>
+        <stop offset="100%" stop-color="#aab1b6"/>
+      </linearGradient>
+      <radialGradient id="haze" cx="50%" cy="50%" r="50%">
+        <stop offset="0%"   stop-color="#eef1f3" stop-opacity="0.66"/>
+        <stop offset="100%" stop-color="#eef1f3" stop-opacity="0"/>
+      </radialGradient>
+      <linearGradient id="fog" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0%"   stop-color="#cdd4d8" stop-opacity="0"/>
+        <stop offset="55%"  stop-color="#cdd4d8" stop-opacity="0.34"/>
+        <stop offset="100%" stop-color="#cdd4d8" stop-opacity="0"/>
+      </linearGradient>
+      <radialGradient id="vig" cx="50%" cy="46%" r="72%">
+        <stop offset="60%"  stop-color="#000" stop-opacity="0"/>
+        <stop offset="100%" stop-color="#000" stop-opacity="0.45"/>
+      </radialGradient>
+      <!-- grain. Fine detail is what makes a backdrop-filter visible. -->
+      <filter id="grain" x="0" y="0" width="100%" height="100%">
+        <feTurbulence type="fractalNoise" baseFrequency="0.9" numOctaves="3" stitchTiles="stitch"/>
+        <feColorMatrix type="saturate" values="0"/>
+      </filter>
+    </defs>
+
+    <rect width="1600" height="1000" fill="url(#air)"/>
+    <ellipse cx="1095" cy="455" rx="540" ry="300" fill="url(#haze)"/>
+    <circle cx="1095" cy="418" r="48" fill="#f4f7f8" opacity="0.52"/>
+
+    <!-- six ridges, each darker and sharper than the one behind it -->
+    <path d="M0 470 L190 336 L330 432 L520 288 L700 452 L880 330 L1060 474 L1250 346 L1420 456 L1600 372 L1600 1000 L0 1000Z" fill="#9aa2a8" opacity="0.40"/>
+    <rect x="0" y="448" width="1600" height="90" fill="url(#fog)"/>
+
+    <path d="M0 560 L170 452 L320 548 L500 402 L690 566 L870 448 L1050 576 L1240 452 L1410 564 L1600 482 L1600 1000 L0 1000Z" fill="#7b848b" opacity="0.52"/>
+    <rect x="0" y="540" width="1600" height="84" fill="url(#fog)"/>
+
+    <path d="M0 654 L180 548 L330 640 L510 486 L700 658 L880 542 L1060 670 L1250 548 L1420 656 L1600 574 L1600 1000 L0 1000Z" fill="#5a636a" opacity="0.70"/>
+    <rect x="0" y="634" width="1600" height="76" fill="url(#fog)"/>
+
+    <path d="M0 752 L160 666 L340 758 L520 642 L700 770 L880 672 L1070 782 L1260 680 L1440 778 L1600 708 L1600 1000 L0 1000Z" fill="#3c4349" opacity="0.86"/>
+    <rect x="0" y="738" width="1600" height="60" fill="url(#fog)"/>
+
+    <path d="M0 856 L240 798 L470 868 L700 790 L940 874 L1180 796 L1400 876 L1600 812 L1600 1000 L0 1000Z" fill="#232a2f"/>
+
+    <!-- near treeline: the sharpest thing in the picture, and the part
+         you watch bend as it passes behind the window -->
+    <g fill="#12171b">
+      <path d="M0 940 L300 906 L620 946 L940 902 L1280 948 L1600 908 L1600 1000 L0 1000Z"/>
+      <path d="M90 918l9-30 9 30zM140 912l11-38 11 38zM205 922l8-27 8 27zM262 908l12-41 12 41zM340 916l9-31 9 31z
+               M410 924l10-34 10 34zM486 918l8-28 8 28zM560 928l11-37 11 37zM640 934l9-30 9 30zM716 926l12-40 12 40z
+               M800 918l9-31 9 31zM876 912l10-35 10 35zM952 906l9-30 9 30zM1030 914l11-38 11 38zM1112 922l8-27 8 27z
+               M1188 916l12-41 12 41zM1270 926l9-31 9 31zM1348 932l10-34 10 34zM1430 924l8-28 8 28zM1510 916l11-37 11 37z"/>
+    </g>
+
+    <rect width="1600" height="1000" fill="url(#vig)"/>
+    <rect width="1600" height="1000" filter="url(#grain)" opacity="0.11"/>
+  </svg>
+</div>
+
+<div class="bar">
+  <div class="seg" role="group" aria-label="Screen" id="views">
+    <button type="button" data-view="home" aria-pressed="true">Home</button>
+    <button type="button" data-view="history" aria-pressed="false">Search</button>
+    <button type="button" data-view="words" aria-pressed="false">Teach a word</button>
+  </div>
+  <label class="slider">Tint
+    <input type="range" id="tint" min="0" max="30" value="6" aria-label="Window tint">
+    <output id="tintout">6%</output>
+  </label>
+  <label class="slider">Blur
+    <input type="range" id="blur" min="0" max="40" value="14" aria-label="Window blur">
+    <output id="blurout">14px</output>
+  </label>
+  <button class="reset" type="button" id="reset">Back to 6 and 14</button>
+</div>
+
+<main class="win">
+
+  <aside class="rail">
+    <div class="traffic"><i style="background:#FF5F57"></i><i style="background:#FEBC2E"></i><i style="background:#28C840"></i></div>
+
+    <div class="brand">
+      <div class="mark" aria-hidden="true">
+        <svg width="13" height="13" viewBox="0 0 14 14" fill="none">
+          <rect x="4.7" y="1.5" width="4.6" height="7.2" rx="2.3" stroke="#fff" stroke-width="1.25"/>
+          <path d="M2.7 6.7v.8a4.3 4.3 0 0 0 8.6 0v-.8" stroke="#7BFFE8" stroke-width="1.25" stroke-linecap="round"/>
+          <path d="M7 11.8v1.1" stroke="#fff" stroke-width="1.25" stroke-linecap="round"/>
+        </svg>
+      </div>
+      <div class="brandname">Dictator</div>
+    </div>
+
+    <nav aria-label="Sections" id="nav">
+      <button class="nav" type="button" data-view="home" aria-current="page">
+        <svg width="15" height="15" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M2.6 6.9 8 2.6l5.4 4.3V13a.9.9 0 0 1-.9.9h-9a.9.9 0 0 1-.9-.9V6.9Z" stroke="currentColor" stroke-width="1.25" stroke-linejoin="round"/></svg>
+        Home
+      </button>
+      <button class="nav" type="button" data-view="history">
+        <svg width="15" height="15" viewBox="0 0 16 16" fill="none" aria-hidden="true"><circle cx="7.3" cy="7.3" r="4.4" stroke="currentColor" stroke-width="1.25"/><path d="m10.7 10.7 2.5 2.5" stroke="currentColor" stroke-width="1.25" stroke-linecap="round"/></svg>
+        History <span class="n">1,204</span>
+      </button>
+      <button class="nav" type="button" data-view="words">
+        <svg width="15" height="15" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M3.2 12.4V4.1A1.6 1.6 0 0 1 4.8 2.5h7.1a.9.9 0 0 1 .9.9v9.1" stroke="currentColor" stroke-width="1.25" stroke-linejoin="round"/><path d="M4.6 12.4h8.2v1.1H4.6a1.55 1.55 0 0 1 0-3.1h8.2" stroke="currentColor" stroke-width="1.25" stroke-linejoin="round"/></svg>
+        Words <span class="n">23</span>
+      </button>
+      <button class="nav" type="button">
+        <svg width="15" height="15" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="m6.1 4.6-3 3.4 3 3.4M9.9 4.6l3 3.4-3 3.4" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        Snippets <span class="n">8</span>
+      </button>
+      <button class="nav" type="button">
+        <svg width="15" height="15" viewBox="0 0 16 16" fill="none" aria-hidden="true"><rect x="2.6" y="3.6" width="10.8" height="9.8" rx="2" stroke="currentColor" stroke-width="1.25"/><path d="M5.6 2.2v2.6M10.4 2.2v2.6M2.9 6.9h10.2" stroke="currentColor" stroke-width="1.25" stroke-linecap="round"/></svg>
+        Meetings
+      </button>
+      <button class="nav" type="button">
+        <svg width="15" height="15" viewBox="0 0 16 16" fill="none" aria-hidden="true"><circle cx="8" cy="8" r="2.1" stroke="currentColor" stroke-width="1.25"/><path d="M8 2v1.5M8 12.5V14M14 8h-1.5M3.5 8H2M12.2 3.8l-1 1M4.8 11.2l-1 1M12.2 12.2l-1-1M4.8 4.8l-1-1" stroke="currentColor" stroke-width="1.25" stroke-linecap="round"/></svg>
+        Settings
+      </button>
+    </nav>
+
+    <div>
+      <div class="railhead">Words you taught it</div>
+      <div class="taught">
+        <div class="w"><span class="ini" style="background:rgba(var(--moss),0.4)">K</span>Kubernetes</div>
+        <div class="w"><span class="ini" style="background:rgba(var(--sand),0.4)">S</span>seedha</div>
+        <div class="w"><span class="ini" style="background:rgba(var(--sky),0.4)">P</span>Prakrit</div>
+        <div class="w"><span class="ini" style="background:rgba(var(--moss),0.4)">R</span>rebase</div>
+      </div>
+    </div>
+
+    <div class="keyfoot">
+      <div class="keyrow"><kbd>right &#8997;</kbd> hold to talk</div>
+      <div class="keyhint">double tap for hands free</div>
+    </div>
+  </aside>
+
+  <section class="main">
+
+    <div class="pane" data-view="home">
+      <div class="top">
+        <div>
+          <h1 class="hello">Good evening, Krish</h1>
+          <p class="sub">
+            <span class="chip lock">
+              <svg width="9" height="9" viewBox="0 0 12 12" fill="none" aria-hidden="true"><rect x="2.4" y="5.2" width="7.2" height="5.2" rx="1.4" stroke="currentColor" stroke-width="1.2"/><path d="M4.2 5.2V3.9a1.8 1.8 0 0 1 3.6 0v1.3" stroke="currentColor" stroke-width="1.2"/></svg>
+              nothing left this Mac
+            </span>
+            1,204 dictations, all of them here
+          </p>
+        </div>
+        <label class="find">
+          <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true"><circle cx="7.2" cy="7.2" r="4.3" stroke="currentColor" stroke-width="1.3"/><path d="m10.6 10.6 2.5 2.5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>
+          <input type="search" placeholder="Search what you said">
+        </label>
+      </div>
+
+      <div class="said">
+        <div class="saidtop">
+          <span class="core"></span>
+          <span class="when">Last thing you said, 20 seconds ago</span>
+          <span class="chip hin" style="margin-left:auto">Hinglish</span>
+        </div>
+        <p class="quote">yaar ye <mark title="it heard fun shun and fixed it">function</mark> thoda slow lag raha hai, can you check the <mark title="it heard loob and fixed it">loop</mark></p>
+        <div class="saidfoot">
+          <span>went to <b>Terminal</b></span>
+          <span>held <b>4.2s</b></span>
+          <span>pasted <b>1.9s</b> later</span>
+          <div class="act">
+            <button type="button">Undo the paste</button>
+            <button type="button">Copy</button>
+            <button type="button">Fix a word</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="cards">
+        <div class="card" style="background: rgba(var(--sand),0.26); box-shadow: inset 0 0 0 1px rgba(var(--sand),0.42)">
+          <div class="ctop">
+            <span class="clab">SAVED TODAY</span>
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true" style="opacity:.6"><circle cx="8" cy="8" r="5.9" stroke="currentColor" stroke-width="1.4"/><path d="M8 4.7V8l2.2 1.3" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
+          </div>
+          <div>
+            <div class="cnum">41<small> min</small></div>
+            <div class="ccap">against typing it at 40 a minute</div>
+            <div class="spark">
+              <i style="height:28%"></i><i style="height:46%"></i><i style="height:34%"></i>
+              <i style="height:62%"></i><i style="height:50%"></i><i style="height:78%"></i>
+              <i class="hi" style="height:100%"></i>
+            </div>
+          </div>
+        </div>
+
+        <div class="card" style="background: rgba(var(--moss),0.26); box-shadow: inset 0 0 0 1px rgba(var(--moss),0.42)">
+          <div class="ctop">
+            <span class="clab">SPOKEN</span>
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true" style="opacity:.6"><path d="M3 8.6v-1M6 11V5M9 12.8V3.2M12 9.6v-3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+          </div>
+          <div>
+            <div class="cnum">2,480</div>
+            <div class="ccap">words today, none of them typed</div>
+          </div>
+        </div>
+
+        <div class="card" style="background: rgba(var(--sky),0.26); box-shadow: inset 0 0 0 1px rgba(var(--sky),0.42)">
+          <div class="ctop">
+            <span class="clab">NOT LOST</span>
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true" style="opacity:.6"><path d="M3.4 8.3 6.4 11.3l6.2-6.6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </div>
+          <div>
+            <div class="cnum">0</div>
+            <div class="ccap">holds dropped in 164</div>
+          </div>
+        </div>
+      </div>
+
+      <div>
+        <div class="lhead">
+          <h2>It learned these from you</h2>
+          <button class="more" type="button">All 23</button>
+        </div>
+        <div class="lrow"><span class="heard">cuber netties</span><span class="arrow">&#9656;</span><span>Kubernetes</span><span class="howmany">7&#215;</span></div>
+        <div class="lrow"><span class="heard">sidha</span><span class="arrow">&#9656;</span><span>seedha</span><span class="howmany">5&#215;</span></div>
+        <div class="lrow"><span class="heard">pull rekvest</span><span class="arrow">&#9656;</span><span>pull request</span><span class="howmany">4&#215;</span></div>
+      </div>
+    </div>
+
+    <div class="pane hide" data-view="history">
+      <div class="top">
+        <div>
+          <h1 class="hello">What you said</h1>
+          <p class="sub">1,204 dictations, searchable by the words in them.</p>
+        </div>
+        <label class="find" style="width: 258px">
+          <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true"><circle cx="7.2" cy="7.2" r="4.3" stroke="currentColor" stroke-width="1.3"/><path d="m10.6 10.6 2.5 2.5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>
+          <input type="search" value="latency" aria-label="Search">
+        </label>
+      </div>
+
+      <div class="filters" role="group" aria-label="Filter">
+        <button type="button" aria-pressed="true">Everything</button>
+        <button type="button" aria-pressed="false">Terminal</button>
+        <button type="button" aria-pressed="false">Slack</button>
+        <button type="button" aria-pressed="false">Hinglish only</button>
+        <button type="button" aria-pressed="false">Looked rough</button>
+      </div>
+
+      <div class="hits">
+        <div class="hit">
+          <div class="hittop">
+            <span class="app" style="background:rgba(var(--sand),0.4)">C</span>Chrome
+            <span class="chip hin">Hinglish</span>
+            <span class="ago">18m ago</span>
+          </div>
+          <div class="hittext">iska <mark>latency</mark> abhi bhi kharab hai, model load hi saath percent hai</div>
+        </div>
+        <div class="hit">
+          <div class="hittop">
+            <span class="app" style="background:rgba(var(--moss),0.4)">T</span>Terminal
+            <span class="chip eng">English</span>
+            <span class="ago">2h ago</span>
+          </div>
+          <div class="hittext">run the sweep again and put the <mark>latency</mark> numbers in findings</div>
+        </div>
+        <div class="hit">
+          <div class="hittop">
+            <span class="app" style="background:rgba(var(--sky),0.4)">S</span>Slack
+            <span class="chip rough">looked rough</span>
+            <span class="ago">yesterday</span>
+          </div>
+          <div class="hittext">bhai <mark>latency</mark> wala issue abhi bhi open hai, model load sixty percent le raha hai</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="pane hide" data-view="words">
+      <div class="top">
+        <div>
+          <h1 class="hello">Words you taught it</h1>
+          <p class="sub">It learns from the second correction, so these stuck.</p>
+        </div>
+      </div>
+
+      <div class="addrow">
+        <label class="find">
+          <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M8 3.4v9.2M3.4 8h9.2" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
+          <input type="text" placeholder="Add a word or name, e.g. Kubernetes">
+        </label>
+        <button class="go" type="button">Teach it</button>
+      </div>
+
+      <div class="grid">
+        <div class="wcard">
+          <div class="wtop"><span class="ini" style="background:rgba(var(--moss),0.4)">K</span><span class="wname">Kubernetes</span><span class="howmany">7&#215;</span></div>
+          <div class="wwas">it kept hearing <b>cuber netties</b>, <b>kuber netes</b></div>
+        </div>
+        <div class="wcard">
+          <div class="wtop"><span class="ini" style="background:rgba(var(--sand),0.4)">S</span><span class="wname">seedha</span><span class="howmany">5&#215;</span></div>
+          <div class="wwas">it kept hearing <b>sidha</b>, <b>seedhaa</b></div>
+        </div>
+        <div class="wcard">
+          <div class="wtop"><span class="ini" style="background:rgba(var(--sky),0.4)">P</span><span class="wname">Prakrit</span><span class="howmany">4&#215;</span></div>
+          <div class="wwas">it kept hearing <b>prakarat</b></div>
+        </div>
+        <div class="wcard">
+          <div class="wtop"><span class="ini" style="background:rgba(var(--moss),0.4)">R</span><span class="wname">rebase</span><span class="howmany">3&#215;</span></div>
+          <div class="wwas">it kept hearing <b>re base</b>, <b>ribase</b></div>
+        </div>
+      </div>
+    </div>
+
+  </section>
+
+  <aside class="side">
+    <div class="sidetop">
+      <h2>Recent</h2>
+      <span class="meter">
+        <span class="bars"><i></i><i></i><i></i><i></i></span>
+        listening
+      </span>
+    </div>
+    <div class="feed">
+      <div class="item">
+        <div class="imeta"><span class="app" style="background:rgba(var(--moss),0.4)">T</span><span class="aname">Terminal</span><span class="ago">now</span></div>
+        <div class="itext">yaar ye function thoda slow lag raha hai, can you check the loop</div>
+      </div>
+      <div class="item">
+        <div class="imeta"><span class="app" style="background:rgba(var(--sky),0.4)">S</span><span class="aname">Slack</span><span class="ago">4m</span></div>
+        <div class="itext">push the branch and tell Mayank to look at the dmg job</div>
+      </div>
+      <div class="item">
+        <div class="imeta"><span class="app" style="background:rgba(var(--sand),0.4)">C</span><span class="aname">Chrome</span><span class="ago">18m</span></div>
+        <div class="itext">iska latency abhi bhi kharab hai, model load hi saath percent hai</div>
+        <div class="ifoot">
+          <span class="chip rough">looked rough</span>
+          <button class="fix" type="button">Fix a word</button>
+        </div>
+      </div>
+      <div class="item">
+        <div class="imeta"><span class="app" style="background:rgba(var(--moss),0.4)">N</span><span class="aname">Notes</span><span class="ago">32m</span></div>
+        <div class="itext">kal subah Prakrit sir ko IBC wala plan bhejna hai</div>
+      </div>
+    </div>
+  </aside>
+
+</main>
+
+<p class="cap">Defaults are tint 6 and blur 14. The sliders are only there so you can land on a different pair.</p>
+
+<script>
+(function () {
+  "use strict";
+  var root = document.documentElement;
+
+  function press(scope, attr, value) {
+    var all = scope.querySelectorAll('button[data-' + attr + ']');
+    for (var i = 0; i < all.length; i++) {
+      all[i].setAttribute('aria-pressed', String(all[i].dataset[attr] === value));
+    }
+  }
+
+  function show(view) {
+    var panes = document.querySelectorAll('.pane');
+    for (var i = 0; i < panes.length; i++) {
+      panes[i].classList.toggle('hide', panes[i].dataset.view !== view);
+    }
+    press(document.getElementById('views'), 'view', view);
+    var navs = document.querySelectorAll('#nav .nav');
+    for (var j = 0; j < navs.length; j++) {
+      if (navs[j].dataset.view === view) { navs[j].setAttribute('aria-current', 'page'); }
+      else { navs[j].removeAttribute('aria-current'); }
+    }
+  }
+
+  document.getElementById('views').addEventListener('click', function (e) {
+    var b = e.target.closest('button');
+    if (b) { show(b.dataset.view); }
+  });
+  document.getElementById('nav').addEventListener('click', function (e) {
+    var b = e.target.closest('.nav');
+    if (b && b.dataset.view) { show(b.dataset.view); }
+  });
+
+  var tint = document.getElementById('tint');
+  var blur = document.getElementById('blur');
+  var tintout = document.getElementById('tintout');
+  var blurout = document.getElementById('blurout');
+
+  function apply() {
+    root.style.setProperty('--tint', (tint.value / 100).toFixed(2));
+    root.style.setProperty('--blur', blur.value + 'px');
+    tintout.textContent = tint.value + '%';
+    blurout.textContent = blur.value + 'px';
+  }
+  tint.addEventListener('input', apply);
+  blur.addEventListener('input', apply);
+  document.getElementById('reset').addEventListener('click', function () {
+    tint.value = 6; blur.value = 14; apply();
+  });
+
+  show('home');
+}());
+</script>
+</body>
+</html>
