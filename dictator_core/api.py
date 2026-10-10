@@ -35,8 +35,9 @@ from . import (core, history, learn as _learn, recap as _recap, roman,
 __all__ = ["Dictator", "Transcript", "transcribe", "VERSION"]
 
 # The shape of Transcript and the names of these methods are the promise.
-# Everything under dictator/ other than this file is internal and will move.
-VERSION = "1.0"
+# Everything under dictator_core/ other than this file is internal and will
+# move. VERSION follows the app's release version.
+VERSION = "0.2.0"
 
 
 @dataclass
