@@ -362,64 +362,6 @@ func spokenIn(lang: String, engine: String) -> String? {
     return nil
 }
 
-/// One of the three cards about today on Home: a label, a big number and a
-/// line under it, on a soft tint of one of the theme's colours (the accent
-/// violet, the live teal, and amber for the streak), and optionally seven
-/// bars for the last week.
-struct TodayCard: View {
-    var label: String
-    var symbol: String
-    var tint: NSColor
-    var value: String
-    var caption: String
-    /// Seven bars, 0 to 1, oldest first, or nil for none.
-    var bars: [Double]? = nil
-
-    private var color: Color { Color(nsColor: tint) }
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            HStack {
-                Text(label).font(.system(size: 10.5, weight: .semibold))
-                    .tracking(0.9).foregroundColor(Theme.secondary)
-                    .lineLimit(1).fixedSize()
-                Spacer()
-                Image(systemName: symbol).font(.system(size: 12, weight: .medium))
-                    .foregroundColor(color)
-            }
-            Spacer(minLength: Theme.s3)
-            Text(value).font(.display(30, .bold)).foregroundColor(Theme.text)
-                .lineLimit(1).minimumScaleFactor(0.45)
-            Text(caption).font(.caption12).foregroundColor(Theme.secondary)
-                .lineLimit(2).minimumScaleFactor(0.85)
-                .fixedSize(horizontal: false, vertical: true)
-                .padding(.top, 4)
-            if let b = bars { week(b).padding(.top, Theme.s2) }
-        }
-        .padding(.horizontal, Theme.s4).padding(.vertical, 14)
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        .background(RoundedRectangle(cornerRadius: 16, style: .continuous)
-            .fill(color.opacity(0.10)))
-        .background(RoundedRectangle(cornerRadius: 16, style: .continuous)
-            .fill(Theme.card))
-        .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous)
-            .strokeBorder(color.opacity(0.30), lineWidth: 1))
-    }
-
-    private func week(_ b: [Double]) -> some View {
-        GeometryReader { geo in
-            HStack(alignment: .bottom, spacing: 4) {
-                ForEach(b.indices, id: \.self) { i in
-                    RoundedRectangle(cornerRadius: 2)
-                        .fill(color.opacity(i == b.count - 1 ? 0.9 : 0.35))
-                        .frame(height: max(3, geo.size.height * b[i]))
-                }
-            }
-        }
-        .frame(height: 22)
-    }
-}
-
 struct HomePage: View {
     @EnvironmentObject var model: AppModel
     @StateObject private var st = HomeState()
@@ -428,7 +370,6 @@ struct HomePage: View {
         PageScroll {
             if let r = model.clash { RivalBanner(running: r) }
             hero
-            today
             HStack(spacing: Theme.s3) {
                 stat("text.word.spacing", st.words.map { $0.formatted() } ?? "–", "words, all time")
                 stat("hourglass", st.saved.map(duration) ?? "–", "saved against typing")
@@ -525,46 +466,6 @@ struct HomePage: View {
             .fill(Theme.brand))
         .overlay(RoundedRectangle(cornerRadius: Theme.heroRadius, style: .continuous)
             .strokeBorder(Color.white.opacity(0.14), lineWidth: 1))
-    }
-
-    /// Today in three cards: the time saved, with the last seven days as bars,
-    /// the words spoken, and the streak. One wide card and two narrow ones,
-    /// 1.6 : 1 : 1, measured rather than left to the stack.
-    private var today: some View {
-        GeometryReader { geo in
-            let unit = max(0, geo.size.width - Theme.s3 * 2) / 3.6
-            HStack(spacing: Theme.s3) {
-                TodayCard(label: "SAVED TODAY", symbol: "clock", tint: Palette.accent,
-                          value: st.todaySaved.map(duration) ?? "0 s",
-                          caption: "against typing it at 40 a minute", bars: week)
-                    .frame(width: unit * 1.6)
-                TodayCard(label: "SPOKEN", symbol: "waveform", tint: Palette.live,
-                          value: st.todayWords.map { $0.formatted() } ?? "0",
-                          caption: "words today, none of them typed")
-                    .frame(width: unit)
-                TodayCard(label: "STREAK", symbol: "flame", tint: Palette.warn,
-                          value: st.streak.map { "\($0)" } ?? "0",
-                          caption: st.streak == 1 ? "day in a row" : "days in a row")
-                    .frame(width: unit)
-            }
-        }
-        .frame(height: 132)
-    }
-
-    /// Words per day over the last seven days, as a share of the busiest one,
-    /// from the history already loaded. Today is the last bar.
-    private var week: [Double] {
-        let cal = Calendar.current
-        var byDay: [Date: Int] = [:]
-        for r in st.said {
-            byDay[cal.startOfDay(for: r.at), default: 0] += r.text.split(separator: " ").count
-        }
-        let days = (0..<7).reversed().map {
-            cal.date(byAdding: .day, value: -$0, to: cal.startOfDay(for: Date()))!
-        }
-        let counts = days.map { Double(byDay[$0] ?? 0) }
-        let top = counts.max() ?? 0
-        return top > 0 ? counts.map { 0.18 + 0.82 * ($0 / top) } : counts.map { _ in 0.18 }
     }
 
     private func heroChip(_ symbol: String, _ s: String) -> some View {
