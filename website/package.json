@@ -5,9 +5,9 @@
   "scripts": {
     "dev": "astro dev",
     "build": "astro build",
-    "build:ci": "node scripts/sync-releases.mjs && astro build",
+    "build:ci": "node scripts/sync-latest.mjs && astro build",
     "preview": "astro preview",
-    "sync-releases": "node scripts/sync-releases.mjs"
+    "sync-latest": "node scripts/sync-latest.mjs"
   },
   "dependencies": {
     "@fontsource-variable/inter-tight": "^5.3.0",

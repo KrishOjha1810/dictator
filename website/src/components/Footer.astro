@@ -1,5 +1,5 @@
 ---
-import { latest, latestMacHref } from "../lib/releases";
+import { latest, latestMacHref } from "../lib/latest";
 
 const year = new Date().getFullYear();
 ---
@@ -16,7 +16,6 @@ const year = new Date().getFullYear();
     </a>
     <nav class="mono" aria-label="Footer">
       <a href="/download">Install guide</a>
-      <a href="/releases">Releases</a>
       <a href="/#faq">FAQ</a>
     </nav>
     <p class="mono">v{latest.version} · © {year}</p>

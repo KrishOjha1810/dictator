@@ -1,28 +1,22 @@
-import data from "../data/releases.json";
+import data from "../data/latest.json";
 
-export interface MacBuild {
-  file: string;
-  url: string;
-  size: number;
-  sha256: string;
-  minOS: string;
-  arch: string;
-}
-
-export interface Release {
+export interface Latest {
   version: string;
   date: string;
-  notes: string;
-  mac: MacBuild;
+  mac: {
+    url: string;
+    size: number;
+    sha256: string;
+    minOS: string;
+    arch: string;
+  };
 }
 
-export const releases: Release[] = data.releases;
-export const latest: Release = releases[0];
+export const latest: Latest = data;
 
 // The stable address for the newest build. public/_redirects points it at the
 // current file, so this link never changes between releases.
 export const latestMacHref = "/download/mac";
-export const macHref = (version: string) => `/download/mac/${version}`;
 
 export function formatSize(bytes: number): string {
   return `${(bytes / 1_000_000).toFixed(1)} MB`;
