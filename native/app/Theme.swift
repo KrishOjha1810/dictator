@@ -217,7 +217,10 @@ enum Theme {
     static let radius: CGFloat = 14
     static let smallRadius: CGFloat = 8
 
-    static let hubSize = NSSize(width: 980, height: 660)
+    /// Three columns need the room for three columns. At 980 the middle
+    /// one came out about 500 points wide and every line in it truncated to
+    /// a word per row.
+    static let hubSize = NSSize(width: 1180, height: 760)
     static let onboardingSize = NSSize(width: 660, height: 500)
 }
 
@@ -276,33 +279,42 @@ enum Appearance: String, CaseIterable {
 struct BrandMark: View {
     var size: CGFloat = 28
 
+    /// On glass the tile is a sheet of the same glass, not a painted square.
+    ///
+    /// It used to be the icon's indigo to violet to teal gradient. A
+    /// saturated gradient is the first thing that makes an interface look
+    /// generated, and over a photograph it fights everything behind it, so
+    /// in the app the mark is drawn in white and keeps only the teal of the
+    /// cursor. The installed icon is unchanged: a Dock icon has to carry at
+    /// 32 points against every other icon, where a sidebar mark does not.
     var body: some View {
-        let r = size * 0.27
+        let r = size * 0.30
         ZStack {
-            RoundedRectangle(cornerRadius: r, style: .continuous).fill(Theme.brand)
-            RoundedRectangle(cornerRadius: r, style: .continuous)
-                .strokeBorder(Color.white.opacity(0.18), lineWidth: max(0.5, size / 64))
-            HStack(alignment: .center, spacing: size * 0.08) {
-                // The grille: a white capsule with four lines in it.
-                ZStack {
-                    Capsule().fill(Color.white)
-                    VStack(alignment: .leading, spacing: size * 0.05) {
-                        ForEach([0.62, 0.86, 0.5, 0.74], id: \.self) { w in
-                            Capsule().fill(Theme.ink)
-                                .frame(width: size * 0.26 * w, height: max(1, size * 0.045))
-                        }
-                    }
-                }
-                .frame(width: size * 0.36, height: size * 0.5)
-                Capsule().fill(Theme.cursorGlow)
-                    .frame(width: max(1.5, size * 0.055), height: size * 0.32)
-                    .shadow(color: Color(nsColor: Palette.gradTeal).opacity(0.9),
-                            radius: size * 0.06)
+            if Glass.on {
+                RoundedRectangle(cornerRadius: r, style: .continuous)
+                    .fill(Color.white.opacity(0.13))
+                RoundedRectangle(cornerRadius: r, style: .continuous)
+                    .strokeBorder(Color.white.opacity(0.26), lineWidth: max(0.5, size / 52))
+            } else {
+                RoundedRectangle(cornerRadius: r, style: .continuous).fill(Theme.brand)
+                RoundedRectangle(cornerRadius: r, style: .continuous)
+                    .strokeBorder(Color.white.opacity(0.18), lineWidth: max(0.5, size / 64))
             }
-            .offset(x: size * 0.02)
+            mic
         }
         .frame(width: size, height: size)
         .accessibilityHidden(true)
+    }
+
+    /// A microphone, because the mark before it (a grille of text lines with
+    /// a cursor) turns to mush below about 24 points and the sidebar draws
+    /// it at 25. Drawn with SF Symbols rather than by hand: the hand drawn
+    /// one came out as a circle at small sizes, and this is a glyph Apple
+    /// has already hinted for every size.
+    private var mic: some View {
+        Image(systemName: "mic.fill")
+            .font(.system(size: size * 0.46, weight: .medium))
+            .foregroundColor(.white)
     }
 }
 

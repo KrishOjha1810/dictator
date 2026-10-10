@@ -36,28 +36,28 @@ private struct Ridge {
 }
 
 private let ridges: [Ridge] = [
-    Ridge(points: [(0, 0.470), (0.119, 0.336), (0.206, 0.432), (0.325, 0.288),
-                   (0.438, 0.452), (0.550, 0.330), (0.663, 0.474), (0.781, 0.346),
-                   (0.888, 0.456), (1, 0.372)],
-          grey: 0.62, alpha: 0.40, fog: 0.448),
-    Ridge(points: [(0, 0.560), (0.106, 0.452), (0.200, 0.548), (0.313, 0.402),
-                   (0.431, 0.566), (0.544, 0.448), (0.656, 0.576), (0.775, 0.452),
-                   (0.881, 0.564), (1, 0.482)],
-          grey: 0.49, alpha: 0.52, fog: 0.540),
-    Ridge(points: [(0, 0.654), (0.113, 0.548), (0.206, 0.640), (0.319, 0.486),
-                   (0.438, 0.658), (0.550, 0.542), (0.663, 0.670), (0.781, 0.548),
-                   (0.888, 0.656), (1, 0.574)],
-          grey: 0.36, alpha: 0.70, fog: 0.634),
-    Ridge(points: [(0, 0.752), (0.100, 0.666), (0.213, 0.758), (0.325, 0.642),
-                   (0.438, 0.770), (0.550, 0.672), (0.669, 0.782), (0.788, 0.680),
-                   (0.900, 0.778), (1, 0.708)],
-          grey: 0.24, alpha: 0.86, fog: 0.738),
-    Ridge(points: [(0, 0.856), (0.150, 0.798), (0.294, 0.868), (0.438, 0.790),
-                   (0.588, 0.874), (0.738, 0.796), (0.875, 0.876), (1, 0.812)],
-          grey: 0.14, alpha: 1.0, fog: nil),
-    Ridge(points: [(0, 0.940), (0.188, 0.906), (0.388, 0.946), (0.588, 0.902),
-                   (0.800, 0.948), (1, 0.908)],
-          grey: 0.07, alpha: 1.0, fog: nil),
+    Ridge(points: [(0, 0.655), (0.119, 0.588), (0.206, 0.636), (0.325, 0.562),
+                   (0.438, 0.644), (0.550, 0.584), (0.663, 0.656), (0.781, 0.592),
+                   (0.888, 0.648), (1, 0.606)],
+          grey: 0.52, alpha: 0.17, fog: 0.644),
+    Ridge(points: [(0, 0.722), (0.106, 0.666), (0.200, 0.714), (0.313, 0.640),
+                   (0.431, 0.726), (0.544, 0.666), (0.656, 0.732), (0.775, 0.668),
+                   (0.881, 0.726), (1, 0.684)],
+          grey: 0.42, alpha: 0.22, fog: 0.714),
+    Ridge(points: [(0, 0.790), (0.113, 0.736), (0.206, 0.782), (0.319, 0.704),
+                   (0.438, 0.792), (0.550, 0.730), (0.663, 0.798), (0.781, 0.734),
+                   (0.888, 0.790), (1, 0.748)],
+          grey: 0.32, alpha: 0.30, fog: 0.782),
+    Ridge(points: [(0, 0.858), (0.100, 0.812), (0.213, 0.862), (0.325, 0.800),
+                   (0.438, 0.868), (0.550, 0.814), (0.669, 0.874), (0.788, 0.818),
+                   (0.900, 0.872), (1, 0.834)],
+          grey: 0.22, alpha: 0.40, fog: 0.852),
+    Ridge(points: [(0, 0.918), (0.150, 0.886), (0.294, 0.924), (0.438, 0.880),
+                   (0.588, 0.928), (0.738, 0.884), (0.875, 0.926), (1, 0.892)],
+          grey: 0.13, alpha: 0.55, fog: nil),
+    Ridge(points: [(0, 0.964), (0.188, 0.946), (0.388, 0.968), (0.588, 0.944),
+                   (0.800, 0.970), (1, 0.948)],
+          grey: 0.07, alpha: 0.72, fog: nil),
 ]
 
 struct Backdrop: View {
@@ -92,21 +92,21 @@ struct Backdrop: View {
     /// hills in front of it read as distance rather than as shapes.
     private var sky: some View {
         LinearGradient(stops: [
-            .init(color: grey(0.09), location: 0.00),
-            .init(color: grey(0.21), location: 0.38),
-            .init(color: grey(0.42), location: 0.66),
-            .init(color: grey(0.58), location: 0.86),
-            .init(color: grey(0.67), location: 1.00),
+            .init(color: grey(0.055), location: 0.00),
+            .init(color: grey(0.105), location: 0.42),
+            .init(color: grey(0.195), location: 0.70),
+            .init(color: grey(0.300), location: 0.88),
+            .init(color: grey(0.380), location: 1.00),
         ], startPoint: .top, endPoint: .bottom)
     }
 
     /// The low sun, as a glow rather than a disc with an edge. An edge would
     /// survive the blur and read as a bright blob behind the cards.
     private func haze(_ w: CGFloat, _ h: CGFloat) -> some View {
-        RadialGradient(colors: [Color(white: 0.94).opacity(0.42),
+        RadialGradient(colors: [Color(white: 0.94).opacity(0.17),
                                 Color(white: 0.94).opacity(0)],
-                       center: .init(x: 0.68, y: 0.45),
-                       startRadius: 0, endRadius: max(w, h) * 0.52)
+                       center: .init(x: 0.70, y: 0.60),
+                       startRadius: 0, endRadius: max(w, h) * 0.46)
     }
 
     private func hills(_ w: CGFloat, _ h: CGFloat) -> some View {
@@ -117,7 +117,7 @@ struct Backdrop: View {
                     shape(r, w, h).fill(grey(r.grey).opacity(r.alpha))
                     if let y = r.fog {
                         LinearGradient(colors: [Color(white: 0.82).opacity(0),
-                                                Color(white: 0.82).opacity(0.30),
+                                                Color(white: 0.82).opacity(0.14),
                                                 Color(white: 0.82).opacity(0)],
                                        startPoint: .top, endPoint: .bottom)
                             .frame(height: h * 0.08)
@@ -145,22 +145,22 @@ struct Backdrop: View {
     /// you watch pass behind a panel.
     private func treeline(_ w: CGFloat, _ h: CGFloat) -> some View {
         Canvas { ctx, size in
-            let base = size.height * 0.925
+            let base = size.height * 0.962
             var x: CGFloat = size.width * 0.02
             var i = 0
             while x < size.width {
                 // Varied without being random: a repeating pattern of five
                 // heights reads as trees, where equal ones read as a comb.
-                let tall = [0.030, 0.042, 0.026, 0.048, 0.034][i % 5]
+                let tall = [0.014, 0.020, 0.012, 0.023, 0.016][i % 5]
                 let top = base - size.height * tall
-                let half = size.width * 0.006
+                let half = size.width * 0.0032
                 var tree = Path()
                 tree.move(to: CGPoint(x: x - half, y: base + size.height * 0.012))
                 tree.addLine(to: CGPoint(x: x, y: top))
                 tree.addLine(to: CGPoint(x: x + half, y: base + size.height * 0.012))
                 tree.closeSubpath()
-                ctx.fill(tree, with: .color(Color(white: 0.055)))
-                x += size.width * 0.047
+                ctx.fill(tree, with: .color(Color(white: 0.035).opacity(0.8)))
+                x += size.width * 0.026
                 i += 1
             }
         }

@@ -10,24 +10,30 @@ import AppKit
 import SwiftUI
 
 enum Page: String, CaseIterable, Identifiable {
-    case home = "Home", words = "Words", snippets = "Snippets", scratchpad = "Scratchpad"
-    case style = "Style"
+    case home = "Home", history = "History", words = "Words", snippets = "Snippets"
+    case scratchpad = "Scratchpad", style = "Style"
     case review = "Review", meetings = "Meetings", settings = "Settings", help = "Help"
     var id: String { rawValue }
 
-    /// The pages in the top of the sidebar; Settings and Help sit at the bottom.
-    static let main: [Page] = [.home, .words, .snippets, .scratchpad, .style, .review, .meetings]
+    /// The sidebar, in the order of a day: see what just happened, go back
+    /// through it, teach it, keep things.
+    ///
+    /// Six, because a list long enough to read is a list nobody reads. The
+    /// four that are not here (Scratchpad, Style, Review, Help) are a key
+    /// press away in the palette, which indexes every page by name.
+    static let main: [Page] = [.home, .history, .words, .snippets, .meetings, .settings]
 
     var symbol: String {
         switch self {
         case .home: return "house"
+        case .history: return "magnifyingglass"
         case .words: return "character.book.closed"
-        case .snippets: return "text.badge.plus"
+        case .snippets: return "chevron.left.forwardslash.chevron.right"
         case .scratchpad: return "note.text"
         case .style: return "textformat"
         case .review: return "checkmark.seal"
-        case .meetings: return "person.2"
-        case .settings: return "gearshape"
+        case .meetings: return "calendar"
+        case .settings: return "sun.max"
         case .help: return "questionmark.circle"
         }
     }
