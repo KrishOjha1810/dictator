@@ -14,7 +14,7 @@ export default function Nav({ tone = "sky" }: { tone?: "sky" | "panel" }) {
     <header className={`c-nav nav ${tone}`}>
       <a className="brand" href="/" aria-label="Dictator home">
         <img src="/icon.png" alt="" width={34} height={34} />
-        <span>dictator</span>
+        <span>Dictator</span>
       </a>
       <nav className="links" aria-label="Main">
         {links.map((l) => (

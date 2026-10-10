@@ -30,7 +30,7 @@ const faqs = [
   },
   {
     q: "Which key do I hold?",
-    a: "Right ⌥ Option, unless you change it. You can also pick fn (🌐), right ⌘ or left ⌘. Double-tap the key for hands free dictation.",
+    a: "Whichever you pick in Settings: fn (🌐), right ⌥ Option, right ⌘ or left ⌘. Double-tap it for hands free dictation.",
   },
 ];
 

@@ -4,7 +4,7 @@ const steps = [
   {
     n: "01",
     title: "Hold the key",
-    body: "Right ⌥ Option by default, from any app. A small pill appears, and its bars move with your voice, so you always know the microphone is really open.",
+    body: "The key you choose, in any app. A small pill appears, and its bars move with your voice, so you always know the microphone is really open.",
   },
   {
     n: "02",

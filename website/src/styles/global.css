@@ -129,6 +129,9 @@
 html {
   -webkit-text-size-adjust: 100%;
   scroll-behavior: smooth;
+  /* iOS Safari ignores overflow-x on body alone; without this a phone can
+     scroll the page sideways by a few pixels */
+  overflow-x: clip;
 }
 
 body {
@@ -197,6 +200,12 @@ p {
   padding: var(--gutter);
   display: grid;
   gap: var(--gutter);
+}
+
+/* Grid items do not shrink below their content's width by default, so one
+   long line (the marquee rows) made every panel wider than a phone screen. */
+.page > * {
+  min-width: 0;
 }
 
 /* the framed panels: a white rim around a rounded inner surface */
