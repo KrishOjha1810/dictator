@@ -244,3 +244,22 @@ jobs:
             build/Dictator-*.dmg.sha256
             build/appcast.xml
           body_path: build/notes.md
+
+      # The website's download and the feed apps on the new address read.
+      # Only once tools/hosting.env names the bucket; until then a release is
+      # GitHub only, as before.
+      - name: Publish to Cloudflare R2
+        if: startsWith(github.ref, 'refs/tags/v') && steps.done.outputs.skip != 'true'
+        env:
+          CF_ACCOUNT_ID: ${{ secrets.CF_ACCOUNT_ID }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          R2_BUCKET: ${{ secrets.R2_BUCKET }}
+          CF_PAGES_DEPLOY_HOOK: ${{ secrets.CF_PAGES_DEPLOY_HOOK }}
+        run: |
+          . tools/hosting.env
+          if [ -z "$DOWNLOAD_BASE" ]; then
+            echo "No DOWNLOAD_BASE in tools/hosting.env; GitHub release only"
+            exit 0
+          fi
+          tools/publish_r2.sh "${{ steps.v.outputs.version }}"
