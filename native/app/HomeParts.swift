@@ -142,8 +142,7 @@ struct RecentColumn: View {
             Spacer(minLength: 0)
         }
         .padding(.horizontal, 16).padding(.top, 20).padding(.bottom, 22)
-        .frame(width: 274)
-        .frame(maxHeight: .infinity, alignment: .topLeading)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
     }
 
     private func row(_ r: Said) -> some View {

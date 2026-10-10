@@ -484,7 +484,11 @@ struct HomePage: View {
             }
             if beside {
                 Rectangle().fill(Theme.hairline).frame(width: 1)
-                recent.frame(width: 274)
+                // layoutPriority so the scroll view beside it cannot take
+                // this column's width. A ScrollView asks for everything,
+                // and without this the column was squeezed to about 225
+                // points and clipped its own text off the window.
+                recent.frame(width: 274).layoutPriority(1)
             }
         }
         .onAppear {
@@ -507,14 +511,15 @@ struct HomePage: View {
                 Text("\(greeting), \(firstName)")
                     .font(.display(24, .semibold)).foregroundColor(Theme.text)
                     .lineLimit(1).minimumScaleFactor(0.75).fixedSize(horizontal: false, vertical: true)
-                HStack(spacing: 9) {
-                    Chip(text: "nothing left this Mac", symbol: "lock.fill")
-                    if windowWidth >= roomForRecent {
+                ViewThatFits(in: .horizontal) {
+                    HStack(spacing: 9) {
+                        Chip(text: "nothing left this Mac", symbol: "lock.fill")
                         Text(st.words.map { "\($0.formatted()) dictations, all of them here" }
                              ?? "everything stays here")
                             .font(.system(size: 13)).foregroundColor(Theme.tertiary)
                             .lineLimit(1)
                     }
+                    Chip(text: "nothing left this Mac", symbol: "lock.fill")
                 }
             }
             Spacer(minLength: 0)
@@ -551,14 +556,17 @@ struct HomePage: View {
 
             Rectangle().fill(Theme.hairline).frame(height: 1).padding(.top, 20)
 
-            Group {
-                if windowWidth >= 1080 {
-                    HStack(spacing: 16) { facts(l); Spacer(minLength: 12); actions(l) }
-                } else {
-                    VStack(alignment: .leading, spacing: 12) {
-                        HStack(spacing: 16) { facts(l); Spacer(minLength: 0) }
-                        HStack(spacing: 8) { actions(l); Spacer(minLength: 0) }
-                    }
+            // One row if it fits, two if it does not. ViewThatFits rather
+            // than a width to compare against: the number that matters is
+            // how much room is left after the sidebar and the recent
+            // column, not how wide the window is, and a guess at it is what
+            // pushed this row to 780 points and shoved the recent column
+            // off the right of a 1170 point window.
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: 16) { facts(l); Spacer(minLength: 12); actions(l) }
+                VStack(alignment: .leading, spacing: 12) {
+                    HStack(spacing: 16) { facts(l); Spacer(minLength: 0) }
+                    HStack(spacing: 8) { actions(l); Spacer(minLength: 0) }
                 }
             }
             .padding(.top, 14)
