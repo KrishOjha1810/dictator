@@ -101,7 +101,7 @@ tools/build_dmg.sh                   # the app bundle and .dmg
 
 | Path | What lives there |
 |---|---|
-| `dictator/` | the Python package: the dictation loop, CLI, library |
+| `dictator_core/` | dictator core, the Python package: the dictation loop, CLI, library |
 | `native/` | Swift: key listener, recorder, indicator, the app |
 | `tools/` | build, release and benchmark scripts |
 | `tests/` | pytest suite |

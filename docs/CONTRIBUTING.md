@@ -1,7 +1,7 @@
 # Contributing
 
 Dictator is local push-to-talk dictation for macOS: a Python package
-(`dictator/`) plus Swift helpers (`native/`). Read
+(`dictator_core/`, "dictator core") plus Swift helpers (`native/`). Read
 [`architecture.md`](architecture.md) before changing how the pieces fit
 together, and [`findings.md`](findings.md) before changing engines, latency or
 permissions logic. Much of what looks like a simple improvement there has
@@ -57,14 +57,14 @@ These are the things that are easy to break and expensive to get wrong.
 - **No audio or text leaves the machine.** No network calls for speech, recap
   or meetings. A feature that needs a server is a different product.
 - **Keep the public library stable.** `Dictator`, `Transcript`, `transcribe`
-  and `VERSION` (`dictator/__init__.py`) are the public surface. Everything
+  and `VERSION` (`dictator_core/__init__.py`) are the public surface. Everything
   else is internal.
-- **The pipeline lives in one place.** The order of steps in `dictator/api.py`
+- **The pipeline lives in one place.** The order of steps in `dictator_core/api.py`
   is the hard part. The key listener calls the library; do not copy the
   pipeline anywhere else.
 - **Never change the signing identity.** macOS ties each user's Microphone and
   Accessibility grants to it. A new identity silently drops every grant on the
-  next update. See `dictator/signing.py`, `dictator/tcc.py` and
+  next update. See `dictator_core/signing.py`, `dictator_core/tcc.py` and
   [`architecture.md`](architecture.md#why-it-is-signed).
 - **State lives in `~/.dictator`**, overridable with `DICTATOR_STATE`.
 - **Measure, do not guess.** A number added to `findings.md` comes from a real
@@ -82,7 +82,7 @@ These are the things that are easy to break and expensive to get wrong.
 ## Commit messages
 
 ```
-type: short summary in the imperative
+type(scope): short summary in the imperative
 
 - what changed, one point per line
 - and why, when it is not obvious
@@ -90,11 +90,24 @@ type: short summary in the imperative
 
 `type` is one of `feat`, `fix`, `refactor`, `docs`, `test`, `ci`, `chore`.
 
+`scope` says which part of the repo changed:
+
+| Scope | For changes in |
+|---|---|
+| `app` | `native/`: the Mac app and its Swift helpers |
+| `dictator-core` | `dictator_core/`: the Python package |
+| `website` | `website/` |
+| `docs` | documentation |
+
+For example `fix(app): keep the key hint in the sidebar`,
+`feat(website): show the release date` or `fix(docs): correct the install
+steps`. A commit that changes two parts names the main one, or is split in two.
+
 ## Layout
 
 | Path | What lives there |
 |---|---|
-| `dictator/` | the Python package: dictation loop, CLI, library |
+| `dictator_core/` | dictator core, the Python package: dictation loop, CLI, library |
 | `native/` | Swift: key listener, recorder, indicator, paste, the app, the meeting recorder |
 | `bin/dictator` | the command line entry point |
 | `scripts/install.sh` | the from-source installer |

@@ -52,7 +52,7 @@ is what asking for Hinglish should mean.
 
 ## The fix
 
-One condition, in `dictator/stt.py`:
+One condition, in `dictator_core/stt.py`:
 
 ```python
 -    if language() != "hinglish" and parakeet_ready():

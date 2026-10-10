@@ -12,13 +12,13 @@ from pathlib import Path
 
 import pytest
 
-from dictator import core, orbnative
+from dictator_core import core, orbnative
 
 
 def _cli():
-    # The CLI body lives in dictator.cli now; bin/dictator is just a launcher.
+    # The CLI body lives in dictator_core.cli now; bin/dictator is just a launcher.
     import importlib
-    return importlib.import_module("dictator.cli")
+    return importlib.import_module("dictator_core.cli")
 
 
 DEFAULT = {"position": "top", "idle": "hover",
@@ -165,7 +165,7 @@ def test_only_top_and_bottom_centre_lie_flat():
 
 def test_the_pill_and_the_loop_agree_on_the_control_channel():
     """The helper sends to the socket and checks the lock control.py uses."""
-    from dictator import control
+    from dictator_core import control
     src = Path(orbnative.SRC).read_text()
     assert f'"{control.SOCK_NAME}"' in src
     assert f'"{control.SOCK_NAME}.lock"' in src

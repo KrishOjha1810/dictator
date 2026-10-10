@@ -12,7 +12,7 @@ category, and no speech model will ever know them.
 """
 import pytest
 
-from dictator import history, review, vocab
+from dictator_core import history, review, vocab
 
 
 def _said(text, app="Terminal"):
@@ -132,33 +132,33 @@ def test_a_caller_can_ask_what_it_got_wrong_without_the_command():
     """The loop that catches corrections cannot read a terminal's text field,
     so an embedder with its own way of asking the user is better placed than
     we are. That only helps if the list is reachable."""
-    import dictator
+    import dictator_core
     _said("hello Zhrkvander")
-    got = dictator.Dictator().review()
+    got = dictator_core.Dictator().review()
     assert [w["word"] for w in got] == ["Zhrkvander"]
 
 
 def test_a_caller_can_erase_one_thing_without_erasing_everything():
-    import dictator
+    import dictator_core
     _said("the deploy key is in the vault")
     _said("an unrelated thought")
-    assert dictator.Dictator().forget(containing="deploy key") == 1
+    assert dictator_core.Dictator().forget(containing="deploy key") == 1
     assert [r["shown"] for r in history.recent()] == ["an unrelated thought"]
 
 
 def test_an_empty_search_through_the_library_erases_nothing():
     """The same accident as on the command line, one layer up: a caller
     passing a variable that happened to be empty must not lose the history."""
-    import dictator
+    import dictator_core
     _said("something")
-    assert dictator.Dictator().forget(containing="") == 0
-    assert dictator.Dictator().forget() == 0
+    assert dictator_core.Dictator().forget(containing="") == 0
+    assert dictator_core.Dictator().forget() == 0
     assert len(history.recent()) == 1
 
 
 def test_erasing_everything_has_to_be_asked_for_by_name():
-    import dictator
+    import dictator_core
     _said("one")
     _said("two")
-    assert dictator.Dictator().forget(everything=True) == 2
+    assert dictator_core.Dictator().forget(everything=True) == 2
     assert history.recent() == []

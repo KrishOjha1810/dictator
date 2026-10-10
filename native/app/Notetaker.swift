@@ -1,6 +1,6 @@
 // The Notetaker: start and stop recording a meeting from the pill, the menu
 // or Option-M. All of the recording is `dictator meeting start|stop`
-// (dictator/meeting.py); this only decides when to run it, and asks first.
+// (dictator_core/meeting.py); this only decides when to run it, and asks first.
 //
 // Recording other people has consent implications, and in some places legal
 // ones. So the first time, the app (never the pill, which is too small and too

@@ -17,7 +17,7 @@ import time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-from dictator import hindi, known, stt, truth          # noqa: E402
+from dictator_core import hindi, known, stt, truth          # noqa: E402
 
 OUT = Path.home() / ".dictator" / "sweep.md"
 
@@ -81,8 +81,8 @@ def run(wav, model, trim, lang, prompt):
 
 
 def shipped(wav):
-    import dictator
-    d = dictator.Dictator(remember=False, learn=False, expand=False)
+    import dictator_core
+    d = dictator_core.Dictator(remember=False, learn=False, expand=False)
     t0 = time.time()
     return d.transcribe(str(wav)).heard, time.time() - t0
 

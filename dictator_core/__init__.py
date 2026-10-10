@@ -2,7 +2,7 @@
 
 As a library:
 
-    from dictator import Dictator
+    from dictator_core import Dictator
 
     d = Dictator()
     said = d.transcribe("recording.wav")

@@ -5,12 +5,14 @@ history recorder, so the suite filled the user's own utterance history with
 "deploy the thing" and the vocabulary would have started learning from it.
 State that a test creates has to live somewhere a test can throw away.
 """
+import importlib
+
 import pytest
 
 
 @pytest.fixture(autouse=True)
 def _own_state_dir(tmp_path, monkeypatch):
-    from dictator import core
+    from dictator_core import core
     monkeypatch.setattr(core, "STATE_DIR", tmp_path)
     monkeypatch.setattr(core, "LOG_FILE", tmp_path / "log")
     monkeypatch.setattr(core, "HUD_FILE", tmp_path / "hud.json")
@@ -85,12 +87,13 @@ def _own_state_dir(tmp_path, monkeypatch):
             ("meeting", "PLIST", tmp_path / "app" / "Dictator Meeting.app"
                                  / "Contents" / "Info.plist"),
     ):
-        try:
-            m = __import__(f"dictator.{mod}", fromlist=[mod])
-            if hasattr(m, attr):
-                monkeypatch.setattr(m, attr, value)
-        except Exception:
-            pass
+        # No try/except around the import: when the package was renamed, a
+        # silent ImportError here left every one of these pointing at the
+        # user's real ~/.dictator for a whole test run, and the tests wiped
+        # their history. A module that cannot be found must stop the run.
+        m = importlib.import_module(f"dictator_core.{mod}")
+        if hasattr(m, attr):
+            monkeypatch.setattr(m, attr, value)
     # The models, and the same shape once more: stt works out MODEL_DIR from
     # STATE_DIR at import, so on a Mac (or a CI runner) with no voicebridge
     # models it is ~/.dictator/models, and anything that downloads a model
@@ -99,7 +102,7 @@ def _own_state_dir(tmp_path, monkeypatch):
     # and nothing a test writes lands beside them.
     try:
         from pathlib import Path
-        from dictator import stt
+        from dictator_core import stt
         real = Path.home() / ".dictator"
         if str(stt.MODEL_DIR).startswith(str(real)):
             # Not tmp_path/models: tests make that one themselves.
@@ -117,7 +120,7 @@ def _own_state_dir(tmp_path, monkeypatch):
         pass
     # shared() caches a Vocab that has already read the real file.
     try:
-        from dictator import vocab
+        from dictator_core import vocab
         monkeypatch.setattr(vocab, "_shared", None)
     except Exception:
         pass
@@ -125,7 +128,7 @@ def _own_state_dir(tmp_path, monkeypatch):
     # real path, so without this a test would expand a phrase out of the
     # user's own file and, worse, write its own back into it.
     try:
-        from dictator import snippets
+        from dictator_core import snippets
         monkeypatch.setattr(snippets, "_shared", None)
     except Exception:
         pass
@@ -135,7 +138,7 @@ def _own_state_dir(tmp_path, monkeypatch):
     # test and fires inside the next one; test_media turns it back on.
     (tmp_path / "quiet-media").write_text("off")
     try:
-        from dictator import media
+        from dictator_core import media
         monkeypatch.setattr(media, "_run", lambda *a, **k: "")
     except Exception:
         pass

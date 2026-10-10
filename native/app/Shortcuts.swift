@@ -90,7 +90,7 @@ final class Hotkeys {
 }
 
 /// indicator.json, the parts the app reads directly. Written only through
-/// `dictator indicator`; see dictator/orbnative.py.
+/// `dictator indicator`; see dictator_core/orbnative.py.
 struct IndicatorFile {
     var position = "top"
     var idle = "hover"

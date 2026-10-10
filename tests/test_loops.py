@@ -12,7 +12,7 @@ loudness gate would have kept both loops and thrown away real short answers.
 """
 import pytest
 
-from dictator import loops
+from dictator_core import loops
 
 
 @pytest.mark.parametrize("text", [
@@ -75,7 +75,7 @@ def test_the_retry_replaces_a_loop_and_keeps_a_good_answer(monkeypatch,
                                                            tmp_path):
     """The behaviour that matters: a loop is thrown away for the second
     answer, and a second answer that also loops is not preferred."""
-    from dictator import stt
+    from dictator_core import stt
 
     calls = []
 
@@ -120,7 +120,7 @@ def test_a_byte_the_model_emitted_does_not_throw_the_hold_away(monkeypatch,
     `subprocess.run(text=True)`, was caught by the broad handler and logged as
     "nothing was said". The person had spoken. It was thrown away because one
     byte was ugly."""
-    from dictator import stt
+    from dictator_core import stt
 
     seen = {}
 
@@ -159,7 +159,7 @@ def test_a_short_hold_is_not_trimmed_at_all():
     is worse AND slower than leaving it alone (7.59% against 3.95% gibberish
     for the shortest, and 0.83s against 0.58s). A decoder given too little
     context loops, and looping takes longer than the encoding it saved."""
-    from dictator import stt
+    from dictator_core import stt
     for secs in (0.5, 1.0, 2.7, 4.0, 5.9):
         assert stt.audio_ctx_for(secs) == 0, secs
 
@@ -167,33 +167,33 @@ def test_a_short_hold_is_not_trimmed_at_all():
 def test_a_long_hold_is_still_trimmed():
     """Above six seconds it buys real time for nothing, which is what it was
     written for. Removing it there would make every long dictation slower."""
-    from dictator import stt
+    from dictator_core import stt
     assert 0 < stt.audio_ctx_for(8.0) < 1500
     assert 0 < stt.audio_ctx_for(12.0) < 1500
     assert stt.audio_ctx_for(40.0) == 1500
 
 
 def test_the_boundary_is_where_the_measurement_put_it():
-    from dictator import stt
+    from dictator_core import stt
     assert stt.audio_ctx_for(stt.WORTH_TRIMMING - 0.1) == 0
     assert stt.audio_ctx_for(stt.WORTH_TRIMMING) > 0
 
 
 def test_unknown_duration_still_means_do_not_trim():
     """A wav that could not be read must not be guessed at."""
-    from dictator import stt
+    from dictator_core import stt
     assert stt.audio_ctx_for(0) == 0
     assert stt.audio_ctx_for(-1) == 0
 
 
 def test_a_sentence_looped_three_times_is_kept_once():
-    from dictator import loops
+    from dictator_core import loops
     got = loops.collapse("yar ye test karke dekho. yar ye test karke dekho. "
                          "yar ye test karke dekho. yar ye tes")
     assert got == "yar ye test karke dekho."
 
 
 def test_a_sentence_said_twice_is_left_alone():
-    from dictator import loops
+    from dictator_core import loops
     t = "Do it now. Do it now. Then stop."
     assert loops.collapse(t) == t

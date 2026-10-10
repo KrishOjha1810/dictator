@@ -1659,7 +1659,7 @@ idea was killed in four minutes by printing the numbers.
 
 ### What does separate them is the shape of the output
 
-`dictator/loops.py` reads the text rather than the audio, in two ways: one
+`dictator_core/loops.py` reads the text rather than the audio, in two ways: one
 short unit repeated inside a single token (`nder` four times), and the same
 clause repeated three times in a row. Both thresholds were set against real
 text rather than chosen:

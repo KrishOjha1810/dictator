@@ -6,7 +6,7 @@ import time
 
 import pytest
 
-from dictator import core, media
+from dictator_core import core, media
 
 
 @pytest.fixture
@@ -94,7 +94,7 @@ def test_a_pause_left_by_a_crash_is_not_resumed_later(helper):
 def _hold(monkeypatch):
     """A Dictation whose recorder and side effects are all stand-ins, and a
     list of what it asked the quieting to do."""
-    from dictator import dictate
+    from dictator_core import dictate
     did = []
 
     class Q:

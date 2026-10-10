@@ -9,7 +9,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from dictator import dictate
+from dictator_core import dictate
 
 
 def _quiet(monkeypatch):
@@ -204,7 +204,7 @@ def test_each_hold_records_to_its_own_file(monkeypatch):
 class _CutProc:
     """A recorder that lost its input and exited on its own, so by the time the
     key came up there was nothing left to terminate."""
-    from dictator import recorder as _rec
+    from dictator_core import recorder as _rec
     dictator_native = True
     returncode = _rec.CUT_SHORT
 
@@ -294,7 +294,7 @@ def test_an_ordinary_hold_says_nothing_about_being_cut(monkeypatch):
 def _hold_producing(monkeypatch, tmp_path, text, rms, secs):
     """One hold, with the transcriber made to answer `text` and the audio made
     to measure `rms` over `secs`."""
-    from dictator import core, dictate, stt
+    from dictator_core import core, dictate, stt
 
     said = []
     monkeypatch.setattr(core, "surface_error",
@@ -337,7 +337,7 @@ def test_the_two_thresholds_sit_where_the_corpus_put_them():
     """Both are needed and neither alone works. A 1.01s hold at 0.0026 RMS is a
     real "Yeah." that transcribed; a 0.67s hold at 0.0020 is silence. Those are
     adjacent in loudness, so only duration separates them."""
-    from dictator import dictate
+    from dictator_core import dictate
     quiet_but_real = (0.0026, 1.01)
     silent_and_brief = (0.0020, 0.67)
     assert quiet_but_real[0] >= dictate.QUIET
@@ -351,7 +351,7 @@ def test_the_engine_is_named_in_words_a_person_can_use():
     gibberish against 7.27% over 270 real holds) and until now the user could
     not tell which had answered, so "excellent sometimes, poor sometimes" was
     as precise as any report could be."""
-    from dictator.dictate import _engine_name
+    from dictator_core.dictate import _engine_name
     assert _engine_name("parakeet") == "the fast English engine"
     assert _engine_name("cli:ggml-large-v3-turbo.bin") == "the multilingual model"
     assert _engine_name("server:ggml-large-v3-turbo.bin") == "the multilingual model"
@@ -361,6 +361,6 @@ def test_the_engine_is_named_in_words_a_person_can_use():
 def test_an_engine_it_does_not_recognise_is_named_rather_than_hidden():
     """Returning "unknown" for a real engine name would lose the one piece of
     information the caller had."""
-    from dictator.dictate import _engine_name
+    from dictator_core.dictate import _engine_name
     assert _engine_name("cli:something-new.bin") == "cli:something-new.bin"
     assert _engine_name("") == "an unknown engine"

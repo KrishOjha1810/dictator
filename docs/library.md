@@ -5,7 +5,7 @@ Dictator is a library as well as a key. Anything that can get audio into a
 login item.
 
 ```python
-from dictator import Dictator
+from dictator_core import Dictator
 
 d = Dictator()
 said = d.transcribe("recording.wav")

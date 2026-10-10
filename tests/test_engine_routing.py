@@ -19,7 +19,7 @@ import struct
 
 import pytest
 
-from dictator import stt
+from dictator_core import stt
 
 
 def _wav(path, secs, rate=16000):

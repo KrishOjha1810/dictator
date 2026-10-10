@@ -12,15 +12,15 @@ from unittest import mock
 
 import pytest
 
-import dictator
-from dictator import Dictator, Transcript, api
+import dictator_core
+from dictator_core import Dictator, Transcript, api
 
 ROOT = Path(__file__).resolve().parent.parent
 
 
 def test_the_public_surface_is_small_and_named():
-    assert dictator.__all__ == ["Dictator", "Transcript", "transcribe", "VERSION"]
-    assert dictator.VERSION
+    assert dictator_core.__all__ == ["Dictator", "Transcript", "transcribe", "VERSION"]
+    assert dictator_core.VERSION
 
 
 def test_a_transcript_knows_what_was_heard_and_what_was_written():
@@ -105,7 +105,7 @@ def test_there_is_only_one_pipeline():
     If dictate.py starts transcribing and correcting on its own again, the two
     drift and the drift is invisible: one caller gets your learned words and
     the other does not."""
-    src = (ROOT / "dictator" / "dictate.py").read_text()
+    src = (ROOT / "dictator_core" / "dictate.py").read_text()
     assert "self.sdk.transcribe(" in src, "the listener no longer calls the library"
     tree = ast.parse(src)
     calls = {ast.unparse(n.func) for n in ast.walk(tree)
@@ -119,5 +119,5 @@ def test_there_is_only_one_pipeline():
 def test_the_shaping_flags_live_in_one_place():
     """They were defined in the listener and in the library at once, which is
     the exact duplication this layer exists to remove."""
-    assert "_format_flags" not in (ROOT / "dictator" / "dictate.py").read_text()
-    assert "shaping_flags" in (ROOT / "dictator" / "cli.py").read_text()
+    assert "_format_flags" not in (ROOT / "dictator_core" / "dictate.py").read_text()
+    assert "shaping_flags" in (ROOT / "dictator_core" / "cli.py").read_text()

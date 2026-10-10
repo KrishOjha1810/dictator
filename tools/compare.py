@@ -32,7 +32,7 @@ HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE.parent))
 sys.path.insert(0, str(HERE))
 import nonwords                              # noqa: E402
-from dictator import roman, stt              # noqa: E402
+from dictator_core import roman, stt              # noqa: E402
 
 
 def transcribe(wav: Path, model: Path, lang: str,

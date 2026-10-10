@@ -29,15 +29,15 @@ The opposite failure is worse and quieter: a dictionary loose enough to accept
 anything scores every model as perfect. Both directions are asserted in
 tests/test_nonwords.py, and any change belongs in that file first.
 
-The dictionaries themselves now live in dictator/known.py, because the product
+The dictionaries themselves now live in dictator_core/known.py, because the product
 needs the same answer to decide which words to ask the user about.
 """
 import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-from dictator import hindi                    # noqa: E402,F401
-from dictator.known import (ALLOW, ENGLISH, HINDI, HINDI_KEYS,  # noqa: E402,F401
+from dictator_core import hindi                    # noqa: E402,F401
+from dictator_core.known import (ALLOW, ENGLISH, HINDI, HINDI_KEYS,  # noqa: E402,F401
                             _WORD, _known, score, unknown)
 
 if __name__ == "__main__":

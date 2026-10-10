@@ -10,7 +10,7 @@ the columns can be compared rather than reasoned about:
   pinned     the language decided by the tiny detector instead of by whisper
   both
 
-The number is the share of words in neither dictionary, from dictator.known.
+The number is the share of words in neither dictionary, from dictator_core.known.
 Word count sits beside it because a model that drops speech scores well by
 saying less, and on short holds that is the likeliest way to look good.
 """
@@ -22,7 +22,7 @@ import wave
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-from dictator import known, stt                      # noqa: E402
+from dictator_core import known, stt                      # noqa: E402
 
 
 def run(wav: Path, trim: bool, pin: bool) -> "tuple[str, float]":

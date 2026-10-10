@@ -36,7 +36,7 @@ import time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-from dictator import hindi, known, truth              # noqa: E402
+from dictator_core import hindi, known, truth              # noqa: E402
 
 
 def _words(text: str) -> list:
@@ -89,11 +89,11 @@ def eng_exact(said: str, heard: str) -> "tuple[int, int]":
 
 
 def transcribe(wav: Path, model: "Path|None") -> "tuple[str, float]":
-    from dictator import stt
+    from dictator_core import stt
     t0 = time.time()
     if model is None:
-        import dictator
-        d = dictator.Dictator(remember=False, learn=False, expand=False)
+        import dictator_core
+        d = dictator_core.Dictator(remember=False, learn=False, expand=False)
         # `.heard`, not `.text`. The references were written by correcting what
         # the model produced, which is the raw transcript, and `.text` is that
         # after the shaping pass has removed the fillers. Scoring one against

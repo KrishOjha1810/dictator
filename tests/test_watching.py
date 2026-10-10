@@ -6,7 +6,7 @@ command saying so, which is what these tests are here to stop.
 """
 import pytest
 
-from dictator import api, history
+from dictator_core import api, history
 
 
 def _row(**kw):
@@ -16,7 +16,7 @@ def _row(**kw):
 
 
 def _sdk(monkeypatch, field_result):
-    from dictator import readback
+    from dictator_core import readback
     monkeypatch.setattr(readback, "field", lambda: field_result)
     d = api.Dictator()
     d.learning = True
@@ -106,9 +106,9 @@ def test_an_unreadable_field_is_recorded_rather_than_swallowed(monkeypatch):
 
 
 def _cli():
-    # The CLI body lives in dictator.cli now; bin/dictator is just a launcher.
+    # The CLI body lives in dictator_core.cli now; bin/dictator is just a launcher.
     import importlib
-    return importlib.import_module("dictator.cli")
+    return importlib.import_module("dictator_core.cli")
 
 
 def test_a_loop_that_has_caught_nothing_says_so(monkeypatch, capsys):

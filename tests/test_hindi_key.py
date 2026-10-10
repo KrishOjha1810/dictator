@@ -7,7 +7,7 @@ exists for never applied to half of what this user says.
 """
 import pytest
 
-from dictator import hindi, vocab
+from dictator_core import hindi, vocab
 
 
 @pytest.mark.parametrize("spellings", [
