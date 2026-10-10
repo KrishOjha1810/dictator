@@ -12,12 +12,36 @@
 import AppKit
 import SwiftUI
 
+/// Whether the sidebar shows names or only icons. It collapses by itself
+/// when the window is narrow, and the button in the top bar collapses or
+/// opens it by hand; the hand choice is kept between launches.
+final class SidebarState: ObservableObject {
+    /// Below this window width the sidebar is icons only.
+    static let narrow: CGFloat = 900
+
+    @Published var collapsedByHand = Prefs.store.bool(forKey: "sidebarCollapsed") {
+        didSet { Prefs.store.set(collapsedByHand, forKey: "sidebarCollapsed") }
+    }
+    /// Opened by hand while the window is narrow; forgotten once it is wide.
+    @Published var openedWhileNarrow = false
+    @Published var width: CGFloat = 980
+
+    var collapsed: Bool {
+        width < Self.narrow ? !openedWhileNarrow : collapsedByHand
+    }
+
+    func toggle() {
+        if width < Self.narrow { openedWhileNarrow.toggle() } else { collapsedByHand.toggle() }
+    }
+}
+
 struct HubView: View {
     @EnvironmentObject var model: AppModel
+    @StateObject private var sidebar = SidebarState()
 
     var body: some View {
         HStack(spacing: 0) {
-            Sidebar()
+            Sidebar(collapsed: sidebar.collapsed)
             VStack(spacing: 0) {
             TopBar()
             Group {
@@ -46,8 +70,18 @@ struct HubView: View {
             }
             .background(Theme.background)
         }
-        .frame(minWidth: 820, minHeight: 560)
+        .frame(minWidth: 640, minHeight: 520)
         .background(Theme.background)
+        .background(GeometryReader { g in
+            Color.clear
+                .onAppear { sidebar.width = g.size.width }
+                .onChange(of: g.size.width) {
+                    sidebar.width = g.size.width
+                    if g.size.width >= SidebarState.narrow { sidebar.openedWhileNarrow = false }
+                }
+        })
+        .animation(.easeOut(duration: 0.18), value: sidebar.collapsed)
+        .environmentObject(sidebar)
         .overlay(Group { if model.paletteOpen { CommandPalette() } })
         .ignoresSafeArea()
     }
@@ -60,20 +94,42 @@ struct HubView: View {
 
 struct Sidebar: View {
     @EnvironmentObject var model: AppModel
+    var collapsed = false
 
     /// In the order a day goes: say things, teach it, keep things.
     static let pages: [Page] = [.home, .words, .snippets, .style, .scratchpad, .meetings, .review]
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 2) {
-            Wordmark(size: 19)
-                .padding(.horizontal, 8)
-                .padding(.bottom, Theme.s4)
+        VStack(alignment: collapsed ? .center : .leading, spacing: 2) {
+            Group {
+                if collapsed { BrandMark(size: 26) } else { Wordmark(size: 16) }
+            }
+            .padding(.horizontal, collapsed ? 0 : 8)
+            .padding(.bottom, Theme.s4)
 
-            ForEach(Self.pages) { SidebarItem(page: $0) }
+            ForEach(Self.pages) { SidebarItem(page: $0, collapsed: collapsed) }
             Spacer()
-            ForEach([Page.settings, .help]) { SidebarItem(page: $0) }
+            ForEach([Page.settings, .help]) { SidebarItem(page: $0, collapsed: collapsed) }
 
+            if collapsed {
+                // The key and the promise, as two small marks with tooltips.
+                VStack(spacing: Theme.s2) {
+                    Image(systemName: "keyboard")
+                        .font(.system(size: 13, weight: .medium))
+                        .foregroundColor(Theme.railSecondary)
+                        .frame(width: 36, height: 32)
+                        .help("Hold \(Prefs.keyNames[model.key] ?? model.key) to talk, "
+                              + "double tap for hands free")
+                    Image(systemName: "lock.fill")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundColor(Theme.live)
+                        .frame(width: 36, height: 32)
+                        .background(RoundedRectangle(cornerRadius: 8, style: .continuous)
+                            .fill(Theme.liveSoft))
+                        .help("Local on this Mac. No audio is uploaded.")
+                }
+                .padding(.top, Theme.s3)
+            } else {
             VStack(alignment: .leading, spacing: 6) {
                 // The key, so how to start is always on screen.
                 HStack(spacing: 8) {
@@ -90,11 +146,13 @@ struct Sidebar: View {
             }
             .padding(.horizontal, 4)
             .padding(.top, Theme.s3)
+            }
         }
-        .padding(.horizontal, Theme.s3)
+        .padding(.horizontal, collapsed ? Theme.s2 : Theme.s3)
         .padding(.top, 50)   // under the traffic lights
         .padding(.bottom, Theme.s3)
-        .frame(width: 216)
+        // Wide enough for the traffic lights when collapsed.
+        .frame(width: collapsed ? 76 : 216)
         .frame(maxHeight: .infinity)
         .background(Theme.rail)
         .overlay(alignment: .trailing) { Rectangle().fill(Theme.border).frame(width: 1) }
@@ -126,6 +184,7 @@ struct LocalCard: View {
 struct SidebarItem: View {
     @EnvironmentObject var model: AppModel
     var page: Page
+    var collapsed = false
     @StateObject private var hover = Hover()
 
     var body: some View {
@@ -136,18 +195,22 @@ struct SidebarItem: View {
                     .font(.system(size: 12.5, weight: .medium))
                     .foregroundColor(on ? .white : Theme.railSecondary)
                     .frame(width: 18)
-                Text(page.rawValue)
-                    .font(.system(size: 13, weight: on ? .semibold : .regular))
-                    .foregroundColor(on ? .white : Theme.railText)
-                Spacer()
+                if !collapsed {
+                    Text(page.rawValue)
+                        .font(.system(size: 13, weight: on ? .semibold : .regular))
+                        .foregroundColor(on ? .white : Theme.railText)
+                    Spacer()
+                }
             }
             .padding(.horizontal, 10)
+            .frame(maxWidth: collapsed ? 44 : .infinity)
             .frame(height: 32)
             .background(RoundedRectangle(cornerRadius: 8, style: .continuous)
                 .fill(on ? Theme.accentFill : (hover.on ? Theme.railHover : .clear)))
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .help(collapsed ? page.rawValue : "")
         .onHover { hover.on = $0 && !snapshotRun }
     }
 }
@@ -156,10 +219,17 @@ struct SidebarItem: View {
 /// switch. The switch sets the same preference as Settings > Appearance.
 struct TopBar: View {
     @EnvironmentObject var model: AppModel
+    @EnvironmentObject var sidebar: SidebarState
     @Environment(\.colorScheme) private var scheme
 
     var body: some View {
         HStack(spacing: Theme.s3) {
+            Button { sidebar.toggle() } label: {
+                square("sidebar.left")
+            }
+            .buttonStyle(.plain)
+            .help(sidebar.collapsed ? "Show the sidebar" : "Collapse the sidebar")
+
             Button { model.paletteOpen = true } label: {
                 HStack(spacing: Theme.s2) {
                     Image(systemName: "magnifyingglass").font(.system(size: 12, weight: .medium))
@@ -181,15 +251,7 @@ struct TopBar: View {
             .buttonStyle(.plain)
 
             Button { Appearance.set(scheme == .dark ? .light : .dark) } label: {
-                Image(systemName: scheme == .dark ? "moon" : "sun.max")
-                    .font(.system(size: 14, weight: .medium))
-                    .foregroundColor(Theme.secondary)
-                    .frame(width: 34, height: 34)
-                    .background(RoundedRectangle(cornerRadius: 10, style: .continuous)
-                        .fill(Theme.card))
-                    .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous)
-                        .strokeBorder(Theme.border, lineWidth: 1))
-                    .contentShape(Rectangle())
+                square(scheme == .dark ? "moon" : "sun.max")
             }
             .buttonStyle(.plain)
             .help(scheme == .dark ? "Switch to light" : "Switch to dark")
@@ -197,6 +259,17 @@ struct TopBar: View {
         .padding(.horizontal, Theme.s5)
         .padding(.top, 10)
         .padding(.bottom, 2)
+    }
+
+    private func square(_ symbol: String) -> some View {
+        Image(systemName: symbol)
+            .font(.system(size: 14, weight: .medium))
+            .foregroundColor(Theme.secondary)
+            .frame(width: 34, height: 34)
+            .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(Theme.card))
+            .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .strokeBorder(Theme.border, lineWidth: 1))
+            .contentShape(Rectangle())
     }
 }
 
@@ -255,7 +328,7 @@ struct PageScroll<Content: View>: View {
         ScrollView {
             VStack(alignment: .leading, spacing: Theme.s5) { content }
                 .frame(maxWidth: 760, alignment: .leading)
-                .padding(.horizontal, Theme.s7)
+                .padding(.horizontal, Theme.s5)
                 .padding(.top, Theme.s5)
                 .padding(.bottom, Theme.s6)
                 .frame(maxWidth: .infinity)
@@ -385,22 +458,16 @@ struct HomePage: View {
         PageScroll {
             if let r = model.clash { RivalBanner(running: r) }
             header
-            HStack(spacing: Theme.s3) {
-                stat("doc.text.fill", Theme.accent, Theme.accentSoft,
-                     (st.todayWords ?? 0).formatted(), "words today",
-                     st.words.map { "\($0.formatted()) all time" })
-                stat("clock", Theme.coral, Theme.coralSoft,
-                     duration(st.todaySaved ?? 0), "time saved today",
-                     st.saved.map { "\(duration($0)) all time" })
-                stat("waveform", Theme.live, Theme.liveSoft,
-                     st.wpm.map { "\(Int($0.rounded()))" } ?? "–", "words a minute",
-                     "typing is about 40")
-                stat("flame.fill", Theme.coral, Theme.coralSoft,
-                     st.streak.map { "\($0)" } ?? "–", "day streak",
-                     model.last?.ms.map { "last pasted in \(waited($0))" })
+            // Four across, or two rows of two when the window is narrow.
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: Theme.s3) { stats.prefix; stats.suffix }
+                    .fixedSize(horizontal: false, vertical: true)
+                VStack(spacing: Theme.s3) {
+                    HStack(spacing: Theme.s3) { stats.prefix }
+                    HStack(spacing: Theme.s3) { stats.suffix }
+                }
+                .fixedSize(horizontal: false, vertical: true)
             }
-            .fixedSize(horizontal: false, vertical: true)
-
             VStack(alignment: .leading, spacing: Theme.s3) {
                 HStack {
                     Text("Recent dictation").font(.sectionTitle).foregroundColor(Theme.text)
@@ -478,6 +545,17 @@ struct HomePage: View {
     /// name on the account the greeting is just "Good evening".
     private var firstName: String? {
         NSFullUserName().split(separator: " ").first.map(String.init)
+    }
+
+    /// The four numbers, in halves so a narrow window can stack them.
+    private var stats: (prefix: some View, suffix: some View) {
+        (Group {
+            stat("doc.text.fill", Theme.accent, Theme.accentSoft, (st.todayWords ?? 0).formatted(), "words today", st.words.map { "\($0.formatted()) all time" })
+            stat("clock", Theme.coral, Theme.coralSoft, duration(st.todaySaved ?? 0), "time saved today", st.saved.map { "\(duration($0)) all time" })
+        }, Group {
+            stat("waveform", Theme.live, Theme.liveSoft, st.wpm.map { "\(Int($0.rounded()))" } ?? "–", "words a minute", "typing is about 40")
+            stat("flame.fill", Theme.coral, Theme.coralSoft, st.streak.map { "\($0)" } ?? "–", "day streak", model.last?.ms.map { "last pasted in \(waited($0))" })
+        })
     }
 
     /// A number with its icon in a tinted tile, and a quieter line under it.

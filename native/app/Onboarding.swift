@@ -218,7 +218,7 @@ struct OnboardingView: View {
 
     private var welcome: some View {
         VStack(spacing: Theme.s4) {
-            BrandMark(size: 96, tile: true)
+            BrandMark(size: 96)
                 .shadow(color: .black.opacity(0.25), radius: 16, y: 8)
                 .padding(.bottom, Theme.s2)
             Text("Talk, and it types").font(.display(34))

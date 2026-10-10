@@ -4,10 +4,9 @@
 //
 // The icon is drawn here rather than kept as a picture somebody exported
 // once, so it can be changed in code review and rebuilt by anyone with the
-// Command Line Tools. A white square with the mark on it: a cobalt blue
-// lowercase "d" whose bowl holds a voice waveform, and a text cursor beside
-// it. Speech becoming writing, which is the whole app. The same shape as
-// BrandMark in native/app/Theme.swift; change the two together.
+// Command Line Tools. A deep indigo-to-teal square with a white microphone
+// whose grille is lines of text, and a glowing cursor beside it: speech
+// becoming writing, which is the whole app.
 //
 // Every size the iconset wants is drawn at its own pixel size, not scaled
 // down from 1024, so the 16 and 32 pixel versions stay sharp. The result is
@@ -21,16 +20,15 @@ guard CommandLine.arguments.count == 2 else {
 }
 let out = URL(fileURLWithPath: CommandLine.arguments[1])
 
-// The mark's blue, light at the top left to deep at the bottom right, on a
-// white tile that goes faintly warm towards the bottom.
-let markTop    = NSColor(srgbRed: 0x4F / 255.0, green: 0x78 / 255.0, blue: 1.0, alpha: 1)
-let markBottom = NSColor(srgbRed: 0x23 / 255.0, green: 0x48 / 255.0, blue: 0xE8 / 255.0, alpha: 1)
-let tileTop    = NSColor.white
-let tileBottom = NSColor(srgbRed: 0xF1 / 255.0, green: 0xF1 / 255.0, blue: 0xEB / 255.0, alpha: 1)
+// Deep indigo into violet into teal: a night sky the white microphone stands
+// out against in a Dock full of white and blue icons.
+let deep   = NSColor(srgbRed: 0.10, green: 0.09, blue: 0.30, alpha: 1)
+let violet = NSColor(srgbRed: 0.36, green: 0.20, blue: 0.78, alpha: 1)
+let teal   = NSColor(srgbRed: 0.10, green: 0.72, blue: 0.70, alpha: 1)
+let ink    = NSColor(srgbRed: 0.30, green: 0.22, blue: 0.72, alpha: 1)
 
 func capsule(_ r: NSRect) -> NSBezierPath {
-    let rad = min(r.width, r.height) / 2
-    return NSBezierPath(roundedRect: r, xRadius: rad, yRadius: rad)
+    NSBezierPath(roundedRect: r, xRadius: r.width / 2, yRadius: r.width / 2)
 }
 
 func draw(_ px: Int) -> Data {
@@ -53,72 +51,108 @@ func draw(_ px: Int) -> Data {
 
     if !small {
         let shadow = NSShadow()
-        shadow.shadowColor = NSColor.black.withAlphaComponent(0.28)
+        shadow.shadowColor = NSColor.black.withAlphaComponent(0.35)
         shadow.shadowBlurRadius = s * 0.03
-        shadow.shadowOffset = NSSize(width: 0, height: -s * 0.012)
+        shadow.shadowOffset = NSSize(width: 0, height: -s * 0.014)
         NSGraphicsContext.saveGraphicsState()
         shadow.set()
-        tileTop.setFill()
+        deep.setFill()
         shape.fill()
         NSGraphicsContext.restoreGraphicsState()
     }
 
-    // The tile: white, faintly warm at the foot.
+    // Background: diagonal indigo to violet to teal, then light from above.
     NSGraphicsContext.saveGraphicsState()
     shape.addClip()
-    NSGradient(starting: tileTop, ending: tileBottom)!.draw(in: body, angle: -90)
+    NSGradient(colors: [teal, violet, deep], atLocations: [0, 0.48, 1],
+               colorSpace: .sRGB)!.draw(in: body, angle: -55)
+    NSGradient(colors: [NSColor.white.withAlphaComponent(0.30),
+                        NSColor.white.withAlphaComponent(0.0)])!
+        .draw(fromCenter: NSPoint(x: body.midX - body.width * 0.18, y: body.maxY),
+              radius: 0,
+              toCenter: NSPoint(x: body.midX - body.width * 0.18, y: body.maxY),
+              radius: body.width * 0.85, options: [])
     NSGraphicsContext.restoreGraphicsState()
 
-    // A hairline rim so the tile holds its edge on a white desktop.
-    let rim = NSBezierPath(roundedRect: body.insetBy(dx: s * 0.002, dy: s * 0.002),
-                           xRadius: radius, yRadius: radius)
-    rim.lineWidth = max(1, s * 0.004)
-    NSColor.black.withAlphaComponent(0.08).setStroke()
-    rim.stroke()
-
-    // The glyph, in units of its height g, as BrandMark lays it out: the
-    // "d" is 0.86 wide, a 0.08 gap, the cursor 0.22. Small sizes draw it
-    // bigger in the tile so it still reads at 16 pixels.
-    let g = body.height * (small ? 0.66 : 0.52)
-    let x0 = body.midX - g * 1.16 / 2 + body.width * 0.01
-    let y0 = body.midY - g / 2   // the glyph's foot; AppKit's y runs upwards
-
-    let d = NSBezierPath(ovalIn: NSRect(x: x0, y: y0, width: g * 0.74, height: g * 0.74))
-    d.append(NSBezierPath(roundedRect: NSRect(x: x0 + g * 0.56, y: y0, width: g * 0.30, height: g),
-                          xRadius: g * 0.15, yRadius: g * 0.15))
-    d.windingRule = .nonZero
-    NSGraphicsContext.saveGraphicsState()
-    d.addClip()
-    NSGradient(starting: markTop, ending: markBottom)!
-        .draw(in: NSRect(x: x0, y: y0, width: g * 0.86, height: g), angle: -60)
-    NSGraphicsContext.restoreGraphicsState()
-
-    // The waveform in the bowl, running into the stem. Fewer, wider bars
-    // at the smallest sizes, where six would blur into one.
-    let bars: [CGFloat] = small ? [0.22, 0.42, 0.26] : [0.14, 0.28, 0.42, 0.30, 0.20, 0.10]
-    let bw = g * (small ? 0.09 : 0.055), gap = g * (small ? 0.08 : 0.045)
-    let total = CGFloat(bars.count) * bw + CGFloat(bars.count - 1) * gap
-    var bx = x0 + (g * 0.78 - total) / 2
-    let cy = y0 + g * 0.37
-    NSColor.white.setFill()
-    for h in bars {
-        capsule(NSRect(x: bx, y: cy - g * h / 2, width: bw, height: g * h)).fill()
-        bx += bw + gap
+    // A thin glassy rim, brighter at the top.
+    if !small {
+        NSGraphicsContext.saveGraphicsState()
+        let rim = NSBezierPath(roundedRect: body.insetBy(dx: s * 0.004, dy: s * 0.004),
+                               xRadius: radius, yRadius: radius)
+        rim.lineWidth = s * 0.006
+        NSColor.white.withAlphaComponent(0.22).setStroke()
+        rim.stroke()
+        NSGraphicsContext.restoreGraphicsState()
     }
 
-    // The cursor: a stem with short caps, as tall as the bowl, where the
-    // words land.
-    let cx = x0 + g * (0.86 + 0.08 + 0.11)
-    let ch = g * 0.70, cw = g * 0.07
-    let cyMid = body.midY - g * 0.15
-    let cursor = NSBezierPath(rect: NSRect(x: cx - cw / 2, y: cyMid - ch / 2, width: cw, height: ch))
-    cursor.append(capsule(NSRect(x: cx - g * 0.11, y: cyMid + ch / 2 - cw, width: g * 0.22, height: cw)))
-    cursor.append(capsule(NSRect(x: cx - g * 0.11, y: cyMid - ch / 2, width: g * 0.22, height: cw)))
+    // The microphone: a glossy white capsule on a stand.
+    let mw = body.width * 0.30, mh = body.height * 0.44
+    let mic = NSRect(x: body.midX - mw / 2 - body.width * 0.04,
+                     y: body.midY - mh / 2 + body.height * 0.08, width: mw, height: mh)
+    let micShadow = NSShadow()
+    micShadow.shadowColor = NSColor.black.withAlphaComponent(0.30)
+    micShadow.shadowBlurRadius = s * 0.035
+    micShadow.shadowOffset = NSSize(width: 0, height: -s * 0.018)
     NSGraphicsContext.saveGraphicsState()
-    cursor.addClip()
-    NSGradient(starting: markTop, ending: markBottom)!
-        .draw(in: NSRect(x: cx - g * 0.11, y: cyMid - ch / 2, width: g * 0.22, height: ch), angle: -90)
+    if !small { micShadow.set() }
+    NSColor.white.setFill()
+    capsule(mic).fill()
     NSGraphicsContext.restoreGraphicsState()
+    // Soft shading on the capsule so it reads as round, not flat.
+    NSGraphicsContext.saveGraphicsState()
+    capsule(mic).addClip()
+    NSGradient(colors: [NSColor.white, NSColor(srgbRed: 0.88, green: 0.88, blue: 0.96, alpha: 1)])!
+        .draw(in: mic, angle: 0)
+    NSGraphicsContext.restoreGraphicsState()
+
+    // The grille is lines of text: speech turning into writing.
+    let lines: [CGFloat] = [0.62, 0.78, 0.52, 0.70]
+    let lh = mh * (small ? 0.09 : 0.065)
+    let lgap = mh * 0.115
+    var ly = mic.midY + lgap * 1.5 - lh / 2
+    for w in lines {
+        let lw = mw * w
+        let r = NSRect(x: mic.midX - mw * 0.36, y: ly, width: lw, height: lh)
+        NSGradient(starting: ink, ending: teal)!
+            .draw(in: NSBezierPath(roundedRect: r, xRadius: lh / 2, yRadius: lh / 2), angle: 0)
+        ly -= lgap
+    }
+
+    // The stand: a U around the capsule, a stem and a foot.
+    let stand = NSBezierPath()
+    let uw = mw * 1.55
+    let uTop = mic.midY - mh * 0.02
+    let uRect = NSRect(x: mic.midX - uw / 2, y: mic.minY - mh * 0.20, width: uw, height: (uTop - (mic.minY - mh * 0.20)) * 2)
+    stand.appendArc(withCenter: NSPoint(x: uRect.midX, y: uTop), radius: uw / 2,
+                    startAngle: 180, endAngle: 360, clockwise: false)
+    let stemTop = uTop - uw / 2
+    let stemBottom = body.minY + body.height * 0.17
+    stand.move(to: NSPoint(x: mic.midX, y: stemTop))
+    stand.line(to: NSPoint(x: mic.midX, y: stemBottom))
+    stand.move(to: NSPoint(x: mic.midX - mw * 0.55, y: stemBottom))
+    stand.line(to: NSPoint(x: mic.midX + mw * 0.55, y: stemBottom))
+    stand.lineWidth = body.width * (small ? 0.07 : 0.045)
+    stand.lineCapStyle = .round
+    NSGraphicsContext.saveGraphicsState()
+    if !small { micShadow.set() }
+    NSColor.white.setStroke()
+    stand.stroke()
+    NSGraphicsContext.restoreGraphicsState()
+
+    // A glowing text cursor beside it, where the words land.
+    if !small {
+        let cw = body.width * 0.035, ch = mh * 0.62
+        let cur = NSRect(x: mic.maxX + body.width * 0.15, y: mic.midY - ch / 2, width: cw, height: ch)
+        let glow = NSShadow()
+        glow.shadowColor = teal.withAlphaComponent(0.95)
+        glow.shadowBlurRadius = s * 0.04
+        glow.shadowOffset = .zero
+        NSGraphicsContext.saveGraphicsState()
+        glow.set()
+        NSColor(srgbRed: 0.55, green: 1.0, blue: 0.92, alpha: 1).setFill()
+        NSBezierPath(roundedRect: cur, xRadius: cw / 2, yRadius: cw / 2).fill()
+        NSGraphicsContext.restoreGraphicsState()
+    }
 
     NSGraphicsContext.restoreGraphicsState()
     return rep.representation(using: .png, properties: [:])!

@@ -2,9 +2,9 @@
 // chrome (cards, buttons, page headers, the brand mark) the windows are built
 // from.
 //
-// The identity is the mark (BrandMark below, and tools/make_icon.swift for
-// the Dock): a lowercase "d" in cobalt blue whose bowl holds a voice
-// waveform, with a text cursor beside it. Voice becomes text. So:
+// The mark (BrandMark below, and tools/make_icon.swift for the Dock) is a
+// white microphone whose grille is lines of text, with a glowing cursor:
+// voice becomes text. The app around it is calmer than the mark:
 //
 //   - Cobalt blue is the brand and the one accent: controls, the selected
 //     page, links.
@@ -81,7 +81,7 @@ enum Palette {
     static let warn = dynamic(hex(0xB8650A), hex(0xF2A649))
     static let bad = dynamic(hex(0xC23A30), hex(0xFF7A6E))
 
-    // The mark's blue, light at the top of the bowl to deep at the stem.
+    // Cobalt, light to deep, for the onboarding welcome.
     static let markTop = hex(0x4F78FF)
     static let markBottom = hex(0x2348E8)
 }
@@ -119,8 +119,8 @@ enum Theme {
     static let warn = Color(nsColor: Palette.warn)
     static let bad = Color(nsColor: Palette.bad)
 
-    /// The mark's blue, for brand moments only: the mark itself and the
-    /// onboarding welcome.
+    /// Cobalt, light to deep, for brand moments only: the onboarding
+    /// welcome and its card icons.
     static let brand = LinearGradient(
         colors: [Color(nsColor: Palette.markTop), Color(nsColor: Palette.markBottom)],
         startPoint: .topLeading, endPoint: .bottomTrailing)
@@ -195,94 +195,62 @@ enum Appearance: String, CaseIterable {
 
 // ---------------------------------------------------------------------------
 // The brand mark, drawn rather than loaded, so it is crisp at every size and
-// a bare build without the icon file still has it. tools/make_icon.swift
-// draws the same shape for the Dock.
+// a bare build without the icon file still has it. It is the app icon in
+// miniature (tools/make_icon.swift), so it keeps the icon's own indigo,
+// violet and teal rather than the app's palette.
 
-/// The "d": a round bowl and a thick stem on its right, with rounded ends.
-/// Drawn in a box 0.86 wide for every 1 tall.
-struct DShape: Shape {
-    func path(in r: CGRect) -> Path {
-        let u = r.height
-        var p = Path()
-        p.addEllipse(in: CGRect(x: r.minX, y: r.minY + u * 0.26, width: u * 0.74, height: u * 0.74))
-        p.addRoundedRect(in: CGRect(x: r.minX + u * 0.56, y: r.minY, width: u * 0.30, height: u),
-                         cornerSize: CGSize(width: u * 0.15, height: u * 0.15),
-                         style: .continuous)
-        return p
-    }
-}
-
-/// The mark: the blue "d" with a waveform in its bowl, and a text cursor
-/// beside it. `size` is its height; it is a little wider than tall.
-/// `tile` puts it on the app icon's white rounded square.
+/// The icon in miniature: gradient tile, white grille of text lines, teal
+/// cursor.
 struct BrandMark: View {
     var size: CGFloat = 28
-    var tile = false
 
-    /// Bar heights, as a share of the glyph's height, left to right.
-    static let bars: [CGFloat] = [0.14, 0.28, 0.42, 0.30, 0.20, 0.10]
+    static let teal = Color(nsColor: hex(0x18AFAB))
+    static let violet = Color(nsColor: hex(0x5C33C7))
+    static let deep = Color(nsColor: hex(0x1D1852))
+    static let glow = Color(nsColor: hex(0x8CFFEB))
+    static let tile = LinearGradient(colors: [teal, violet, deep],
+                                     startPoint: .topLeading, endPoint: .bottomTrailing)
+    static let lines = LinearGradient(colors: [violet, teal],
+                                      startPoint: .leading, endPoint: .trailing)
 
     var body: some View {
-        if tile {
-            let r = size * 0.23
-            ZStack {
-                RoundedRectangle(cornerRadius: r, style: .continuous).fill(Color.white)
-                RoundedRectangle(cornerRadius: r, style: .continuous)
-                    .strokeBorder(Color.black.opacity(0.06), lineWidth: max(0.5, size / 96))
-                glyph(size * 0.52).offset(x: size * 0.02)
-            }
-            .frame(width: size, height: size)
-            .shadow(color: .black.opacity(0.10), radius: size * 0.06, y: size * 0.02)
-            .accessibilityHidden(true)
-        } else {
-            glyph(size).accessibilityHidden(true)
-        }
-    }
-
-    private func glyph(_ g: CGFloat) -> some View {
-        HStack(alignment: .center, spacing: g * 0.08) {
-            ZStack(alignment: .topLeading) {
-                DShape().fill(Theme.brand)
-                // The waveform, centred on the bowl and running into the stem.
-                HStack(alignment: .center, spacing: g * 0.045) {
-                    ForEach(Array(Self.bars.enumerated()), id: \.offset) { _, b in
-                        Capsule().fill(Color.white)
-                            .frame(width: max(1, g * 0.055), height: g * b)
+        let r = size * 0.27
+        ZStack {
+            RoundedRectangle(cornerRadius: r, style: .continuous).fill(Self.tile)
+            RoundedRectangle(cornerRadius: r, style: .continuous)
+                .strokeBorder(Color.white.opacity(0.18), lineWidth: max(0.5, size / 64))
+            HStack(alignment: .center, spacing: size * 0.08) {
+                // The grille: a white capsule with four lines in it.
+                ZStack {
+                    Capsule().fill(Color.white)
+                    VStack(alignment: .leading, spacing: size * 0.05) {
+                        ForEach([0.62, 0.86, 0.5, 0.74], id: \.self) { w in
+                            Capsule().fill(Self.lines)
+                                .frame(width: size * 0.26 * w, height: max(1, size * 0.045))
+                        }
                     }
                 }
-                .frame(width: g * 0.78, height: g * 0.74)
-                .offset(x: g * 0.0, y: g * 0.26)
+                .frame(width: size * 0.36, height: size * 0.5)
+                Capsule().fill(Self.glow)
+                    .frame(width: max(1.5, size * 0.055), height: size * 0.32)
+                    .shadow(color: Self.teal.opacity(0.9), radius: size * 0.06)
             }
-            .frame(width: g * 0.86, height: g)
-            // The cursor: a stem with short caps, as tall as the bowl.
-            ZStack {
-                Rectangle().frame(width: max(1, g * 0.07), height: g * 0.70)
-                VStack(spacing: 0) {
-                    Capsule().frame(width: g * 0.22, height: max(1, g * 0.07))
-                    Spacer(minLength: 0)
-                    Capsule().frame(width: g * 0.22, height: max(1, g * 0.07))
-                }
-            }
-            .foregroundStyle(Theme.brand)
-            .frame(width: g * 0.22, height: g * 0.70)
-            .offset(y: g * 0.15)
+            .offset(x: size * 0.02)
         }
-        .frame(height: g)
+        .frame(width: size, height: size)
+        .accessibilityHidden(true)
     }
 }
 
-/// The mark and the lowercase name beside it, as in the sidebar.
+/// The mark and the name beside it, as in the sidebar.
 struct Wordmark: View {
-    var size: CGFloat = 20
+    var size: CGFloat = 16
 
     var body: some View {
-        HStack(spacing: size * 0.35) {
-            BrandMark(size: size * 1.3)
-            Text("dictator")
-                .font(.system(size: size, weight: .bold))
-                .tracking(-size * 0.03)
+        HStack(spacing: 10) {
+            BrandMark(size: size * 1.6)
+            Text("Dictator").font(.display(size, .bold))
                 .foregroundColor(Theme.text)
-                .offset(y: size * 0.04)
         }
         .accessibilityElement()
         .accessibilityLabel("Dictator")

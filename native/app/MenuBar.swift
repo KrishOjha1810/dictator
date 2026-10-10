@@ -642,7 +642,7 @@ final class UI: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWindowDelegat
         var size = Theme.hubSize
         if fake, let s = env["DICTATOR_HUB_SIZE"]?.split(separator: "x").compactMap({ Double($0) }),
            s.count == 2 { size = NSSize(width: s[0], height: s[1]) }
-        _ = show("hub", "Dictator", size, min: NSSize(width: 820, height: 560)) {
+        _ = show("hub", "Dictator", size, min: NSSize(width: 640, height: 520)) {
             HubView()
         }
     }
