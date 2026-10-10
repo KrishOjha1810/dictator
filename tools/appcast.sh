@@ -49,7 +49,7 @@ SHORT="$(plutil -extract CFBundleShortVersionString raw "$APP/Contents/Info.plis
 # every release from then on. Refuse that here, before anything is published.
 if [ -n "${DOWNLOAD_BASE:-}" ]; then
     LIVE="$DOWNLOAD_BASE/appcast.xml"
-    URL="$DOWNLOAD_BASE/Dictator.dmg"
+    URL="$DOWNLOAD_BASE/Dictator-$VERSION.dmg"
     PAGE="${SITE_URL:-$DOWNLOAD_BASE}"
 else
     LIVE="https://github.com/$REPO/releases/latest/download/appcast.xml"

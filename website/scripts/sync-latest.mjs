@@ -7,7 +7,7 @@
 //
 // Where the release comes from, all from the environment or the root .env:
 //   DICTATOR_DOWNLOAD_BASE   the R2 bucket's latest.json (tools/publish_r2.sh
-//                            writes it). /download/mac goes to its Dictator.dmg
+//                            writes it). /download/mac goes to its versioned .dmg
 //                            and /appcast.xml to its feed, the address
 //                            installed apps check for updates.
 //   DICTATOR_RELEASES_REPO   otherwise, or while the bucket has no latest.json
@@ -44,15 +44,16 @@ async function fetchFromGitHub() {
   const rel = await res.json();
 
   const version = rel.tag_name.replace(/^v/, "");
-  // Dictator.dmg is the same file as Dictator-<version>.dmg under the name the
-  // install guide uses, so what people download matches what the page says.
-  const asset = rel.assets.find((a) => a.name === "Dictator.dmg");
-  if (!asset) throw new Error(`release ${rel.tag_name} has no Dictator.dmg`);
+  // The versioned file, so what people download says which version it is.
+  const file = `Dictator-${version}.dmg`;
+  const asset = rel.assets.find((a) => a.name === file);
+  if (!asset) throw new Error(`release ${rel.tag_name} has no ${file}`);
 
   return {
     version,
     date: rel.published_at,
     mac: {
+      file,
       url: asset.browser_download_url,
       size: asset.size,
       sha256: (asset.digest || "").replace(/^sha256:/, ""),

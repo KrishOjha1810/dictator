@@ -5,12 +5,14 @@
 #   tools/publish_r2.sh VERSION
 #
 # The bucket only ever holds the newest release:
-#   Dictator.dmg   what the website's download button serves
-#   latest.json    version, size and SHA256 the website shows
-#   appcast.xml    the update feed installed apps read
+#   Dictator-VERSION.dmg   what the website's download button serves, named
+#                          with its version so people know what they have
+#   latest.json            version, file name, size and SHA256 the site shows
+#   appcast.xml            the update feed installed apps read
 #
-# The feed goes up last. Until it does, apps still see the previous feed, so
-# no app is told about an update before its .dmg is in place.
+# The feed goes up after the .dmg, so no app is told about an update before
+# its file is in place. The previous .dmg is deleted only after that, once
+# nothing points at it any more.
 #
 # Needs build/Dictator-VERSION.dmg and build/appcast.xml (tools/build_dmg.sh,
 # tools/appcast.sh), and in the environment or .env (see .env.example):
@@ -52,6 +54,11 @@ put() {
     echo "uploaded $2"
 }
 
+FILE="Dictator-$VERSION.dmg"
+# What the bucket holds now, so its .dmg can be removed once this one is live.
+PREVIOUS="$(curl -fsS --max-time 30 "$DOWNLOAD_BASE/latest.json" 2>/dev/null \
+    | sed -n 's/.*"file": *"\(Dictator-[0-9][0-9.]*\.dmg\)".*/\1/p' | head -1 || true)"
+
 SIZE="$(stat -f %z "$DMG")"
 SHA="$(shasum -a 256 "$DMG" | awk '{print $1}')"
 LATEST="$(mktemp)"
@@ -61,7 +68,8 @@ cat > "$LATEST" <<EOF
   "version": "$VERSION",
   "date": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
   "mac": {
-    "url": "$DOWNLOAD_BASE/Dictator.dmg",
+    "file": "$FILE",
+    "url": "$DOWNLOAD_BASE/$FILE",
     "size": $SIZE,
     "sha256": "$SHA",
     "minOS": "14.0",
@@ -70,11 +78,18 @@ cat > "$LATEST" <<EOF
 }
 EOF
 
-# The .dmg keeps one name, so browsers may cache it only briefly; the feed and
+# A versioned .dmg never changes, so it can be cached for good; the feed and
 # latest.json must never be stale.
-put "$DMG" Dictator.dmg application/x-apple-diskimage "public, max-age=300"
+put "$DMG" "$FILE" application/x-apple-diskimage "public, max-age=31536000, immutable"
 put "$LATEST" latest.json application/json "no-cache"
 put "$FEED" appcast.xml application/xml "no-cache"
+
+if [ -n "$PREVIOUS" ] && [ "$PREVIOUS" != "$FILE" ]; then
+    curl -fsS --retry 3 -X DELETE \
+        --aws-sigv4 "aws:amz:auto:s3" \
+        --user "$R2_ACCESS_KEY_ID:$R2_SECRET_ACCESS_KEY" \
+        "$ENDPOINT/$PREVIOUS" >/dev/null && echo "removed $PREVIOUS"
+fi
 
 if [ -n "${CF_PAGES_DEPLOY_HOOK:-}" ]; then
     curl -fsS -X POST "$CF_PAGES_DEPLOY_HOOK" >/dev/null

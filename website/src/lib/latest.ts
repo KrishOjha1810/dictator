@@ -4,6 +4,7 @@ export interface Latest {
   version: string;
   date: string;
   mac: {
+    file: string;
     url: string;
     size: number;
     sha256: string;
