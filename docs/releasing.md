@@ -54,10 +54,9 @@ The same material is in the repository secrets for CI:
 | `DICTATOR_P12_PASSWORD` | `release.pass` |
 | `DICTATOR_SPARKLE_ED_KEY` | `sparkle_ed25519.key` |
 | `CF_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET` | the R2 upload key and bucket |
-| `CF_PAGES_TOKEN` | Cloudflare API token that publishes the website |
+| `CF_PAGES_DEPLOY_HOOK` | rebuilds the website from `main` after a release |
 
-And repository variables: `DICTATOR_DOWNLOAD_BASE`, `DICTATOR_SITE_URL` and
-`CF_PAGES_PROJECT`.
+And repository variables: `DICTATOR_DOWNLOAD_BASE` and `DICTATOR_SITE_URL`.
 
 Local runs read the same names from `.env`. `.env.example` lists all of them.
 

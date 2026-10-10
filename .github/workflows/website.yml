@@ -1,18 +1,16 @@
-# Build the website and publish it to Cloudflare Pages.
+# Ask Cloudflare Pages to build and publish the website from this repo.
 #
-# Two ways in:
+# The Pages project is connected to this repo (Cloudflare's GitHub app) with
+# automatic deployments off, so the site is only rebuilt when asked:
 #   - a website-* tag on main, for a change to the site alone:
 #       git tag website-2026-10-10 && git push origin website-2026-10-10
 #   - the release workflow, straight after an app release, so the site shows
 #     the new version (its version, size and download link are written into
 #     the pages when they are built)
 #
-# Needs, in repository settings (Secrets and variables > Actions):
-#   variables  DICTATOR_SITE_URL, DICTATOR_DOWNLOAD_BASE, CF_PAGES_PROJECT
-#   secrets    CF_ACCOUNT_ID, CF_PAGES_TOKEN (a Cloudflare API token with
-#              Account > Cloudflare Pages > Edit)
-#
-# Runs on Linux only, about a minute, so it costs a sliver of the free minutes.
+# Asking is one request to the project's deploy hook, the repository secret
+# CF_PAGES_DEPLOY_HOOK. Cloudflare then builds main with the project's own
+# settings (docs/cloudflare-r2.md). Seconds on a Linux runner; free.
 name: website
 
 on:
@@ -22,56 +20,32 @@ on:
 
 env:
   RELEASE_BRANCHES: "main"
-  DICTATOR_SITE_URL: ${{ vars.DICTATOR_SITE_URL }}
-  DICTATOR_DOWNLOAD_BASE: ${{ vars.DICTATOR_DOWNLOAD_BASE }}
-  CF_PAGES_PROJECT: ${{ vars.CF_PAGES_PROJECT }}
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
+        if: github.event_name == 'push'
         with:
           fetch-depth: 0
 
-      - name: Check the tag and the settings
-        env:
-          CF_ACCOUNT_ID: ${{ secrets.CF_ACCOUNT_ID }}
-          CF_PAGES_TOKEN: ${{ secrets.CF_PAGES_TOKEN }}
+      # Cloudflare builds main, so a website-* tag must point into main, like
+      # an app release. Called from the release workflow, that one has checked
+      # its own tag.
+      - name: Tag is on main
+        if: github.event_name == 'push'
         run: |
-          # A website-* tag must point into main, like an app release. Called
-          # from the release workflow, that one has checked its own tag.
-          if [ "$GITHUB_EVENT_NAME" = "push" ]; then
-            ok=""
-            for b in $RELEASE_BRANCHES; do
-              git merge-base --is-ancestor "$GITHUB_SHA" "origin/$b" 2>/dev/null && ok="$b"
-            done
-            [ -n "$ok" ] || { echo "::error::$GITHUB_REF_NAME is not on any of: $RELEASE_BRANCHES"; exit 1; }
-          fi
-          missing=""
-          for v in DICTATOR_DOWNLOAD_BASE CF_PAGES_PROJECT CF_ACCOUNT_ID CF_PAGES_TOKEN; do
-            [ -n "${!v}" ] || missing="$missing $v"
+          ok=""
+          for b in $RELEASE_BRANCHES; do
+            git merge-base --is-ancestor "$GITHUB_SHA" "origin/$b" 2>/dev/null && ok="$b"
           done
-          [ -z "$missing" ] || { echo "::error::Not set (repository variables and secrets):$missing"; exit 1; }
+          [ -n "$ok" ] || { echo "::error::$GITHUB_REF_NAME is not on any of: $RELEASE_BRANCHES"; exit 1; }
 
-      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413  # v6.1.0
-        with:
-          package_json_file: website/package.json
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020  # v7.0.0
-        with:
-          node-version: 24
-          cache: pnpm
-          cache-dependency-path: website/pnpm-lock.yaml
-
-      - name: Build
-        working-directory: website
-        run: |
-          pnpm install --frozen-lockfile
-          pnpm build
-
-      - name: Publish to Cloudflare Pages
-        working-directory: website
+      - name: Rebuild the website
         env:
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CF_ACCOUNT_ID }}
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CF_PAGES_TOKEN }}
-        run: pnpm dlx wrangler@4.141.0 pages deploy dist --project-name "$CF_PAGES_PROJECT" --branch main
+          CF_PAGES_DEPLOY_HOOK: ${{ secrets.CF_PAGES_DEPLOY_HOOK }}
+        run: |
+          [ -n "$CF_PAGES_DEPLOY_HOOK" ] || { echo "::error::No CF_PAGES_DEPLOY_HOOK secret"; exit 1; }
+          curl -fsS -X POST "$CF_PAGES_DEPLOY_HOOK" >/dev/null
+          echo "Cloudflare Pages is building the website"

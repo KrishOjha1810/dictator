@@ -5,8 +5,8 @@
 //
 // The template is dist/index.html, which Vite has already filled with the
 // built CSS and script. Each page gets its own title, description and, when
-// the site's address is known (DICTATOR_SITE_URL, or CF_PAGES_URL on
-// Cloudflare Pages), canonical and share links.
+// the site's address is known (DICTATOR_SITE_URL), canonical and share links.
+// Not CF_PAGES_URL: on Cloudflare that is each build's own preview address.
 
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
@@ -18,7 +18,7 @@ loadRootEnv();
 const ROOT = fileURLToPath(new URL("..", import.meta.url));
 const DIST = `${ROOT}dist/`;
 const SERVER = `${ROOT}dist-server/entry-server.js`;
-const SITE = envUrl("DICTATOR_SITE_URL") || envUrl("CF_PAGES_URL");
+const SITE = envUrl("DICTATOR_SITE_URL");
 
 const escape = (s) => s.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;");
 

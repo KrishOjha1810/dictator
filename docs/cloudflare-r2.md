@@ -30,10 +30,16 @@ bucket can move to a custom domain later by changing `DICTATOR_DOWNLOAD_BASE`
 alone. Do that before the app has many users: `r2.dev` is rate limited and
 not meant for production traffic.
 
-1. **Workers & Pages → Create → Pages → Upload assets**: name the project
-   (it becomes `<name>.pages.dev`, and cannot be renamed) and upload a build
-   of the website (`pnpm build` in `website/`, then zip `dist/`). The name
-   is `CF_PAGES_PROJECT`, the address `DICTATOR_SITE_URL`.
+1. **Workers & Pages → Create → Pages → Connect to Git**: pick this repo
+   (installing Cloudflare's GitHub app on the organization takes an org
+   admin). Project name becomes `<name>.pages.dev` and cannot be renamed; that
+   address is `DICTATOR_SITE_URL`. Build settings: production branch `main`,
+   root directory `website`, build command `pnpm build`, output directory
+   `dist`. Environment variables: `NODE_VERSION=24`, `PNPM_VERSION=12.5.1`,
+   `DICTATOR_SITE_URL`, and `DICTATOR_DOWNLOAD_BASE` once step 3 gives it.
+   Then **Settings → Builds → Branch control**: turn automatic deployments
+   off, and **Deploy hooks → Add**, branch `main`. That URL is
+   `CF_PAGES_DEPLOY_HOOK`.
 2. **R2 → Create bucket**, for example `dictator-downloads`.
 3. **Bucket → Settings → Public Development URL → Enable**. That
    `https://pub-….r2.dev` address is `DICTATOR_DOWNLOAD_BASE`. With a domain
@@ -41,9 +47,7 @@ not meant for production traffic.
 4. **R2 → API Tokens → Create Account API token**: Object Read & Write,
    limited to that bucket. Note the access key ID and the secret (shown once),
    and the account ID on the R2 overview page.
-5. **Manage Account → Account API Tokens → Create Token → Custom token**:
-   permission Account → Cloudflare Pages → Edit. That is `CF_PAGES_TOKEN`,
-   which publishes the website.
+
 
 ## Set up GitHub
 
@@ -53,12 +57,11 @@ In `cc-vb/dictator`, **Settings → Secrets and variables → Actions**:
 |---|---|---|
 | Variable | `DICTATOR_SITE_URL` | `https://<name>.pages.dev` |
 | Variable | `DICTATOR_DOWNLOAD_BASE` | `https://pub-….r2.dev` |
-| Variable | `CF_PAGES_PROJECT` | the Pages project's name |
 | Secret | `CF_ACCOUNT_ID` | the account ID |
 | Secret | `R2_ACCESS_KEY_ID` | from step 4 |
 | Secret | `R2_SECRET_ACCESS_KEY` | from step 4 |
 | Secret | `R2_BUCKET` | `dictator-downloads` |
-| Secret | `CF_PAGES_TOKEN` | from step 5 |
+| Secret | `CF_PAGES_DEPLOY_HOOK` | from step 1 |
 
 For releases made from your Mac, put the same names in `.env`.
 
@@ -69,17 +72,17 @@ they check the bucket directly.
 
 ## Publishing the website
 
-`.github/workflows/website.yml` builds the site and publishes it to the Pages
-project. It runs after every app release, because the site writes the
-version, size and download link into its pages when it is built, and on a
-`website-*` tag on `main` for a change to the site alone:
+Cloudflare builds the site from `main` whenever `.github/workflows/website.yml`
+calls the deploy hook. It does that after every app release, because the site
+writes the version, size and download link into its pages when it is built,
+and on a `website-*` tag on `main` for a change to the site alone:
 
 ```bash
 git tag website-2026-10-10 && git push origin website-2026-10-10
 ```
 
-It costs nothing: about a minute of a Linux runner, and Pages does not charge
-for publishing or serving a static site. The bucket keeps the previous
+It costs nothing: seconds of a Linux runner, and a Pages build, of which the
+free plan has 500 a month. The bucket keeps the previous
 release's `.dmg` too, so the old site's download link still works in the
 minute before the new site is up.
 

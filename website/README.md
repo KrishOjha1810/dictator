@@ -56,16 +56,25 @@ download button says "Coming soon".
 
 ## Deploy (Cloudflare Pages)
 
-`.github/workflows/website.yml` builds the site and uploads `dist/` to the
-Pages project `CF_PAGES_PROJECT`. It runs after every app release and on a
-`website-*` tag on `main`:
+The Pages project is connected to this repo and builds `main` with:
+
+| Setting | Value |
+|---|---|
+| Root directory | `website` |
+| Build command | `pnpm build` |
+| Output directory | `dist` |
+| Environment variables | `NODE_VERSION=24`, `PNPM_VERSION=12.5.1`, `DICTATOR_SITE_URL`, `DICTATOR_DOWNLOAD_BASE` |
+
+Automatic deployments are off. `.github/workflows/website.yml` calls the
+project's deploy hook after every app release and on a `website-*` tag on
+`main`:
 
 ```bash
 git tag website-2026-10-10 && git push origin website-2026-10-10
 ```
 
-Cloudflare only serves the files; nothing has to stay running on anyone's
-machine. Setup is in [`docs/cloudflare-r2.md`](../docs/cloudflare-r2.md).
+Cloudflare builds and serves the site; nothing has to stay running on
+anyone's machine. Setup is in [`docs/cloudflare-r2.md`](../docs/cloudflare-r2.md).
 
 ## Layout
 
