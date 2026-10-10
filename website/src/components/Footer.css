@@ -1,0 +1,64 @@
+/* Scoped to .c-foot, the component's root element. */
+
+.c-foot.foot {
+  display: grid;
+  gap: clamp(40px, 6vw, 80px);
+  padding: clamp(48px, 7vw, 96px) clamp(8px, 2vw, 24px) 8px;
+  color: #fff;
+}
+
+.c-foot .cta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  justify-content: space-between;
+  gap: 28px;
+}
+
+.c-foot .cta h2 {
+  font-size: clamp(40px, 6vw, 88px);
+  max-width: 12ch;
+}
+
+.c-foot .row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  padding-top: 22px;
+  border-top: 1px solid rgba(255, 255, 255, 0.3);
+}
+
+.c-foot .brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 20px;
+  letter-spacing: -0.04em;
+  text-decoration: none;
+}
+
+.c-foot .brand img {
+  border-radius: 7px;
+}
+
+.c-foot nav {
+  display: flex;
+  gap: 22px;
+  font-size: 12px;
+}
+
+.c-foot nav a {
+  text-decoration: none;
+  opacity: 0.85;
+}
+
+.c-foot nav a:hover {
+  opacity: 1;
+}
+
+.c-foot p.mono {
+  font-size: 11px;
+  opacity: 0.75;
+}

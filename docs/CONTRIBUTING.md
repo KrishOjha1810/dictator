@@ -101,4 +101,4 @@ type: short summary in the imperative
 | `tools/` | build, release and benchmark scripts |
 | `tests/` | the pytest suite |
 | `docs/` | user and developer documentation |
-| `website/` | the public site (Astro), see [`website/README.md`](../website/README.md) |
+| `website/` | the public site (React, prerendered), see [`website/README.md`](../website/README.md) |

@@ -1,0 +1,78 @@
+/* Scoped to .c-install, the component's root element. */
+
+.hero-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.c-install .steps {
+  list-style: none;
+  margin: 0 auto;
+  padding: 0;
+  max-width: 900px;
+  display: grid;
+  gap: 12px;
+}
+
+.c-install .steps li {
+  display: grid;
+  grid-template-columns: 64px 1fr;
+  gap: 18px;
+  padding: clamp(20px, 2.4vw, 32px);
+  border-radius: var(--radius-lg);
+  background: var(--card);
+  box-shadow: var(--shadow-card);
+}
+
+.c-install .n {
+  color: var(--mint-600);
+  padding-top: 6px;
+}
+
+.c-install .steps h3 {
+  font-size: clamp(24px, 2.2vw, 32px);
+  margin-bottom: 10px;
+}
+
+.c-install .steps p {
+  color: var(--muted);
+}
+
+.c-install .verify {
+  max-width: 900px;
+  margin: 24px auto 0;
+  display: grid;
+  gap: 16px;
+  padding: clamp(20px, 2.4vw, 32px);
+  border-radius: var(--radius-lg);
+  background: var(--mint-50);
+}
+
+.c-install .verify h3 {
+  font-size: 26px;
+  margin-bottom: 8px;
+}
+
+.c-install .verify p {
+  color: var(--muted);
+}
+
+.c-install pre {
+  margin: 0;
+  padding: 16px 18px;
+  border-radius: 12px;
+  background: #14211d;
+  color: #dbe7e3;
+  overflow-x: auto;
+  font-family: var(--font-mono);
+  font-size: 14px;
+}
+
+@media (max-width: 560px) {
+  .c-install .steps li {
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+}

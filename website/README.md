@@ -3,16 +3,19 @@
 The public site for Dictator: the landing page, the install guide, and the
 download for each platform.
 
-It is a static [Astro](https://astro.build) site. There is no server and no
-database; the build writes plain HTML to `dist/`, which Cloudflare Pages
-serves.
+It is a [React](https://react.dev) site built with [Vite](https://vite.dev)
+and prerendered: every page is written to `dist/` as finished HTML, then
+React takes over in the browser for the parts that move (the demo in the
+hero, the copy button). There is no server and no database; Cloudflare Pages
+serves `dist/` as it is.
 
 ## Run it
 
 ```bash
 cd website
 pnpm install
-pnpm dev            # http://localhost:4321
+pnpm dev            # http://localhost:5173
+pnpm build && pnpm preview   # the built site, as it will be served
 ```
 
 ## Configuration
@@ -66,11 +69,21 @@ anyone's machine.
 ## Layout
 
 ```
+index.html      the page template every page is rendered into
 src/
-  pages/        index, download (install guide), 404
+  main.tsx      the browser entry: hydrates the prerendered page
+  entry-server.tsx  renders a page to HTML at build time
+  App.tsx, routes.tsx  one page per address, with its title and description
+  pages/        Home, Download (install guide), NotFound
   components/   Hero, Sky (the painted backdrop), Features, HowItWorks,
-                Platforms (the OS download cards), Faq, Nav, Footer
+                Platforms (the OS download cards), Faq, Nav, Footer,
+                PageHeader, DownloadButton. Each has its own .css, scoped
+                under the class on its root element (.c-hero, .c-nav, ...)
   styles/       global.css: colour, type and spacing tokens
   lib/          latest.ts: types and helpers over latest.json
-scripts/        sync-latest.mjs, env.mjs (loads the root .env)
+scripts/        sync-latest.mjs, prerender.mjs, env.mjs (loads the root .env)
 ```
+
+`pnpm build` runs, in order: `sync-latest.mjs`, the browser build, the
+server build of `entry-server.tsx`, and `prerender.mjs`, which writes
+`index.html`, `download/index.html` and `404.html`.

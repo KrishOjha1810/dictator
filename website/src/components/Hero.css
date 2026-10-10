@@ -1,0 +1,310 @@
+/* Scoped to .c-hero, the component's root element. */
+
+.c-hero.hero-frame {
+  padding: var(--frame);
+}
+
+.c-hero .hero {
+  position: relative;
+  border-radius: var(--radius-xl);
+  overflow: hidden;
+  min-height: min(920px, 100svh);
+  color: #fff;
+  isolation: isolate;
+}
+
+.c-hero .inner {
+  position: relative;
+  z-index: 2;
+  height: 100%;
+  min-height: inherit;
+  display: flex;
+  flex-direction: column;
+  padding: clamp(18px, 2.6vw, 36px) clamp(18px, 3vw, 44px) clamp(24px, 3.4vw, 48px);
+}
+
+.c-hero .grid {
+  flex: 1;
+  display: grid;
+  grid-template-columns: minmax(0, 1.25fr) minmax(0, 0.75fr);
+  gap: 32px;
+  align-items: end;
+  margin-top: clamp(40px, 7vw, 96px);
+}
+
+.c-hero .copy {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 48px;
+  height: 100%;
+}
+
+.c-hero h1 {
+  font-size: clamp(52px, 8.6vw, 132px);
+  letter-spacing: -0.055em;
+  line-height: 0.9;
+  max-width: 10.5ch;
+  text-shadow: 0 2px 30px rgba(60, 80, 90, 0.18);
+}
+
+.c-hero .lede {
+  display: grid;
+  gap: 28px;
+  max-width: 520px;
+}
+
+.c-hero .lede > p:first-child {
+  font-size: clamp(18px, 1.7vw, 23px);
+  line-height: 1.35;
+  letter-spacing: -0.01em;
+}
+
+.c-hero kbd {
+  font-family: inherit;
+  padding: 0 6px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.24);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.35);
+}
+
+.c-hero .actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.c-hero .meta {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.82);
+}
+
+.c-hero .demo {
+  position: relative;
+  justify-self: end;
+  width: min(100%, 440px);
+  padding-bottom: 56px;
+}
+
+.c-hero .status {
+  display: flex;
+  justify-content: space-between;
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.9);
+  padding: 0 6px 12px;
+}
+
+.c-hero .dot-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.c-hero .dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #fff;
+}
+
+.c-hero .demo[data-phase="listening"] .dot {
+  background: #ff8f7a;
+  box-shadow: 0 0 0 0 rgba(255, 143, 122, 0.7);
+  animation: ping 1.2s ease-out infinite;
+}
+
+@keyframes ping {
+  to {
+    box-shadow: 0 0 0 9px rgba(255, 143, 122, 0);
+  }
+}
+
+.c-hero .card {
+  background: #fff;
+  color: #14211d;
+  border-radius: 26px;
+  padding: 14px;
+  box-shadow: 0 30px 60px -30px rgba(20, 40, 36, 0.55);
+}
+
+.c-hero .chrome {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 4px 6px 14px;
+}
+
+.c-hero .lights {
+  display: inline-flex;
+  gap: 6px;
+}
+
+.c-hero .lights i {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #e4ebe8;
+}
+
+.c-hero .app {
+  font-size: 11px;
+  color: #7c8c87;
+}
+
+.c-hero .thread {
+  display: grid;
+  gap: 14px;
+  min-height: 150px;
+  align-content: start;
+}
+
+.c-hero .bubble {
+  position: relative;
+  max-width: 84%;
+  padding: 12px 16px;
+  border-radius: 16px;
+  font-size: 15px;
+  line-height: 1.35;
+}
+
+.c-hero .bubble time {
+  position: absolute;
+  top: 6px;
+  font-size: 9px;
+  color: #9aa8a3;
+}
+
+.c-hero .them {
+  background: #edf2f0;
+}
+
+.c-hero .them time {
+  left: calc(100% + 8px);
+  white-space: nowrap;
+}
+
+.c-hero .you {
+  justify-self: end;
+  background: linear-gradient(160deg, #a5cfc1, #86b9a8);
+  color: #fff;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.35);
+  opacity: 0;
+  translate: 0 8px;
+  transition: opacity 0.3s ease, translate 0.3s ease;
+}
+
+.c-hero .you.shown {
+  opacity: 1;
+  translate: 0 0;
+}
+
+.c-hero .you time {
+  right: calc(100% + 8px);
+  white-space: nowrap;
+}
+
+.c-hero .caret {
+  display: inline-block;
+  width: 2px;
+  height: 1.05em;
+  margin-left: 2px;
+  vertical-align: -0.15em;
+  background: var(--cursor);
+  box-shadow: 0 0 8px var(--cursor);
+  animation: blink 1s steps(1) infinite;
+}
+
+@keyframes blink {
+  50% {
+    opacity: 0;
+  }
+}
+
+.c-hero .footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 16px;
+  padding: 10px 10px 10px 16px;
+  border-radius: 14px;
+  background: #14211d;
+}
+
+.c-hero .wave {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  height: 22px;
+}
+
+.c-hero .wave i {
+  width: 3px;
+  height: 4px;
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.35);
+  transition: height 0.3s ease;
+}
+
+.c-hero .demo[data-phase="listening"] .wave i {
+  background: #fff;
+  animation: level 0.9s ease-in-out infinite alternate;
+  animation-delay: calc(var(--i) * -73ms);
+}
+
+@keyframes level {
+  0% {
+    height: 4px;
+  }
+  40% {
+    height: 18px;
+  }
+  70% {
+    height: 9px;
+  }
+  100% {
+    height: 22px;
+  }
+}
+
+.c-hero .footer .chip {
+  background: rgba(255, 255, 255, 0.1);
+  color: #dbe7e3;
+}
+
+.c-hero .demo[data-phase="pasted"] .footer .chip {
+  background: var(--cursor);
+  color: #0f2a25;
+}
+
+.c-hero .badge {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  padding: 6px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.28);
+  -webkit-backdrop-filter: blur(12px);
+  backdrop-filter: blur(12px);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.35);
+}
+
+.c-hero .badge img {
+  border-radius: 10px;
+}
+
+@media (max-width: 960px) {
+  .c-hero .grid {
+    grid-template-columns: 1fr;
+    align-items: start;
+  }
+
+  .c-hero .demo {
+    justify-self: stretch;
+    width: 100%;
+  }
+
+  .c-hero .hero {
+    min-height: 0;
+  }
+}

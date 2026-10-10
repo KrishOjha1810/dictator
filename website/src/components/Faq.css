@@ -1,0 +1,86 @@
+/* Scoped to .c-faq, the component's root element. */
+
+.c-faq .wrap {
+  display: grid;
+  grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.2fr);
+  gap: clamp(28px, 5vw, 80px);
+}
+
+.c-faq header {
+  display: grid;
+  align-content: start;
+  gap: 20px;
+}
+
+.c-faq h2 {
+  font-size: clamp(40px, 5.4vw, 76px);
+}
+
+.c-faq .list {
+  display: grid;
+  gap: 10px;
+}
+
+.c-faq details {
+  border-radius: var(--radius-md);
+  background: var(--card);
+  box-shadow: var(--shadow-card);
+}
+
+.c-faq summary {
+  list-style: none;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  padding: 22px 24px;
+  font-size: 20px;
+  letter-spacing: -0.025em;
+  cursor: pointer;
+}
+
+.c-faq summary::-webkit-details-marker {
+  display: none;
+}
+
+.c-faq .plus {
+  position: relative;
+  flex: none;
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  background: var(--mint-100);
+}
+
+.c-faq .plus::before,
+.c-faq .plus::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 11px;
+  height: 1.6px;
+  background: var(--mint-700);
+  translate: -50% -50%;
+  transition: rotate 0.2s ease;
+}
+
+.c-faq .plus::after {
+  rotate: 90deg;
+}
+
+.c-faq details[open] .plus::after {
+  rotate: 0deg;
+}
+
+.c-faq details p {
+  padding: 0 24px 24px;
+  color: var(--muted);
+  max-width: 62ch;
+}
+
+@media (max-width: 860px) {
+  .c-faq .wrap {
+    grid-template-columns: 1fr;
+  }
+}

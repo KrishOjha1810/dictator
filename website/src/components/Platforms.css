@@ -1,0 +1,154 @@
+/* Scoped to .c-platforms, the component's root element. */
+
+.c-platforms .platforms {
+  display: grid;
+  grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr) minmax(0, 1fr);
+  gap: clamp(14px, 1.8vw, 24px);
+}
+
+.c-platforms article {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  padding: clamp(24px, 2.6vw, 36px);
+  border-radius: var(--radius-lg);
+}
+
+.c-platforms .mac {
+  background: var(--card);
+  box-shadow: var(--shadow-card);
+}
+
+.c-platforms .soon {
+  background: var(--mint-50);
+  color: var(--muted);
+}
+
+.c-platforms .top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.c-platforms .os {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--font-mono);
+  font-size: 13px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.c-platforms .live {
+  background: #dff3ea;
+  color: #2f7a5f;
+}
+
+.c-platforms .live i {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.c-platforms h3 {
+  font-size: clamp(30px, 3vw, 44px);
+  margin-top: 18px;
+}
+
+.c-platforms .soon h3 {
+  color: var(--text);
+  opacity: 0.55;
+}
+
+.c-platforms .soon p {
+  flex: 1;
+}
+
+.c-platforms .facts {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px 24px;
+  margin: 6px 0 0;
+}
+
+.c-platforms .facts div {
+  display: grid;
+  gap: 2px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+}
+
+.c-platforms dt {
+  font-size: 10px;
+  color: var(--faint);
+}
+
+.c-platforms dd {
+  margin: 0;
+  font-size: 17px;
+}
+
+.c-platforms .sha {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 10px 10px 14px;
+  border-radius: 12px;
+  background: var(--mint-50);
+}
+
+.c-platforms .sha .mono {
+  font-size: 10px;
+  color: var(--faint);
+}
+
+.c-platforms .sha code {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.c-platforms .copy {
+  border: 0;
+  padding: 7px 10px;
+  border-radius: 8px;
+  background: var(--card);
+  color: var(--mint-700) !important;
+  font-size: 11px !important;
+  cursor: pointer;
+}
+
+.c-platforms .actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: auto;
+}
+
+.c-platforms .actions .btn {
+  min-height: 48px;
+  padding: 0 18px;
+  font-size: 13px;
+}
+
+@media (max-width: 1080px) {
+  .c-platforms .platforms {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .c-platforms .mac {
+    grid-column: 1 / -1;
+  }
+}
+
+@media (max-width: 640px) {
+  .c-platforms .platforms {
+    grid-template-columns: 1fr;
+  }
+}

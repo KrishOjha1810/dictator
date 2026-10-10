@@ -105,7 +105,7 @@ tools/build_dmg.sh                   # the app bundle and .dmg
 | `native/` | Swift: key listener, recorder, indicator, the app |
 | `tools/` | build, release and benchmark scripts |
 | `tests/` | pytest suite |
-| `website/` | the public site (Astro), see [`website/README.md`](website/README.md) |
+| `website/` | the public site (React, prerendered), see [`website/README.md`](website/README.md) |
 
 Before opening a pull request, read [`docs/CONTRIBUTING.md`](docs/CONTRIBUTING.md).
 Releases are cut from `main` only; see [`docs/releasing.md`](docs/releasing.md).
