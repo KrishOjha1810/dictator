@@ -609,24 +609,17 @@ final class UI: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWindowDelegat
         w.titlebarAppearsTransparent = true
         w.titleVisibility = .hidden
         w.isMovableByWindowBackground = true
-        // Glass: the window paints nothing of its own and the blur comes
-        // from the effect view below. `isOpaque = false` is the part that is
-        // easy to miss; without it AppKit fills the frame first and the
-        // translucency never reaches the screen.
-        w.isOpaque = !Glass.on
-        w.backgroundColor = Glass.on ? .clear : Palette.background
+        // The glass is inside the window, not behind it: the view carries
+        // its own sky (Backdrop.swift) and the panels sit on that. So the
+        // window is opaque like any other, and unlike a window that blurs
+        // the desktop, it looks the same on every Mac. It also means a
+        // snapshot run photographs the real thing rather than a grey
+        // rectangle, which the earlier version could not.
+        w.backgroundColor = Glass.on ? .black : Palette.background
         w.isReleasedWhenClosed = false
         w.delegate = self
-        let host = NSHostingController(
+        w.contentViewController = NSHostingController(
             rootView: view().environmentObject(model).snapshotActive(quiet))
-        if Glass.on {
-            // A snapshot run has no desktop behind it, so glass there would
-            // photograph as a grey rectangle. Those runs keep the flat look.
-            host.view.frame = NSRect(origin: .zero, size: size)
-            w.contentViewController = quiet ? host : glassBacked(host, size)
-        } else {
-            w.contentViewController = host
-        }
         w.setContentSize(size)
         if let m = min { w.contentMinSize = m }
         w.center()
@@ -642,41 +635,6 @@ final class UI: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWindowDelegat
         // With no Dock icon the app does not come to the front on its own.
         if !quiet { NSApp.activate(ignoringOtherApps: true) }
         return w
-    }
-
-    /// Put the blur behind a window's content.
-    ///
-    /// `.behindWindow` blends with what is on the screen under the window,
-    /// which is the whole point; `.withinWindow` would blend with this app's
-    /// own views and show nothing. The effect view is the content view and
-    /// the SwiftUI host is its child, so every surface the host draws sits
-    /// on the blur rather than beside it.
-    func glassBacked(_ host: NSViewController, _ size: NSSize) -> NSViewController {
-        let box = NSVisualEffectView(frame: NSRect(origin: .zero, size: size))
-        box.material = Glass.material
-        box.blendingMode = .behindWindow
-        // Keep the blur when the window is not frontmost. The alternative
-        // turns the window opaque the moment the user clicks away, which
-        // looks like a glitch rather than a focus state.
-        box.state = .active
-        box.wantsLayer = true
-        box.layer?.cornerRadius = 12
-        box.layer?.masksToBounds = true
-
-        let tinted = NSView(frame: box.bounds)
-        tinted.wantsLayer = true
-        tinted.layer?.backgroundColor = Glass.white(Glass.tint).cgColor
-        tinted.autoresizingMask = [.width, .height]
-        box.addSubview(tinted)
-
-        host.view.frame = box.bounds
-        host.view.autoresizingMask = [.width, .height]
-        box.addSubview(host.view)
-
-        let shell = NSViewController()
-        shell.view = box
-        shell.addChild(host)
-        return shell
     }
 
     func showHub(_ page: Page) {

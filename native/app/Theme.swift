@@ -51,15 +51,26 @@ enum Glass {
     /// this one, not a second one on top of it.
     static let tint: CGFloat = 0.06
 
-    /// The material, which is where the blur comes from.
+    /// How far the scene behind the panels is softened. Fourteen points.
     ///
-    /// `.hudWindow` and not `.underWindowBackground`: the latter is tuned to
-    /// sit under an opaque window and comes out milky. The important part is
-    /// that it is a LIGHT blur. A heavy one dissolves the desktop into a
-    /// smooth wash, and a smooth wash reads as paint, so raising the blur to
-    /// look more frosted makes the window look more solid. That mistake took
-    /// three rounds to find.
-    static let material: NSVisualEffectView.Material = .hudWindow
+    /// Small on purpose, and this is the thing that took longest to learn: a
+    /// heavy blur dissolves the scene into a smooth wash, a smooth wash reads
+    /// as paint, and so every instinct to raise the blur and look more
+    /// frosted makes the window look more solid. At fourteen the ridge behind
+    /// a panel is still recognisable, which is the only thing that proves
+    /// glass is glass.
+    static let blur: CGFloat = 14
+
+    /// The window carries its own sky (Backdrop.swift) rather than blurring
+    /// the user's desktop.
+    ///
+    /// Blurring the desktop is how a Mac app normally does this, and it was
+    /// the first version. It is wrong here: half the look is the soft ridge
+    /// showing through the panels, and behind somebody with a white wallpaper
+    /// there is no ridge. The design would then fall apart differently for
+    /// every person, which is not something that can be designed for or
+    /// tested. Ours looks the same on every Mac.
+    static let ownBackdrop = true
 
     /// White at this alpha, or `clear` when glass is off and the solid
     /// surface underneath should show instead.

@@ -44,7 +44,10 @@ struct HubView: View {
             .background(Theme.background)
         }
         .frame(minWidth: 820, minHeight: 560)
-        .background(Theme.background)
+        .background(Group {
+            // The app's own sky, not the user's desktop. Why, in Backdrop.
+            if Glass.on { Backdrop() } else { Theme.background }
+        })
         .overlay(Group { if model.paletteOpen { CommandPalette() } })
         .ignoresSafeArea()
     }
