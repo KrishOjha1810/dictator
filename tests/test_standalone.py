@@ -57,12 +57,32 @@ def test_built_bundle_points_at_a_real_checkout():
     person running it could act on."""
     info = plistlib.loads(
         (always.APP / "Contents" / "Info.plist").read_bytes())
-    cli = Path(info["DictatorCLI"])
-    assert cli.exists(), f"the app runs {cli}, which is not there"
-    assert cli.name == "dictator", cli
-    assert (cli.parent.parent / "dictator" / "stt.py").exists(), \
-        f"{cli} is not inside a dictator checkout"
-    assert ".dictator" in info["DictatorLog"], info["DictatorLog"]
+    assert ".dictator" in info.get("DictatorLog", ".dictator"), info["DictatorLog"]
+
+    # Two shapes of Dictator.app exist now. The one `dictator build` makes is
+    # a thin wrapper naming a checkout in DictatorCLI. The one on the
+    # releases page carries its own CLI and its own Python inside
+    # Contents/Resources and has no DictatorCLI at all.
+    #
+    # This asserted the first shape, so installing the released app turned
+    # the suite red in a clone that had changed nothing. The invariant was
+    # never "the plist has this key": it is that whatever the app runs is
+    # this product.
+    if "DictatorCLI" in info:
+        cli = Path(info["DictatorCLI"])
+        assert cli.exists(), f"the app runs {cli}, which is not there"
+        assert cli.name == "dictator", cli
+        assert (cli.parent.parent / "dictator" / "stt.py").exists(), \
+            f"{cli} is not inside a dictator checkout"
+        return
+
+    res = always.APP / "Contents" / "Resources"
+    cli = res / "bin" / "dictator"
+    assert cli.exists(), f"no DictatorCLI and no {cli} either"
+    pkg = res / "dictator"
+    assert pkg.is_dir(), f"{cli} has no dictator package beside it"
+    # Shipped as compiled modules, so either shape of stt counts.
+    assert list(pkg.glob("stt.*")), f"{pkg} is not the dictator package"
 
 
 def test_state_is_our_own_directory():
