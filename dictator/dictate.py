@@ -453,6 +453,22 @@ class Dictation:
             return (int((time.monotonic() - released) * 1000)
                     if released is not None else None)
 
+        # The wait, logged here and once, before anything can return.
+        #
+        # It used to be the last line of the happy path, so a hold that
+        # pasted but took a different branch, or a hands free session, left
+        # no timing at all: 13 of 28 successful holds in one real log had
+        # none. That makes the log unmeasurable, and worse, measurable
+        # wrongly. Reading it twice in one afternoon produced two different
+        # false conclusions about this app's latency, one of them a reported
+        # regression that did not exist.
+        #
+        # Hands free has no key-up, so `took` has nothing to measure from and
+        # says so rather than inventing a zero.
+        ms = took()
+        say(f"{ms} ms from letting go to the words landing" if ms is not None
+            else "hands free, so there is no key-up to measure from")
+
         now = mac.frontmost_app()
         if app and now and now != app:
             core.write_last(said.text, took(), said.engine, now or "")
@@ -477,11 +493,7 @@ class Dictation:
                 "to avoid duplicating what did land.")
         else:
             core.write_last(said.text, took(), said.engine, now or "", True)
-        # One line per hold, so the wait can be measured from the log over
-        # real use rather than guessed at.
-        ms = took()
-        if ms is not None:
-            say(f"{ms} ms from letting go to the words landing")
+
             core.log(f"timing: {ms}ms release-to-paste, {secs:.1f}s held, "
                      f"{said.engine}")
 

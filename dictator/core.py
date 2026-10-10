@@ -52,11 +52,34 @@ STATE_DIR = state_dir()
 # pinned to.
 def bundle_root(value: "str|None" = None) -> "Path|None":
     """The app bundle this runs from, or None for a checkout. A function for
-    the same reason state_dir is one: tested without reloading the module."""
+    the same reason state_dir is one: tested without reloading the module.
+
+    Asked of DICTATOR_BUNDLE first, which the app sets when it starts the
+    backend, and then of this file's own path.
+
+    The second half is not belt and braces. Without it, anything that runs
+    the bundled CLI directly, which is `Contents/Resources/bin/dictator` and
+    is exactly what a support instruction or a shell alias reaches for,
+    decided it was a checkout. `doctor` then reported sox instead of the
+    shipped recorder, a missing swiftc as a fault, helpers under ~/.dictator
+    that are not the ones in use, and an app running "a different checkout".
+    Every one of those is false, and a diagnostic that lies is worse than no
+    diagnostic: a whole afternoon here went into chasing the first of them."""
     where = value if value is not None else os.environ.get("DICTATOR_BUNDLE")
-    if not where or not where.strip():
+    if where and where.strip():
+        return Path(os.path.expanduser(where.strip()))
+    if value is not None:
         return None
-    return Path(os.path.expanduser(where.strip()))
+    # .../Dictator.app/Contents/Resources/dictator/core.py
+    #
+    # Every parent, not just a few: the walk used to stop at Contents, which
+    # is the directory directly below the .app it was looking for, so it
+    # never found one.
+    here = Path(__file__).resolve()
+    for up in here.parents:
+        if up.suffix == ".app" and (up / "Contents" / "Resources") in here.parents:
+            return up
+    return None
 
 
 BUNDLE = bundle_root()

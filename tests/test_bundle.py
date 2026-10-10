@@ -677,3 +677,33 @@ def test_status_inside_the_app_does_not_ask_launchd(tmp_path):
     (state / "dictate.pid").write_text(str(os.getpid()))
     assert json.loads(status("--json"))["running"] is True
     assert "dictator on" not in status()
+
+
+def test_the_bundle_knows_itself_without_being_told(tmp_path):
+    """DICTATOR_BUNDLE is set by the app when it starts the backend, so the
+    running app was always right. Anything that ran the bundled CLI directly,
+    which is Contents/Resources/bin/dictator, decided it was a checkout, and
+    `doctor` then reported sox instead of the shipped recorder and an app
+    running "a different checkout". Both false."""
+    from dictator import core
+
+    res = tmp_path / "Dictator.app" / "Contents" / "Resources"
+    (res / "dictator").mkdir(parents=True)
+    here = res / "dictator" / "core.py"
+    here.write_text("")
+
+    found = None
+    for up in here.resolve().parents:
+        if up.suffix == ".app" and (up / "Contents" / "Resources") in here.resolve().parents:
+            found = up
+            break
+    assert found == tmp_path / "Dictator.app", \
+        "the walk stops before it reaches the .app"
+
+
+def test_an_explicit_empty_value_still_means_no_bundle():
+    """`bundle_root("")` is a caller saying "pretend there is none", which the
+    tests rely on. Only an absent value falls through to the path walk."""
+    from dictator import core
+    assert core.bundle_root("") is None
+    assert core.bundle_root("   ") is None
