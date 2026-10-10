@@ -1,7 +1,8 @@
 ---
 import Nav from "./Nav.astro";
 import Sky from "./Sky.astro";
-import { latest, latestMacHref } from "../lib/latest";
+import DownloadButton from "./DownloadButton.astro";
+import { latest, macNeeds } from "../lib/latest";
 
 // What the demo card plays, in order. Each one is a hold, a release, and the
 // sentence landing in the app the cursor was in.
@@ -45,13 +46,13 @@ const scenes = [
               on your Mac, and no audio ever leaves it.
             </p>
             <div class="actions">
-              <a class="btn btn-dark" href={latestMacHref} data-download>
+              <DownloadButton>
                 <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 1v9m0 0L4.5 6.5M8 10l3.5-3.5M2 13.5h12" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"></path></svg>
                 Download for Mac
-              </a>
+              </DownloadButton>
               <a class="btn btn-glass" href="#how">See how it works</a>
             </div>
-            <p class="meta mono">v{latest.version} · macOS {latest.mac.minOS.replace(".0", "")}+ · {latest.mac.arch} · Free</p>
+            <p class="meta mono">{latest ? `v${latest.version}` : "Coming soon"} · macOS {macNeeds.minOS}+ · {macNeeds.arch} · Free</p>
           </div>
         </div>
 

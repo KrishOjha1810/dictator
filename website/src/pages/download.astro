@@ -2,7 +2,8 @@
 import Base from "../layouts/Base.astro";
 import PageHeader from "../components/PageHeader.astro";
 import Platforms from "../components/Platforms.astro";
-import { latest, latestMacHref } from "../lib/latest";
+import DownloadButton from "../components/DownloadButton.astro";
+import { latest } from "../lib/latest";
 
 const steps = [
   {
@@ -35,10 +36,10 @@ const steps = [
   <PageHeader
     eyebrow="Install"
     title="Up and running in two minutes"
-    intro={`Dictator ${latest.version} for macOS 14 or newer on Apple silicon. Free, with no account.`}
+    intro={`Dictator ${latest ? `${latest.version} ` : ""}for macOS 14 or newer on Apple silicon. Free, with no account.`}
   >
     <div class="hero-actions">
-      <a class="btn btn-dark" href={latestMacHref} data-download>Download .dmg</a>
+      <DownloadButton>Download .dmg</DownloadButton>
       <a class="btn btn-glass" href="#install">Install guide</a>
     </div>
   </PageHeader>
@@ -69,7 +70,7 @@ const steps = [
           <h3>Check the download</h3>
           <p>The SHA256 printed next to every version should match what this prints:</p>
         </div>
-        <pre><code>shasum -a 256 ~/Downloads/{latest.mac.file}</code></pre>
+        <pre><code>shasum -a 256 ~/Downloads/{latest?.mac.file ?? "Dictator-<version>.dmg"}</code></pre>
       </div>
     </div>
   </section>

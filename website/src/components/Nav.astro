@@ -1,5 +1,5 @@
 ---
-import { latestMacHref } from "../lib/latest";
+import DownloadButton from "./DownloadButton.astro";
 
 interface Props {
   // On the sky hero the nav is white glass; on a light panel it is ink.
@@ -21,7 +21,7 @@ const links = [
   </a>
   <nav class="links" aria-label="Main">
     {links.map((l) => <a class="mono" href={l.href}>{l.label}</a>)}
-    <a class="btn btn-dark cta" href={latestMacHref} data-download>Download</a>
+    <DownloadButton class="btn btn-dark cta">Download</DownloadButton>
   </nav>
 </header>
 

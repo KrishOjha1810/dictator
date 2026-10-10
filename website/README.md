@@ -47,8 +47,9 @@ pnpm build                         # sync, then build (what Cloudflare runs)
 ```
 
 If the release cannot be fetched, a `latest.json` from an earlier run is kept,
-so an offline rebuild still works. The very first build needs a release in
-the bucket.
+so an offline rebuild still works. Before the first release (no bucket
+address, or nothing in the bucket yet) the site still builds, and every
+download button says "Coming soon".
 
 ## Deploy (Cloudflare Pages)
 

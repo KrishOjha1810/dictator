@@ -1,6 +1,8 @@
 ---
 import { latest, formatSize } from "../lib/latest";
 
+const appSize = latest ? `about ${formatSize(latest.mac.size)}` : "small";
+
 const faqs = [
   {
     q: "Is it free?",
@@ -20,7 +22,7 @@ const faqs = [
   },
   {
     q: "How much space does it need?",
-    a: `The app is about ${formatSize(latest.mac.size)}. On first launch it downloads the English model (about 700 MB), then the Hindi and Hinglish models in the background (about 1.5 GB).`,
+    a: `The app is ${appSize}. On first launch it downloads the English model (about 700 MB), then the Hindi and Hinglish models in the background (about 1.5 GB).`,
   },
   {
     q: "How do updates work?",

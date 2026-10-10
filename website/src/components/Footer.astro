@@ -1,5 +1,6 @@
 ---
-import { latest, latestMacHref } from "../lib/latest";
+import DownloadButton from "./DownloadButton.astro";
+import { latest } from "../lib/latest";
 
 const year = new Date().getFullYear();
 ---
@@ -7,7 +8,7 @@ const year = new Date().getFullYear();
 <footer class="foot">
   <div class="cta">
     <h2>Stop typing what you could just say.</h2>
-    <a class="btn btn-dark" href={latestMacHref} data-download>Download for Mac</a>
+    <DownloadButton>Download for Mac</DownloadButton>
   </div>
   <div class="row">
     <a class="brand" href="/">
@@ -18,7 +19,7 @@ const year = new Date().getFullYear();
       <a href="/download">Install guide</a>
       <a href="/#faq">FAQ</a>
     </nav>
-    <p class="mono">v{latest.version} · © {year}</p>
+    <p class="mono">{latest && `v${latest.version} · `}© {year}</p>
   </div>
 </footer>
 

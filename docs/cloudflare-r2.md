@@ -61,8 +61,9 @@ Without it they check the bucket directly.
 
 ## The first release
 
-The website reads `latest.json` from the bucket when it builds, so the first
-release has to land before the site's first deploy. Then:
+The website builds before there is a release, with its download buttons
+saying "Coming soon", so it can go up first. Rebuild it after the first
+release and it shows the version and the download. Then:
 
 - `https://downloads.example.com/appcast.xml` opens as XML and names the
   version.
