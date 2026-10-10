@@ -280,7 +280,7 @@ struct StatusLine: View {
 
     private func detail(_ s: Status) -> String {
         if s.state == "downloading",
-           let m = s.models.first(where: { !$0.have }) {
+           let m = s.models.first(where: { $0.downloading }) ?? s.models.first(where: { !$0.have }) {
             return "\(modelTitle(m.name)) \(Int((m.progress * 100).rounded()))%"
         }
         return s.label
@@ -496,6 +496,10 @@ struct HomePage: View {
             load()
             model.checkRivals()
         }
+        // A hold writes its history row before last.json, and the app reads
+        // last.json every second, so a new `at` means a new row to show.
+        // Without this Home only caught up when the page was opened again.
+        .onChange(of: model.last?.at) { load() }
     }
 
     private var recent: some View {
@@ -1408,15 +1412,17 @@ struct RivalBanner: View {
             Image(systemName: "exclamationmark.triangle.fill")
                 .font(.system(size: 16, weight: .semibold))
                 .foregroundColor(Theme.warn)
-            Text(Rivals.warning(running.rival))
+            Text(Rivals.warning(running.rival, key: model.key))
                 .font(.system(size: 13))
                 .foregroundColor(Theme.text)
                 .fixedSize(horizontal: false, vertical: true)
             Spacer(minLength: Theme.s2)
             Button("Change key") { model.page = .settings }
                 .buttonStyle(QuietButton())
-            Button("Quit \(running.rival.name)") { model.quitRival() }
-                .buttonStyle(PrimaryButton())
+            if running.rival.quittable {
+                Button("Quit \(running.rival.name)") { model.quitRival() }
+                    .buttonStyle(PrimaryButton())
+            }
         }
         .padding(.horizontal, Theme.s4)
         .padding(.vertical, Theme.s3)

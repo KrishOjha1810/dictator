@@ -8,7 +8,7 @@
 # Why one certificate and not a fresh one per build: macOS pins each user's
 # Microphone and Accessibility grants to the app's signing identity. Sign the
 # next release with a different key and every grant silently stops applying,
-# with the checkbox still on (README, "If the key does nothing"). So this key
+# with the checkbox still on (docs/install.md, "Troubleshooting"). So this key
 # is created once and kept. Losing it costs every user their permissions on
 # the next update.
 #

@@ -5,7 +5,8 @@
 # you can fix the one thing it complained about and run it again.
 set -euo pipefail
 
-HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# The repo root: this script lives in scripts/.
+HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 step() { printf "\n\033[1m%s\033[0m\n" "$*"; }
 
 if [ "$(uname)" != "Darwin" ]; then

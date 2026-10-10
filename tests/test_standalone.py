@@ -130,7 +130,7 @@ def test_the_one_outside_dependency_is_installed_and_checked():
     installed it and doctor never looked for it, so on anyone else's machine
     the feature would simply have been absent while everything reported fine.
     """
-    assert "jellyfish" in (ROOT / "install.sh").read_text(), \
+    assert "jellyfish" in (ROOT / "scripts" / "install.sh").read_text(), \
         "the installer does not install it"
     assert "jellyfish" in (ROOT / "dictator" / "cli.py").read_text(), \
         "doctor does not check for it"
@@ -161,7 +161,7 @@ def test_the_installer_and_the_code_agree_on_the_models():
     while the installer only ever downloaded ggml-large-v3-turbo.bin, so the
     user was sent looking for something that was never going to arrive."""
     from dictator import stt
-    script = (ROOT / "install.sh").read_text()
+    script = (ROOT / "scripts" / "install.sh").read_text()
     for name, mb, why, essential in stt.SHIPPED:
         assert name in script, f"the installer never downloads {name}"
 
@@ -173,7 +173,7 @@ def test_english_does_not_wait_for_the_multilingual_model():
     essential = [m[0] for m in stt.SHIPPED if m[3]]
     assert "ggml-large-v3-turbo.bin" not in essential
     assert sum(m[1] for m in stt.SHIPPED if m[3]) < 800
-    assert "nohup" in (ROOT / "install.sh").read_text(), \
+    assert "nohup" in (ROOT / "scripts" / "install.sh").read_text(), \
         "the big model is no longer fetched in the background"
 
 
@@ -182,7 +182,7 @@ def test_the_installer_counts_its_own_steps():
     added in the middle and the numbers were not. Small, but it is the first
     thing a new user reads and it makes the whole thing look unmaintained."""
     import re
-    steps = re.findall(r'step "(\d+)/(\d+)', (ROOT / "install.sh").read_text())
+    steps = re.findall(r'step "(\d+)/(\d+)', (ROOT / "scripts" / "install.sh").read_text())
     assert steps, "no numbered steps found"
     total = len(steps)
     assert [(str(i), str(total)) for i in range(1, total + 1)] == steps, steps
@@ -335,7 +335,7 @@ def test_the_installer_does_not_take_a_name_another_install_owns():
     first's code from four days earlier. `git pull` said "Already up to date",
     `dictator build` reported success on every helper, and none of it was the
     checkout the user was standing in."""
-    src = (Path(__file__).resolve().parent.parent / "install.sh").read_text()
+    src = (Path(__file__).resolve().parent.parent / "scripts" / "install.sh").read_text()
     link = src[src.index("Make the command reachable"):]
     link = link[:link.index('step "6/6')]
     assert "readlink" in link, \

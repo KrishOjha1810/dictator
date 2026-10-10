@@ -11,15 +11,16 @@
 #      before installing anything: an update that is not signed by this key
 #      is refused, whoever hosts it
 #   3. writes build/appcast.xml, the feed the app reads
-#   4. creates the GitHub release v<VERSION> with the .dmg (under its own name
-#      and as Dictator.dmg, for the README link) and appcast.xml
-#
-# The app looks for updates at releases/latest/download/appcast.xml, so the
-# newest release is always the one offered, and nothing else has to be hosted.
+#   4. uploads the .dmg, latest.json and the feed to the Cloudflare R2 bucket
+#      (tools/publish_r2.sh): what people download and installed apps read
+#   5. creates the GitHub release v<VERSION> in this private repo, the
+#      maintainers' archive of every version. CI, started by its tag, then
+#      finds the release complete and does not publish again
 #
 # Needs: ~/.dictator-release/{release.p12,release.pass,sparkle_ed25519.key},
-# build/cache/sparkle (tools/build_dmg.sh fetches it), and a GitHub token in
-# GH_TOKEN, or in GITPAT_TOKEN_MYNK03 in .env. Run it from a clean tree on the
+# build/cache/sparkle (tools/build_dmg.sh fetches it), DICTATOR_DOWNLOAD_BASE
+# and the R2 keys, and a GitHub token that can write to this private repo, in
+# GH_TOKEN or in GITPAT_TOKEN_MYNK03, all in the environment or .env. Run it from a clean tree on the
 # commit you want to ship; it refuses otherwise, so a release is always a
 # commit somebody can check out.
 set -euo pipefail
@@ -27,8 +28,14 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 VERSION="${1:?usage: tools/release.sh VERSION [notes.md]}"
 NOTES="${2:-}"
-REPO="${DICTATOR_REPO:-cc-vb/dictator}"
+# shellcheck source=env.sh
+. "$ROOT/tools/env.sh"
+for v in DICTATOR_DOWNLOAD_BASE CF_ACCOUNT_ID R2_ACCESS_KEY_ID R2_SECRET_ACCESS_KEY R2_BUCKET; do
+    [ -n "${!v:-}" ] || { echo "no $v (environment or .env); see docs/cloudflare-r2.md" >&2; exit 1; }
+done
 KEYDIR="${DICTATOR_RELEASE_DIR:-$HOME/.dictator-release}"
+# This repo's owner/name, from origin's address: where the archive release goes.
+REPO="$(git remote get-url origin | sed -E 's#^(git@[^:]+:|https://github\.com/)##; s#\.git$##')"
 DMG="$ROOT/build/Dictator-$VERSION.dmg"
 FEED="$ROOT/build/appcast.xml"
 
@@ -66,11 +73,15 @@ DICTATOR_SIGN_ID="$ID" tools/build_dmg.sh "$VERSION"
 # 2 and 3. the update signature and the feed, shared with the CI release job
 tools/appcast.sh "$VERSION" "$REPO" "$KEYDIR/sparkle_ed25519.key"
 
-# 4. publish
+# 4. the copy people download, and the feed installed apps read
+tools/publish_r2.sh "$VERSION"
+
+# 5. the archive, in this repo, on the release commit: the same tag CI would
+# have made.
 cp "$DMG" build/Dictator.dmg
 notes_args=(--generate-notes)
 [ -n "$NOTES" ] && notes_args=(--notes-file "$NOTES")
 gh release create "v$VERSION" -R "$REPO" --target "$(git rev-parse HEAD)" \
     --title "Dictator $VERSION" --latest "${notes_args[@]}" \
     "$DMG" build/Dictator.dmg "$DMG.sha256" "$FEED"
-echo "published v$VERSION: https://github.com/$REPO/releases/tag/v$VERSION"
+echo "published v$VERSION: $DICTATOR_DOWNLOAD_BASE/Dictator-$VERSION.dmg"

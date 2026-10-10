@@ -65,9 +65,152 @@ def arriving(name: str) -> bool:
     return (MODEL_DIR / (name + ".part")).exists()
 
 
+# What a person calls each shipped model, for `dictator models remove english`.
+ALIASES = {
+    "quick": "ggml-tiny.bin",
+    "english": "ggml-parakeet-tdt-0.6b-v3-q8_0.bin",
+    "hinglish": "ggml-large-v3-turbo.bin",
+}
+
+
+def resolve_model(name: str) -> str:
+    """A shipped model's file name, from its file name or its alias. Raises
+    ValueError naming the choices, because a typo here should not read as
+    "nothing to remove"."""
+    n = name.strip().lower()
+    n = ALIASES.get(n, n)
+    for m in SHIPPED:
+        if m[0].lower() == n:
+            return m[0]
+    raise ValueError(f"no model called {name!r}; choose one of: "
+                     + ", ".join(ALIASES))
+
+
+# A model the user removed stays removed. The app downloads whatever is
+# missing every time dictation starts, so without this a deleted model was
+# back the next time the key was changed, and the space never stayed free.
+def _removed_file() -> Path:
+    return core.STATE_DIR / "models-removed"
+
+
+def removed() -> set:
+    try:
+        return {l.strip() for l in _removed_file().read_text().splitlines()
+                if l.strip()}
+    except Exception:
+        return set()
+
+
+def _set_removed(name: str, on: bool) -> None:
+    now = removed()
+    now = (now | {name}) if on else (now - {name})
+    f = _removed_file()
+    f.parent.mkdir(parents=True, exist_ok=True)
+    f.write_text("".join(n + "\n" for n in sorted(now)))
+
+
+# The last download failure per model, so the app can show why and offer a
+# Retry instead of a progress bar that never moves.
+def _failed_file() -> Path:
+    return core.STATE_DIR / "models-failed.json"
+
+
+def failures() -> dict:
+    try:
+        return json.loads(_failed_file().read_text())
+    except Exception:
+        return {}
+
+
+def note_failure(name: str, why: "str|None") -> None:
+    """Record why `name` failed to download, or clear it with None."""
+    now = failures()
+    if why:
+        now[name] = " ".join(str(why).split())[:200]
+    else:
+        now.pop(name, None)
+    try:
+        f = _failed_file()
+        f.parent.mkdir(parents=True, exist_ok=True)
+        f.write_text(json.dumps(now))
+    except Exception:
+        pass
+
+
+def fetching() -> str:
+    """The model a download process is working on right now, or "".
+
+    Read from the pid file fetch_missing writes while it holds the lock, not
+    by probing the lock: a probe that takes the lock for a moment makes a
+    download starting in that moment think another process has it, and skip."""
+    try:
+        pid, name = (MODEL_DIR / ".fetch.pid").read_text().split(None, 1)
+        os.kill(int(pid), 0)
+        return name.strip()
+    except Exception:
+        return ""
+
+
+def own_models() -> bool:
+    """Are the models in a directory this product owns? A voicebridge install
+    shares its directory with us, and deleting from it would break it."""
+    if os.environ.get("DICTATOR_MODELS"):
+        return True
+    try:
+        return MODEL_DIR.resolve() == (core.STATE_DIR / "models").resolve()
+    except Exception:
+        return False
+
+
+def remove(name: str) -> dict:
+    """Delete one shipped model from this Mac, and keep it deleted.
+
+    Returns {"name", "freed" (bytes), "language" (set when the language had
+    to change)}. Raises ValueError with a sentence for the user when it will
+    not: a model directory another app shares, or a download in progress."""
+    name = resolve_model(name)
+    if not own_models():
+        raise ValueError(f"the models are in {MODEL_DIR}, which another app "
+                         "also uses; removing one there would break it")
+    if fetching() == name:
+        raise ValueError(f"{name} is downloading right now; remove it once "
+                         "the download has finished")
+    # A resident server keeps the file mapped; stop it rather than leave the
+    # memory and the disk space held by a model that is meant to be gone.
+    try:
+        pid = int((core.STATE_DIR / "stt.pid").read_text().strip())
+        cmd = subprocess.run(["ps", "-o", "command=", "-p", str(pid)],
+                             capture_output=True, text=True, timeout=10).stdout
+        if name in cmd:
+            _stop_whisper_server()
+    except Exception:
+        pass
+    freed = 0
+    for f in (MODEL_DIR / name, MODEL_DIR / (name + ".part")):
+        try:
+            freed += f.stat().st_size
+            f.unlink()
+        except FileNotFoundError:
+            pass
+    _set_removed(name, True)
+    note_failure(name, None)
+    out = {"name": name, "freed": freed, "language": None}
+    # Without the multilingual model, Hinglish has nothing to run on.
+    essential = next(m[3] for m in SHIPPED if m[0] == name)
+    if not essential and language() == "hinglish":
+        (core.STATE_DIR / "lang").write_text("english")
+        out["language"] = "english"
+    return out
+
+
 def model_status() -> dict:
-    """{filename: {"have": bool, "progress": 0.0 to 1.0, "essential": bool}}
-    for every shipped model, for status.json.
+    """{filename: {"have", "progress", "essential", "mb", "removed",
+    "downloading", "error"}} for every shipped model, for status.json.
+
+    `removed` is the user's own choice and is never downloaded behind their
+    back. `downloading` is true only while a process is fetching that file;
+    a .part with nobody fetching it is a download that stopped, and `error`
+    says why when it is known. Both are what the app's Retry button reads.
 
     `essential` is the last column of SHIPPED, so the app can wait for the
     models English needs and not for the Hinglish one, which is allowed to
@@ -80,10 +223,14 @@ def model_status() -> dict:
     missing is a bar that lies. Three stat calls, so it is cheap enough to
     run on every state change."""
     out = {}
+    gone = removed()
+    failed = failures()
+    now = fetching()
     for name, mb, _what, essential in SHIPPED:
         if (MODEL_DIR / name).exists():
             out[name] = {"have": True, "progress": 1.0,
-                         "essential": essential}
+                         "essential": essential, "mb": mb, "removed": False,
+                         "downloading": False, "error": None}
             continue
         got = 0.0
         try:
@@ -92,7 +239,9 @@ def model_status() -> dict:
         except Exception:
             pass
         out[name] = {"have": False, "progress": round(got, 3),
-                     "essential": essential}
+                     "essential": essential, "mb": mb,
+                     "removed": name in gone, "downloading": now == name,
+                     "error": failed.get(name)}
     return out
 
 # Which engine answered the last transcription. Recorded rather than
@@ -352,6 +501,33 @@ def _stop_whisper_server() -> None:
         if not whisper_up():
             return
         time.sleep(0.15)
+
+
+def release_server() -> bool:
+    """Stop the resident server this product started, if one is running.
+
+    It is started in its own session so a hold never waits on it, which also
+    meant it outlived Pause and Quit and kept its model in memory with
+    nothing left to use it. Only the pid we wrote is stopped: a server on the
+    same port that somebody else started is theirs. True if one was stopped."""
+    f = core.STATE_DIR / "stt.pid"
+    try:
+        pid = int(f.read_text().strip())
+        cmd = subprocess.run(["ps", "-o", "command=", "-p", str(pid)],
+                             capture_output=True, text=True, timeout=10).stdout
+    except Exception:
+        return False
+    try:
+        f.unlink()
+    except FileNotFoundError:
+        pass
+    if "whisper-server" not in cmd:
+        return False        # gone already, or the pid now belongs to another program
+    try:
+        os.kill(pid, 15)
+        return True
+    except Exception:
+        return False
 
 
 def ensure_whisper_server(wait_s: float = 20.0) -> bool:

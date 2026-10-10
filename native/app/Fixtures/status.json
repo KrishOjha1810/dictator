@@ -1,5 +1,6 @@
 {"state": "downloading",
- "models": {"parakeet-tdt-0.6b-v3-q8_0.gguf": {"have": true, "progress": 1.0, "essential": true},
-            "ggml-large-v3-turbo.bin": {"have": false, "progress": 0.41, "essential": false}},
+ "models": {"ggml-tiny.bin": {"have": true, "progress": 1.0, "essential": true, "mb": 74, "removed": false, "downloading": false, "error": null},
+            "ggml-parakeet-tdt-0.6b-v3-q8_0.bin": {"have": true, "progress": 1.0, "essential": true, "mb": 638, "removed": false, "downloading": false, "error": null},
+            "ggml-large-v3-turbo.bin": {"have": false, "progress": 0.41, "essential": false, "mb": 1549, "removed": false, "downloading": true, "error": null}},
  "error": null,
  "updated": 1791460800}

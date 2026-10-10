@@ -57,8 +57,10 @@ Teaching it your words:
   dictator unlearn WORD  stop fixing it
   dictator history [n]   what you have said
   dictator stats         words, words a minute, and your streak
-  dictator models        which speech models are here; `models fetch` downloads the rest
+  dictator models        which speech models are here; `models fetch [NAME]` downloads,
+                         `models remove NAME` deletes one (english, hinglish, quick)
   dictator find WORDS    search everything you have ever dictated
+  dictator quiet-media [on|off]  pause or mute music while the microphone is open
   dictator recap [today|week|N]   what you worked on, summarised locally
   dictator forget "words"  erase everything you said containing them
   dictator forget all      erase the whole history
@@ -503,16 +505,75 @@ def main(argv) -> int:
 
     if cmd == "models":
         from dictator import fetch, stt
+        args = [a for a in rest[1:] if not a.startswith("-")]
+        try:
+            named = [stt.resolve_model(a) for a in args]
+        except ValueError as e:
+            print(f"  {e}")
+            return 2
         if rest[:1] == ["fetch"]:
-            got = fetch.fetch_missing()
-            left = [m[0] for m in stt.missing()]
+            # The app's Download and Retry buttons: start it and come back,
+            # because a 1.5 GB download should not hold a button down.
+            if "--background" in rest:
+                for n in named:
+                    stt._set_removed(n, False)
+                    stt.note_failure(n, None)
+                started = fetch.in_background(named or None)
+                print("  downloading in the background" if started
+                      else "  nothing to download")
+                return 0
+            got = fetch.fetch_missing(named or None, wait=bool(named))
+            gone = stt.removed()
+            left = [m[0] for m in stt.missing() if m[0] not in gone]
             print(f"  downloaded: {', '.join(got) or 'nothing'}")
             if left:
                 print(f"  still missing: {', '.join(left)}")
             return 1 if left else 0
-        for name, m in stt.model_status().items():
-            state = "here" if m["have"] else (
-                f"downloading {m['progress']:.0%}" if m["progress"] else "missing")
+        if rest[:1] == ["remove"]:
+            if len(named) != 1:
+                print("usage: dictator models remove english|hinglish|quick [--yes]")
+                return 2
+            name = named[0]
+            essential = next(m[3] for m in stt.SHIPPED if m[0] == name)
+            if essential:
+                print(f"  {name} is needed to dictate. Without it the key does "
+                      "nothing until you download it again.")
+            if "--yes" not in rest:
+                try:
+                    if input(f"remove {name}? [y/N] ").strip().lower() != "y":
+                        print("left alone.")
+                        return 0
+                except (EOFError, KeyboardInterrupt):
+                    print("\nleft alone.")
+                    return 0
+            try:
+                got = stt.remove(name)
+            except ValueError as e:
+                print(f"  not removed: {e}")
+                return 1
+            print(f"  removed {name}, {got['freed'] / 1e6:,.0f} MB freed. "
+                  f"Get it back with: dictator models fetch {name}")
+            if got["language"]:
+                print(f"  language is now {got['language']}: Hinglish needs "
+                      "the model you removed.")
+            return 0
+        models = stt.model_status()
+        if "--json" in rest:
+            _json({"models": models, "own": stt.own_models()})
+            return 0
+        for name, m in models.items():
+            if m["have"]:
+                state = "here"
+            elif m["downloading"]:
+                state = f"downloading {m['progress']:.0%}"
+            elif m["removed"]:
+                state = "removed by you"
+            elif m["error"]:
+                state = f"failed: {m['error']}"
+            elif m["progress"]:
+                state = f"stopped at {m['progress']:.0%}"
+            else:
+                state = "missing"
             print(f"  {name:40s} {state}")
         return 0
 
@@ -642,6 +703,17 @@ def main(argv) -> int:
 
     if cmd in ("find", "search"):
         return find(rest)
+
+    if cmd == "quiet-media":
+        from dictator import media
+        if rest[:1] in (["on"], ["off"]):
+            media.set_enabled(rest[0] == "on")
+        if "--json" in rest:
+            return _json({"on": media.enabled()})
+        print("  other audio while you dictate: "
+              + ("paused, or muted if it cannot be paused" if media.enabled()
+                 else "left alone"))
+        return 0
 
     if cmd in ("language", "lang"):
         from dictator import stt
@@ -1354,7 +1426,7 @@ def doctor() -> int:
            "" if here else
            (f"downloading now ({mb}MB)" if stt.arriving(name)
             else f"missing ({mb}MB)"
-            + ("" if bundled else "; run ./install.sh again")))
+            + ("" if bundled else "; run scripts/install.sh again")))
 
     # The delivery helper. Without it nothing arrives anywhere, and the only
     # symptom is that the key appears to do nothing.
@@ -1433,7 +1505,7 @@ def doctor() -> int:
 
     on_path = shutil.which("dictator")
     ok("the dictator command is on your PATH", bool(on_path),
-       "" if on_path else "run ./install.sh again, or call it by full path")
+       "" if on_path else "run scripts/install.sh again, or call it by full path")
 
     # And that it is THIS one. /opt/homebrew/bin is shared by every account on
     # the Mac, so whichever installed last owns the name and everybody else's
@@ -1449,7 +1521,7 @@ def doctor() -> int:
            "" if same else
            f"`dictator` on your PATH runs {real}, not {mine}. Nothing you "
            f"change here takes effect. Call it by full path, or re-run "
-           f"./install.sh to put yours in ~/.local/bin")
+           f"scripts/install.sh to put yours in ~/.local/bin")
 
     # Two listeners on the same key means every hold is handled twice and
     # every sentence is pasted twice, and the symptom reads as a paste bug.

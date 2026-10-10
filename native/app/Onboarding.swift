@@ -402,6 +402,14 @@ struct OnboardingView: View {
                     if m.have {
                         Text("ready").font(.system(size: 12)).foregroundColor(Theme.secondary)
                         Spacer()
+                    } else if m.needsAction && (m.stuck || m.removed) {
+                        // A download that failed or stopped does not come
+                        // back by waiting on this card.
+                        Text(m.removed ? "removed" : "stopped")
+                            .font(.system(size: 12)).foregroundColor(Theme.secondary)
+                        Button(m.removed ? "Download" : "Retry") { downloadModel(m.name) }
+                            .buttonStyle(QuietButton())
+                        Spacer()
                     } else {
                         BrandProgress(value: m.progress)
                             .frame(width: 180)

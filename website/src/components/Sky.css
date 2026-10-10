@@ -1,0 +1,178 @@
+/* Scoped to .c-sky, the component's root element. */
+
+.c-sky.sky {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  background: linear-gradient(
+    180deg,
+    #6f9fb4 0%,
+    #93adc0 22%,
+    #c9b3b6 40%,
+    #e2b8ab 50%,
+    #a9c9c0 62%,
+    #86bcae 100%
+  );
+}
+
+.c-sky .cloud {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(22px);
+}
+
+.c-sky .c1 {
+  width: 70%;
+  height: 22%;
+  left: 8%;
+  top: 14%;
+  transform: rotate(-14deg);
+  background: radial-gradient(closest-side, rgba(255, 150, 120, 1), rgba(255, 140, 130, 0) 70%);
+  animation: drift 26s ease-in-out infinite alternate;
+}
+
+.c-sky .c2 {
+  width: 55%;
+  height: 14%;
+  left: 38%;
+  top: 30%;
+  transform: rotate(-22deg);
+  background: radial-gradient(closest-side, rgba(255, 175, 140, 0.95), rgba(255, 170, 150, 0) 72%);
+  animation: drift 32s ease-in-out infinite alternate-reverse;
+}
+
+.c-sky .c3 {
+  width: 40%;
+  height: 10%;
+  left: -6%;
+  top: 40%;
+  transform: rotate(-8deg);
+  background: radial-gradient(closest-side, rgba(255, 210, 200, 0.7), rgba(255, 210, 200, 0) 70%);
+}
+
+.c-sky .c4 {
+  width: 34%;
+  height: 9%;
+  right: 2%;
+  top: 46%;
+  transform: rotate(-30deg);
+  background: radial-gradient(closest-side, rgba(255, 150, 120, 0.9), rgba(255, 160, 130, 0) 70%);
+  animation: drift 22s ease-in-out infinite alternate;
+}
+
+@keyframes drift {
+  to {
+    translate: 4% -2%;
+  }
+}
+
+.c-sky .hills {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  width: 100%;
+  height: 58%;
+}
+
+.c-sky .ripples {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 19%;
+  background: repeating-linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 0) 0 7px,
+    rgba(255, 255, 255, 0.16) 7px 8px
+  );
+  mask-image: linear-gradient(180deg, transparent, #000 40%);
+}
+
+.c-sky .key-scene {
+  position: absolute;
+  left: 50%;
+  bottom: 12%;
+  width: clamp(90px, 10vw, 150px);
+  aspect-ratio: 1;
+  translate: -50% 0;
+}
+
+.c-sky .glow {
+  position: absolute;
+  inset: -90%;
+  background: radial-gradient(closest-side, rgba(255, 252, 220, 0.85), rgba(255, 240, 200, 0.25) 45%, transparent 70%);
+  animation: breathe 5s ease-in-out infinite;
+}
+
+@keyframes breathe {
+  50% {
+    opacity: 0.7;
+    scale: 0.94;
+  }
+}
+
+.c-sky .key {
+  position: absolute;
+  inset: 0;
+  border-radius: 22%;
+  background: linear-gradient(160deg, #ffffff 0%, #f2f6f4 55%, #d8e6e1 100%);
+  box-shadow:
+    inset 0 -8px 0 rgba(120, 160, 150, 0.35),
+    inset 0 2px 0 #fff,
+    0 0 40px rgba(255, 250, 220, 0.9),
+    0 18px 30px -12px rgba(40, 80, 70, 0.5);
+  display: grid;
+  place-items: center;
+  align-content: center;
+  gap: 2px;
+  color: #3e6f62;
+}
+
+.c-sky .key span {
+  font-size: clamp(30px, 3.4vw, 50px);
+  line-height: 1;
+}
+
+.c-sky .key small {
+  font-family: var(--font-mono);
+  font-size: clamp(9px, 0.8vw, 12px);
+  letter-spacing: 0.08em;
+}
+
+.c-sky .reflection {
+  top: 104%;
+  bottom: -104%;
+  transform: scaleY(-1);
+  opacity: 0.22;
+  filter: blur(2px);
+  mask-image: linear-gradient(0deg, #000, transparent 70%);
+}
+
+.c-sky .meadow {
+  position: absolute;
+  inset: 0;
+  filter: blur(0.4px);
+}
+
+.c-sky .meadow i {
+  position: absolute;
+  border-radius: 50%;
+  box-shadow: 0 0 6px rgba(255, 230, 235, 0.6);
+}
+
+.c-sky .grain {
+  position: absolute;
+  inset: 0;
+  opacity: 0.22;
+  mix-blend-mode: overlay;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='180' height='180'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");
+}
+
+.c-sky .veil {
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(90deg, rgba(60, 100, 110, 0.28), transparent 55%),
+    linear-gradient(0deg, rgba(60, 110, 98, 0.35), transparent 35%);
+}

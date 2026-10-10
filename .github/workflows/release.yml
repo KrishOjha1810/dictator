@@ -1,7 +1,13 @@
-# Build Dictator.app and its .dmg on every change, and publish the .dmg as a
-# GitHub Release when a v* tag is pushed.
+# Build Dictator.app and its .dmg, and publish it to the Cloudflare R2 bucket
+# people download from and installed apps update from, when a v* tag on main
+# is pushed. Nothing else runs it: no push, no pull request, so
+# runner minutes are only spent on a release.
 #
-# Three jobs run side by side (the Python tests, the native helpers with
+#   git tag v0.1.9 && git push origin v0.1.9
+#
+# A cheap Linux job first checks the tag points into main, so a tag anywhere
+# else is refused before any macOS runner starts. Then three jobs run side by
+# side (the Python tests, the native helpers with
 # whisper.cpp, the app executable) and one job after them assembles, signs and
 # packages, with tools/build_dmg.sh doing the same thing it does on the
 # maintainer's Mac. The bundle has to come out the same either way, so CI
@@ -10,11 +16,17 @@
 # Signing: with the repository secrets DICTATOR_P12_BASE64 and
 # DICTATOR_P12_PASSWORD set (and DICTATOR_SPARKLE_ED_KEY, which signs the
 # update feed tools/appcast.sh writes), the one self-signed release certificate is
-# imported into a throwaway keychain and used. Without them the app is signed
-# ad-hoc, which is fine for checking the build and wrong for a release: a new
-# identity per build means every user's Microphone and Accessibility grants
-# stop applying on update. So a tag without the secrets fails rather than
-# publishing that.
+# imported into a throwaway keychain and used. Without them the run fails
+# rather than publish an ad-hoc signed app: a new identity per build means
+# every user's Microphone and Accessibility grants stop applying on update.
+#
+# Where the release goes: the R2 bucket (tools/publish_r2.sh), named by the
+# repository variable DICTATOR_DOWNLOAD_BASE and reached with the R2 secrets.
+# tools/build_dmg.sh points the app's update feed there. The same files also
+# go to a GitHub release in this repo, which is private: an archive of every
+# version for the maintainers, not something users read. Then the website is
+# built and published again (.github/workflows/website.yml), so it shows the
+# new version.
 #
 # Every action is pinned to a commit, not a tag: a tag can be moved, and the
 # dmg job holds the release key, the one identity every user's permission
@@ -24,10 +36,7 @@ name: release
 
 on:
   push:
-    branches: [main]
     tags: ["v*"]
-  pull_request:
-  workflow_dispatch:
 
 env:
   # Which branches a v* tag may point into. Releases come from main only; a
@@ -37,9 +46,48 @@ env:
   # bumping it here is all a rebuild takes.
   # build_native.sh checks the tag's commit too, and only v1.9.1 is pinned.
   WHISPER_TAG: v1.9.1
+  # Where releases are served from: repository variables (Settings > Secrets
+  # and variables > Actions > Variables), never written in the code. Empty,
+  # a release is GitHub only and the app keeps its current feed address.
+  DICTATOR_SITE_URL: ${{ vars.DICTATOR_SITE_URL }}
+  DICTATOR_DOWNLOAD_BASE: ${{ vars.DICTATOR_DOWNLOAD_BASE }}
 
 jobs:
+  # The gate. ubuntu-latest costs a tenth of a macOS minute, and this is the
+  # only job that runs for a tag that is not on a release branch.
+  check:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.v.outputs.version }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
+        with:
+          fetch-depth: 0
+      - name: Tag is on a release branch
+        id: v
+        env:
+          CF_ACCOUNT_ID: ${{ secrets.CF_ACCOUNT_ID }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          R2_BUCKET: ${{ secrets.R2_BUCKET }}
+        run: |
+          ok=""
+          for b in $RELEASE_BRANCHES; do
+            git merge-base --is-ancestor "$GITHUB_SHA" "origin/$b" 2>/dev/null && ok="$b"
+          done
+          [ -n "$ok" ] || { echo "::error::$GITHUB_REF_NAME is not on any of: $RELEASE_BRANCHES"; exit 1; }
+          # Here, not after the macOS build: a release nobody can download
+          # should fail in a minute, not in ten.
+          missing=""
+          for v in DICTATOR_DOWNLOAD_BASE CF_ACCOUNT_ID R2_ACCESS_KEY_ID R2_SECRET_ACCESS_KEY R2_BUCKET; do
+            [ -n "${!v}" ] || missing="$missing $v"
+          done
+          [ -z "$missing" ] || { echo "::error::Not set (repository variables and secrets):$missing"; exit 1; }
+          echo "Releasing $GITHUB_REF_NAME from $ok to $DICTATOR_DOWNLOAD_BASE"
+          echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+
   tests:
+    needs: check
     runs-on: macos-15          # Apple silicon
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
@@ -50,6 +98,7 @@ jobs:
       - run: python -m pytest -q tests
 
   native:
+    needs: check
     runs-on: macos-15
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
@@ -71,6 +120,7 @@ jobs:
           retention-days: 3
 
   app:
+    needs: check
     runs-on: macos-15
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
@@ -83,7 +133,7 @@ jobs:
           retention-days: 3
 
   dmg:
-    needs: [tests, native, app]
+    needs: [check, tests, native, app]
     runs-on: macos-15
     permissions:
       contents: write          # to create the release on a tag
@@ -95,17 +145,7 @@ jobs:
       - name: Version
         id: v
         run: |
-          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
-            echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
-            ok=""
-            for b in $RELEASE_BRANCHES; do
-              git merge-base --is-ancestor "$GITHUB_SHA" "origin/$b" 2>/dev/null && ok="$b"
-            done
-            [ -n "$ok" ] || { echo "::error::$GITHUB_REF_NAME is not on any of: $RELEASE_BRANCHES"; exit 1; }
-            echo "Releasing from $ok"
-          else
-            echo "version=0.0.0-${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
-          fi
+          echo "version=${{ needs.check.outputs.version }}" >> "$GITHUB_OUTPUT"
           # The Python runtime is pinned inside build_dmg.sh; key the cache on
           # that pin so a new pin downloads once and an old one never again.
           rel=$(sed -n 's/^PY_RELEASE="\(.*\)"/\1/p' tools/build_dmg.sh)
@@ -131,18 +171,13 @@ jobs:
           P12_PASSWORD: ${{ secrets.DICTATOR_P12_PASSWORD }}
           ED_KEY: ${{ secrets.DICTATOR_SPARKLE_ED_KEY }}
         run: |
-          if [[ "$GITHUB_REF" == refs/tags/v* ]] && [ -z "$ED_KEY" ]; then
+          if [ -z "$ED_KEY" ]; then
             echo "::error::No DICTATOR_SPARKLE_ED_KEY in secrets; a release without a signed update feed would break updates"
             exit 1
           fi
           if [ -z "$P12" ]; then
-            if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
-              echo "::error::No release certificate in secrets; refusing to publish an ad-hoc signed release"
-              exit 1
-            fi
-            echo "No release certificate in secrets, signing ad-hoc"
-            echo "DICTATOR_SIGN_ID=-" >> "$GITHUB_ENV"
-            exit 0
+            echo "::error::No release certificate in secrets; refusing to publish an ad-hoc signed release"
+            exit 1
           fi
           KC="$RUNNER_TEMP/release.keychain-db"
           KC_PASS="$(uuidgen)"
@@ -185,7 +220,6 @@ jobs:
       # disagree.
       - name: Already published?
         id: done
-        if: startsWith(github.ref, 'refs/tags/v')
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -196,7 +230,7 @@ jobs:
           fi
 
       - name: Sign the update and write the feed
-        if: startsWith(github.ref, 'refs/tags/v') && steps.done.outputs.skip != 'true'
+        if: steps.done.outputs.skip != 'true'
         env:
           ED_KEY: ${{ secrets.DICTATOR_SPARKLE_ED_KEY }}
         run: |
@@ -205,15 +239,8 @@ jobs:
           tools/appcast.sh "${{ steps.v.outputs.version }}" "$GITHUB_REPOSITORY" "$KEYFILE"
           rm -f "$KEYFILE"
 
-      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7
-        with:
-          name: Dictator-${{ steps.v.outputs.version }}
-          path: |
-            build/Dictator-*.dmg
-            build/Dictator-*.dmg.sha256
-
       - name: Release notes
-        if: startsWith(github.ref, 'refs/tags/v') && steps.done.outputs.skip != 'true'
+        if: steps.done.outputs.skip != 'true'
         run: |
           {
             echo "Dictator ${{ steps.v.outputs.version }} for Apple silicon, macOS 14 or newer."
@@ -224,7 +251,7 @@ jobs:
             echo "press Open Anyway, once. If your key is fn, set System Settings,"
             echo "Keyboard, Press the Globe key to: Do Nothing."
             echo
-            echo "Installed copies update themselves from here (Dictator, Check for Updates)."
+            echo "Installed copies update themselves (Dictator, Check for Updates)."
             echo
             echo '```'
             cat build/Dictator-*.dmg.sha256
@@ -234,8 +261,22 @@ jobs:
           # link releases/latest/download/Dictator.dmg and stay right forever.
           cp build/Dictator-*.dmg build/Dictator.dmg
 
+      # What people download and installed apps read. Before the GitHub
+      # release: "Already published?" looks at that release, so if this step
+      # fails, running the job again publishes everything instead of skipping.
+      - name: Publish to Cloudflare R2
+        if: steps.done.outputs.skip != 'true'
+        env:
+          CF_ACCOUNT_ID: ${{ secrets.CF_ACCOUNT_ID }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          R2_BUCKET: ${{ secrets.R2_BUCKET }}
+        run: |
+          tools/publish_r2.sh "${{ steps.v.outputs.version }}"
+
+      # The maintainers' archive of every version, in this private repo.
       - uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64  # v3
-        if: startsWith(github.ref, 'refs/tags/v') && steps.done.outputs.skip != 'true'
+        if: steps.done.outputs.skip != 'true'
         with:
           make_latest: true
           files: |
@@ -244,3 +285,10 @@ jobs:
             build/Dictator-*.dmg.sha256
             build/appcast.xml
           body_path: build/notes.md
+
+  # The website writes the version, size and download link into its pages when
+  # it is built, so every app release publishes it again.
+  website:
+    needs: dmg
+    uses: ./.github/workflows/website.yml
+    secrets: inherit

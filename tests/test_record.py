@@ -232,17 +232,18 @@ def test_every_helper_is_built_before_first_use(monkeypatch):
     """Built lazily, swiftc runs in the middle of the first few holds, which is
     where somebody decides whether this works (issue #1)."""
     calls = []
-    from dictator import hotkey, orbnative, paste, readback
+    from dictator import hotkey, media, orbnative, paste, readback
     for mod, attr in ((hotkey, "build"), (orbnative, "build"),
-                      (recorder, "build"), (readback, "build")):
+                      (recorder, "build"), (readback, "build"), (media, "build")):
         monkeypatch.setattr(mod, attr,
                             lambda force=False, _m=mod: calls.append(_m.__name__) or "x")
     monkeypatch.setattr(paste, "helper", lambda: calls.append("paste") or "x")
     monkeypatch.setattr(always, "build_app", lambda: calls.append("app") or "x")
     built = always.build_all()
-    assert set(built) == {"hotkey", "orb", "recorder", "paste", "readback", "app"}
+    assert set(built) == {"hotkey", "orb", "recorder", "paste", "readback",
+                          "media", "app"}
     for name in ("dictator.hotkey", "dictator.orbnative", "dictator.recorder",
-                 "dictator.readback", "paste", "app"):
+                 "dictator.readback", "dictator.media", "paste", "app"):
         assert name in calls, calls
 
 
@@ -258,7 +259,7 @@ def test_the_app_bundle_is_never_force_rebuilt():
 
 def test_the_installer_no_longer_asks_for_sox():
     """sox was half the Homebrew dependency, and it was the GPL half."""
-    text = (ROOT / "install.sh").read_text()
+    text = (ROOT / "scripts" / "install.sh").read_text()
     assert "brew install" in text
     assert "for pkg in whisper-cpp" in text, "the brew package list changed"
 

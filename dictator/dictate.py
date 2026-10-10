@@ -27,7 +27,7 @@ import subprocess
 import threading
 import time
 
-from . import control, core, fetch, hotkey, mac, orbnative, paste, stt, warmup
+from . import control, core, fetch, hotkey, mac, media, orbnative, paste, stt, warmup
 from .api import Dictator
 
 # When a hold that produced nothing is worth telling the user about.
@@ -90,22 +90,36 @@ def _write_status(state: str, error: "str|None") -> None:
     except Exception:
         models = {}
     if state == "ready":
-        try:
-            if any(stt.arriving(m[0]) for m in stt.missing(essential_only=True)):
+        # A ready that cannot transcribe is not ready. While a model English
+        # needs is arriving that is "downloading"; when it was removed or its
+        # download failed, nothing will bring it back on its own, so it is an
+        # error that says where the button is.
+        for name, m in models.items():
+            if m.get("have") or not m.get("essential"):
+                continue
+            if m.get("removed") or (m.get("error") and not m.get("downloading")):
+                state = "error"
+                title = next((f"The {a.capitalize()} model" for a, n in stt.ALIASES.items()
+                              if n == name), name)
+                error = (f"{title} was removed. Download it in Settings."
+                         if m.get("removed")
+                         else f"{title} did not download. Retry in Settings.")
+                break
+            if m.get("downloading") or stt.arriving(name):
                 state = "downloading"
-        except Exception:
-            pass
     core.write_status(state, models=models, error=error)
 
 
 def _watch_models(stop: threading.Event, every: float = 1.5) -> None:
-    """Keep status.json's models current while any is missing.
+    """Keep status.json's models current for as long as the loop runs.
 
     status.json is otherwise written only when the loop changes state, so a
     download that finished while nobody pressed the key stayed "have": false
     in it, and the app's model card waited for a key press that the card
-    itself does not ask for. Writes only when something changed, and stops
-    once every model is on disk."""
+    itself does not ask for. It also has to see a model the user removes or
+    downloads again from Settings, which can happen at any time, so it does
+    not stop once everything is here. A few stat calls every 1.5 seconds,
+    and a write only when something changed."""
     last = None
     while not stop.wait(every):
         try:
@@ -115,8 +129,6 @@ def _watch_models(stop: threading.Event, every: float = 1.5) -> None:
         if now != last:
             republish()
             last = now
-        if all(m.get("have") for m in now.values()):
-            return
 
 
 def _engine_name(engine: str) -> str:
@@ -170,6 +182,8 @@ class Dictation:
         # pill can draw its cross and check; it is appearance only, the pill
         # still decides "listening" from the microphone itself.
         self.hands_free = False
+        # Other audio paused or muted while the microphone is open (media.py).
+        self._quiet = None
 
     def _publish(self, state: str) -> None:
         if state == "ready" and self.blocked:
@@ -205,6 +219,9 @@ class Dictation:
         # start speaking as you press) and end the take at your first pause.
         self.proc = stt.record_hold(self.wav, max_secs=MAX_SECS)
         self.started = time.time()
+        # Music from the speakers ends up in the transcript. Paused, or muted,
+        # a beat after the microphone opens, and never in its way.
+        self._quiet = media.Quieting().start()
         # After the recorder, never before: the microphone opening is the one
         # thing here that must not wait for anything. From this point the model
         # is read from disk WHILE you talk, so that when you let go the only
@@ -256,9 +273,15 @@ class Dictation:
             self.hands_free = True
             core.set_hud("handsfree", 0.0)
 
+    def _unquiet(self):
+        q, self._quiet = self._quiet, None
+        if q:
+            q.stop()
+
     def up(self, held_ms: float):
         self.hands_free = False
         p, self.proc = self.proc, None
+        self._unquiet()
         if not p:
             return
         try:
@@ -302,6 +325,7 @@ class Dictation:
         of a loop that is gone."""
         self.hands_free = False
         p, self.proc = self.proc, None
+        self._unquiet()
         if p:
             try:
                 p.terminate()
@@ -652,17 +676,18 @@ def run(key: str = "fn", send: bool = False, debug: bool = True) -> int:
     # helpers have never been executed. Both are paid here, while nobody is
     # waiting, and cost nothing on a machine that has already paid them.
     warmup.at_startup()
+    # A mute an earlier run made and never undid, because it was killed.
+    media.recover()
 
     # Models that are still arriving get their progress written as it moves,
     # not only when a key is pressed.
     stop_watch = threading.Event()
     # The app has no installer to fetch them, so the loop does, English
-    # first. A repo install got them from install.sh and is left alone.
+    # first. A repo install got them from scripts/install.sh and is left alone.
     if core.BUNDLE:
         fetch.in_background()
-    if stt.missing():
-        threading.Thread(target=_watch_models, args=(stop_watch,),
-                         daemon=True).start()
+    threading.Thread(target=_watch_models, args=(stop_watch,),
+                     daemon=True).start()
 
     # The app stops this loop with SIGTERM (Pause, a new key, Quit). Python's
     # default for it is to die where it stands, which skipped everything in
@@ -745,6 +770,13 @@ def run(key: str = "fn", send: bool = False, debug: bool = True) -> int:
                 publish("paused")
         _restore_sigterm(_old_term)
         _remove_pid()
+        # Pause and Quit both end here. A model kept in memory for holds
+        # that can no longer happen is memory taken from everything else.
+        try:
+            if stt.release_server():
+                core.log("dictate: stopped the resident model server")
+        except Exception:
+            pass
         if ctl:
             ctl.close()
         try:

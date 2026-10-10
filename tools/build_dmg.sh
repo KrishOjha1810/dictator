@@ -246,7 +246,7 @@ if [ -z "${DICTATOR_NATIVE_DIR:-}" ]; then
 fi
 cp -R "$NATIVE/Helpers/." "$C/Helpers/"
 [ -d "$NATIVE/Frameworks" ] && cp -R "$NATIVE/Frameworks/." "$C/Frameworks/"
-for h in dictator-hotkey dictator-rec dictator-paste dictator-orb dictator-readback \
+for h in dictator-hotkey dictator-rec dictator-paste dictator-orb dictator-readback dictator-media \
          whisper-server whisper-cli parakeet-cli "Dictator Meeting.app"; do
     [ -e "$C/Helpers/$h" ] || echo "  WARNING: helper missing: $h" >&2
 done
@@ -282,6 +282,25 @@ plutil -replace LSMinimumSystemVersion -string "$MIN_MACOS" "$C/Info.plist"
 # only ever point at somebody else's install.
 plutil -remove DictatorCLI "$C/Info.plist" 2>/dev/null || true
 plutil -remove DictatorLog "$C/Info.plist" 2>/dev/null || true
+# Where the app checks for updates, from the environment or .env (repository
+# variables in CI). Releases are served from the R2 bucket
+# (DICTATOR_DOWNLOAD_BASE). With the website in front of it
+# (DICTATOR_SITE_URL) the feed is the website's /appcast.xml, which redirects
+# into the bucket, so the storage can move later without a release that moves
+# every app; without the website it is the bucket's own. With neither, the
+# app keeps the address native/app/Info.plist has (a local test build).
+. "$ROOT/tools/env.sh"
+if [ -n "${DICTATOR_DOWNLOAD_BASE:-}" ]; then
+    if [ -n "${DICTATOR_SITE_URL:-}" ]; then
+        FEED_URL="${DICTATOR_SITE_URL%/}/appcast.xml"
+    else
+        FEED_URL="${DICTATOR_DOWNLOAD_BASE%/}/appcast.xml"
+    fi
+fi
+if [ -n "${FEED_URL:-}" ]; then
+    plutil -replace SUFeedURL -string "$FEED_URL" "$C/Info.plist"
+    echo "  update feed: $FEED_URL"
+fi
 if [ -f "$ROOT/native/app/AppIcon.icns" ]; then
     cp "$ROOT/native/app/AppIcon.icns" "$C/Resources/AppIcon.icns"
     plutil -replace CFBundleIconFile -string AppIcon "$C/Info.plist"

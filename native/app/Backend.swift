@@ -199,6 +199,19 @@ struct Status: Equatable {
         /// written before it did falls back to the one rule the loop uses
         /// today, that the large multilingual model is the optional one.
         var essential: Bool
+        /// Size on disk once downloaded, in megabytes.
+        var mb: Int = 0
+        /// The user deleted it; it is not downloaded again until they ask.
+        var removed = false
+        /// A process is fetching this file right now.
+        var downloading = false
+        /// Why the last download failed, when one did.
+        var error: String? = nil
+
+        /// Missing, and nothing is fetching it: a Download or Retry button.
+        var needsAction: Bool { !have && !downloading }
+        /// A download that started and did not finish.
+        var stuck: Bool { needsAction && !removed && (error != nil || progress > 0) }
     }
 
     var state = "starting"
@@ -223,7 +236,14 @@ struct Status: Equatable {
                 return Model(name: k, have: r["have"] as? Bool ?? false,
                              progress: (r["progress"] as? NSNumber)?.doubleValue ?? 0,
                              essential: r["essential"] as? Bool
-                                 ?? !(lower.contains("large") || lower.contains("turbo")))
+                                 ?? !(lower.contains("large") || lower.contains("turbo")),
+                             mb: (r["mb"] as? NSNumber)?.intValue ?? 0,
+                             removed: r["removed"] as? Bool ?? false,
+                             // A file from before this field: a model that is
+                             // missing was only ever missing because it was
+                             // still arriving.
+                             downloading: r["downloading"] as? Bool ?? !(r["have"] as? Bool ?? false),
+                             error: r["error"] as? String)
             }
         }
         return s
@@ -302,6 +322,25 @@ func engineTitle(_ e: String) -> String {
     if l.contains("parakeet") { return "English engine" }
     if l.contains("whisper") || l.contains("turbo") || l.contains("large") { return "Hinglish engine" }
     return e
+}
+
+/// "638 MB" or "1.5 GB".
+func modelSize(_ mb: Int) -> String {
+    mb >= 1000 ? String(format: "%.1f GB", Double(mb) / 1024) : "\(mb) MB"
+}
+
+/// What a model row says when the model is not here and not arriving.
+func modelProblem(_ m: Status.Model) -> String {
+    if m.removed { return "Removed. Download it again any time." }
+    if let e = m.error { return "Download failed: \(e)" }
+    if m.progress > 0 { return "Download stopped at \(Int((m.progress * 100).rounded()))%." }
+    return "Not downloaded yet."
+}
+
+/// Start downloading one model, in the background. The row follows its
+/// progress through status.json like any other download.
+func downloadModel(_ name: String) {
+    CLI.load({ CLI.act(["models", "fetch", name, "--background"]) }) { _ in }
 }
 
 /// "ggml-large-v3-turbo.bin" is a file name, not something to put in a menu.

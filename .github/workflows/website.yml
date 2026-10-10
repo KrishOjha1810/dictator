@@ -1,0 +1,51 @@
+# Ask Cloudflare Pages to build and publish the website from this repo.
+#
+# The Pages project is connected to this repo (Cloudflare's GitHub app) with
+# automatic deployments off, so the site is only rebuilt when asked:
+#   - a website-* tag on main, for a change to the site alone:
+#       git tag website-2026-10-10 && git push origin website-2026-10-10
+#   - the release workflow, straight after an app release, so the site shows
+#     the new version (its version, size and download link are written into
+#     the pages when they are built)
+#
+# Asking is one request to the project's deploy hook, the repository secret
+# CF_PAGES_DEPLOY_HOOK. Cloudflare then builds main with the project's own
+# settings (docs/cloudflare-r2.md). Seconds on a Linux runner; free.
+name: website
+
+on:
+  push:
+    tags: ["website-*"]
+  workflow_call:
+
+env:
+  RELEASE_BRANCHES: "main"
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
+        if: github.event_name == 'push'
+        with:
+          fetch-depth: 0
+
+      # Cloudflare builds main, so a website-* tag must point into main, like
+      # an app release. Called from the release workflow, that one has checked
+      # its own tag.
+      - name: Tag is on main
+        if: github.event_name == 'push'
+        run: |
+          ok=""
+          for b in $RELEASE_BRANCHES; do
+            git merge-base --is-ancestor "$GITHUB_SHA" "origin/$b" 2>/dev/null && ok="$b"
+          done
+          [ -n "$ok" ] || { echo "::error::$GITHUB_REF_NAME is not on any of: $RELEASE_BRANCHES"; exit 1; }
+
+      - name: Rebuild the website
+        env:
+          CF_PAGES_DEPLOY_HOOK: ${{ secrets.CF_PAGES_DEPLOY_HOOK }}
+        run: |
+          [ -n "$CF_PAGES_DEPLOY_HOOK" ] || { echo "::error::No CF_PAGES_DEPLOY_HOOK secret"; exit 1; }
+          curl -fsS -X POST "$CF_PAGES_DEPLOY_HOOK" >/dev/null
+          echo "Cloudflare Pages is building the website"

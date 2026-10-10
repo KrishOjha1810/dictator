@@ -161,3 +161,137 @@ def test_downloads_run_in_their_own_process(models, monkeypatch):
     args, kw = started[0]
     assert args[-2:] == ["models", "fetch"]
     assert kw.get("start_new_session") is True
+
+
+# --- removing a model, and getting it back -----------------------------------
+
+@pytest.fixture
+def here(models, monkeypatch):
+    """Both fake models on disk, in the directory this product owns."""
+    d, _, _ = models
+    monkeypatch.delenv("DICTATOR_MODELS", raising=False)
+    assert d == core.STATE_DIR / "models"
+    fetch.fetch_missing()
+    return d
+
+
+def test_a_removed_model_is_deleted_and_says_how_much_it_freed(here):
+    got = stt.remove("en.bin")
+    assert got["freed"] == len(b"english" * 1000)
+    assert not (here / "en.bin").exists()
+    assert stt.model_status()["en.bin"]["removed"] is True
+
+
+def test_a_removed_model_is_not_downloaded_back_behind_the_users_back(here):
+    stt.remove("hi.bin")
+    assert fetch.fetch_missing() == []
+    assert fetch.in_background() is None
+    assert not (here / "hi.bin").exists()
+
+
+def test_asking_for_a_removed_model_by_name_brings_it_back(here):
+    stt.remove("hi.bin")
+    assert fetch.fetch_missing(["hi.bin"], wait=True) == ["hi.bin"]
+    assert (here / "hi.bin").exists()
+    assert stt.model_status()["hi.bin"]["removed"] is False
+
+
+def test_a_half_downloaded_model_is_removed_with_its_part_file(here):
+    stt.remove("hi.bin")
+    (here / "hi.bin.part").write_bytes(b"half")
+    stt._set_removed("hi.bin", False)
+    stt.remove("hi.bin")
+    assert not (here / "hi.bin.part").exists()
+
+
+def test_removing_the_hinglish_model_moves_the_language_off_hinglish(here):
+    (core.STATE_DIR / "lang").write_text("hinglish")
+    assert stt.remove("hi.bin")["language"] == "english"
+    assert stt.language() == "english"
+
+
+def test_removing_an_english_model_leaves_the_language_alone(here):
+    (core.STATE_DIR / "lang").write_text("hinglish")
+    assert stt.remove("en.bin")["language"] is None
+    assert stt.language() == "hinglish"
+
+
+def test_models_shared_with_another_app_are_not_removed(models, monkeypatch,
+                                                       tmp_path):
+    shared = tmp_path / "voicebridge"
+    shared.mkdir()
+    (shared / "en.bin").write_bytes(b"x")
+    monkeypatch.setattr(stt, "MODEL_DIR", shared)
+    monkeypatch.delenv("DICTATOR_MODELS", raising=False)
+    with pytest.raises(ValueError, match="another app"):
+        stt.remove("en.bin")
+    assert (shared / "en.bin").exists()
+
+
+def test_a_model_that_is_downloading_is_not_removed(here):
+    stt.remove("hi.bin")
+    import os
+    (here / ".fetch.pid").write_text(f"{os.getpid()} hi.bin")
+    with pytest.raises(ValueError, match="downloading"):
+        stt.remove("hi.bin")
+    assert stt.model_status()["hi.bin"]["downloading"] is True
+
+
+def test_an_unknown_model_name_is_an_error_not_a_quiet_nothing():
+    with pytest.raises(ValueError, match="english"):
+        stt.resolve_model("englsh")
+    assert stt.resolve_model("Hinglish") == "ggml-large-v3-turbo.bin"
+
+
+def test_a_failed_download_says_why_and_a_retry_clears_it(models):
+    d, files, _ = models
+    real = files["/en.bin"]
+    files["/en.bin"] = b"english" * 10
+    fetch.fetch_missing(["en.bin"])
+    assert "expected" in stt.model_status()["en.bin"]["error"]
+    files["/en.bin"] = real
+    assert fetch.fetch_missing(["en.bin"], wait=True) == ["en.bin"]
+    assert stt.model_status()["en.bin"]["error"] is None
+
+
+def test_the_pid_file_is_gone_once_the_download_ends(models):
+    d, _, _ = models
+    fetch.fetch_missing()
+    assert not (d / ".fetch.pid").exists()
+    assert stt.fetching() == ""
+
+
+def test_the_command_removes_only_with_yes(here, capsys, monkeypatch):
+    from dictator import cli
+    monkeypatch.setattr("builtins.input", lambda *_: "n")
+    assert cli.main(["dictator", "models", "remove", "hi.bin"]) == 0
+    assert (here / "hi.bin").exists()
+    assert cli.main(["dictator", "models", "remove", "hi.bin", "--yes"]) == 0
+    assert not (here / "hi.bin").exists()
+    assert "freed" in capsys.readouterr().out
+
+
+def test_ready_with_the_english_model_removed_says_so(here, monkeypatch):
+    from dictator import dictate
+    monkeypatch.setattr(stt, "ALIASES", {"english": "en.bin"})
+    stt.remove("en.bin")
+    dictate.publish("ready")
+    st = core.read_status()
+    assert st["state"] == "error"
+    assert st["error"] == "The English model was removed. Download it in Settings."
+
+
+def test_the_resident_server_is_released_only_if_it_is_ours(monkeypatch):
+    import subprocess as sp
+    killed = []
+    monkeypatch.setattr(stt.os, "kill", lambda pid, sig: killed.append(pid))
+    (core.STATE_DIR / "stt.pid").write_text("4242")
+    monkeypatch.setattr(stt.subprocess, "run", lambda *a, **k: sp.CompletedProcess(
+        a, 0, stdout="/x/whisper-server -m m.bin --port 7001\n"))
+    assert stt.release_server() is True and killed == [4242]
+    assert not (core.STATE_DIR / "stt.pid").exists()
+    # a pid that now belongs to some other program is left alone
+    (core.STATE_DIR / "stt.pid").write_text("4243")
+    monkeypatch.setattr(stt.subprocess, "run", lambda *a, **k: sp.CompletedProcess(
+        a, 0, stdout="/Applications/Safari.app/Contents/MacOS/Safari\n"))
+    assert stt.release_server() is False and killed == [4242]
