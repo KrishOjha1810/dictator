@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- One subtype, Indian English, and `isAuxiliary` is deliberately NOT set.
+     An auxiliary subtype never joins the normal keyboard rotation, which is
+     what a voice-only input method usually wants; this one is the keyboard
+     for now, because there is nothing else to switch to inside it yet. -->
+<input-method xmlns:android="http://schemas.android.com/apk/res/android"
+    android:settingsActivity="com.dictator.ime.SetupActivity"
+    android:supportsSwitchingToNextInputMethod="true">
+    <subtype
+        android:label="Dictator"
+        android:imeSubtypeLocale="en_IN"
+        android:imeSubtypeMode="keyboard" />
+</input-method>
