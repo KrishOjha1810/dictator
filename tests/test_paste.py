@@ -11,7 +11,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from dictator import paste
+from dictator_core import paste
 
 
 def _quiet(monkeypatch):
@@ -163,7 +163,7 @@ def test_the_module_that_uses_the_helper_can_build_it():
     called. Deleting the binary once sent every delivery down a path that
     cannot work, quietly, and the only symptom was that the key did nothing."""
     import inspect
-    from dictator import paste
+    from dictator_core import paste
     assert hasattr(paste, "helper"), "paste can no longer build its own helper"
     src = inspect.getsource(paste._paste_once)
     assert "helper()" in src, "the delivery path no longer builds the helper"
@@ -174,7 +174,7 @@ def test_there_is_no_silent_path_that_cannot_work():
     Accessibility grant, so falling back to it was falling back to a
     guaranteed failure that also overwrote the user's clipboard."""
     import inspect
-    from dictator import paste
+    from dictator_core import paste
     src = inspect.getsource(paste._paste_once)
     assert "surface_error" in src, \
         "a missing helper no longer says so and fails silently again"

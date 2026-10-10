@@ -5,7 +5,7 @@ import time
 
 import pytest
 
-from dictator import core, notes
+from dictator_core import core, notes
 
 
 def test_a_note_is_a_markdown_file_named_by_when_it_was_made():
@@ -68,9 +68,9 @@ def test_other_files_in_the_folder_are_not_notes():
 
 
 def _cli():
-    # The CLI body lives in dictator.cli now; bin/dictator is just a launcher.
+    # The CLI body lives in dictator_core.cli now; bin/dictator is just a launcher.
     import importlib
-    return importlib.import_module("dictator.cli")
+    return importlib.import_module("dictator_core.cli")
 
 
 def test_cli_round_trip_as_the_app_uses_it(monkeypatch, capsys):

@@ -54,7 +54,8 @@
   transition: background-color 0.2s ease;
 }
 
-.c-nav.sky .links a.mono {
+.c-nav.sky .links a.mono,
+.c-nav.sky .links .c-theme {
   color: rgba(255, 255, 255, 0.92);
 }
 
@@ -62,7 +63,8 @@
   background: rgba(255, 255, 255, 0.18);
 }
 
-.c-nav.panel .links a.mono:hover {
+.c-nav.panel .links a.mono:hover,
+.c-nav.panel .links .c-theme:hover {
   background: var(--mint-100);
 }
 

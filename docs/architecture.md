@@ -9,12 +9,12 @@
 | `native/record.swift` | the microphone, at 16kHz mono, with a real level meter |
 | `native/app/main.swift` | the app bundle that owns the permissions |
 | `native/meeting.swift` | the meeting recorder: microphone plus system audio |
-| `dictator/dictate.py` | the loop: hold, record, transcribe, paste |
-| `dictator/stt.py` | records and transcribes, locally |
-| `dictator/roman.py` | writes Hindi in Latin script |
-| `dictator/recap.py` | reads your history back to you, summarised locally |
-| `dictator/api.py` | the public Python library ([`library.md`](library.md)) |
-| `dictator/cli.py` | every `dictator ...` command |
+| `dictator_core/dictate.py` | the loop: hold, record, transcribe, paste |
+| `dictator_core/stt.py` | records and transcribes, locally |
+| `dictator_core/roman.py` | writes Hindi in Latin script |
+| `dictator_core/recap.py` | reads your history back to you, summarised locally |
+| `dictator_core/api.py` | the public Python library ([`library.md`](library.md)) |
+| `dictator_core/cli.py` | every `dictator ...` command |
 
 The speech engines, and which one answers which kind of sentence, are in
 [`findings.md`](findings.md#speech).

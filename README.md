@@ -86,6 +86,7 @@ Every command: [`docs/usage.md`](docs/usage.md).
 | [Architecture](docs/architecture.md) | how it works, code signing, privacy |
 | [Findings](docs/findings.md) | measured results: models, latency, macOS behaviour |
 | [Platforms](docs/platforms.md) | Windows, iOS, Android, and Mac distribution |
+| [Developer guide](docs/developer-guide.md) | how it fits together, how a release reaches people, the limits, rules for AI assistants |
 | [Contributing](docs/CONTRIBUTING.md) | dev setup, tests, rules, branches and commits |
 | [Releasing](docs/releasing.md) | publishing a signed, self-updating release |
 | [Cloudflare R2](docs/cloudflare-r2.md) | serving releases from R2 instead of GitHub, switched off for now |
@@ -101,7 +102,7 @@ tools/build_dmg.sh                   # the app bundle and .dmg
 
 | Path | What lives there |
 |---|---|
-| `dictator/` | the Python package: the dictation loop, CLI, library |
+| `dictator_core/` | dictator core, the Python package: the dictation loop, CLI, library |
 | `native/` | Swift: key listener, recorder, indicator, the app |
 | `tools/` | build, release and benchmark scripts |
 | `tests/` | pytest suite |

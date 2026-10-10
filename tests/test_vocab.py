@@ -6,7 +6,7 @@ and the user has no way to see why.
 """
 import pytest
 
-from dictator import vocab
+from dictator_core import vocab
 
 
 @pytest.fixture
@@ -102,7 +102,7 @@ def test_the_spoken_list_comes_from_what_was_actually_said(monkeypatch):
     # Through monkeypatch rather than a plain assignment: vocab reaches for the
     # real module, and an unrestored stub here left every later test in the run
     # reading a fake history.
-    from dictator import history as _history
+    from dictator_core import history as _history
     monkeypatch.setattr(_history, "recent", lambda limit=0: rows)
     got = box.spoken(least=2)
     assert "loop" in got and "slow" in got

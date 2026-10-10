@@ -44,7 +44,7 @@ It speaks a one-line-per-gesture protocol on stdout:
 
 Commands go the other way, one per line on the listener's stdin, so a hands
 free session has one owner however it started (a double tap, or the pill's
-buttons through dictator/control.py):
+buttons through dictator_core/control.py):
 
     TOGGLE   no session: open one (DOWN, LATCH 0); in one: end it (UP toggle)
     FINISH   end the open session and transcribe

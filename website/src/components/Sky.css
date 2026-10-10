@@ -176,3 +176,12 @@
     linear-gradient(90deg, rgba(60, 100, 110, 0.28), transparent 55%),
     linear-gradient(0deg, rgba(60, 110, 98, 0.35), transparent 35%);
 }
+
+/* Dark: the same dusk, after sunset. A tinted layer over the sky rather
+   than a filter on it, so the blurred clouds are not redrawn. */
+[data-theme="dark"] .c-sky.sky::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: rgba(6, 12, 20, 0.6);
+}

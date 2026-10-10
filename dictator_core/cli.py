@@ -13,7 +13,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from dictator import core
+from dictator_core import core
 
 KEYS = ("fn", "rightcmd", "rightopt", "leftcmd")
 
@@ -113,7 +113,7 @@ def _watching(limit: int = 200) -> None:
     It can only learn from a correction it witnessed, so a low number here
     explains a vocabulary that never grows, and no other command reports it.
     """
-    from dictator import history
+    from dictator_core import history
     counts = history.watching(limit)
     counts.pop("unrecorded", None)      # rows from before this was measured
     total = sum(counts.values())
@@ -140,7 +140,7 @@ def tidy() -> int:
     that exists, and they still show in System Settings under the same name as
     the real one, so the obvious thing to do (switch on the Dictator you can
     see) switches on nothing and reads as the fix having failed."""
-    from dictator import tcc
+    from dictator_core import tcc
     left = tcc.orphans()
     if left is None:
         print("Cannot read what macOS remembers, so cannot tell whether there")
@@ -217,27 +217,27 @@ def main(argv) -> int:
             print("Inside Dictator.app this is a setting: Dictator > "
                   "Settings > Open at login.")
             return 1
-        from dictator import always
+        from dictator_core import always
         print(always.on(_key_from(rest)))
         return 0
 
     if cmd == "off":
-        from dictator import always
+        from dictator_core import always
         print(always.off())
         return 0
 
     if cmd == "status":
-        from dictator import always
+        from dictator_core import always
         if core.BUNDLE is not None:
             # Inside the app there is no LaunchAgent to ask about: the app
             # runs the loop as its own child and its login item is
             # SMAppService's, which only the app can read. Asking launchd
             # here said "not running" while dictation worked, and pointed at
             # `dictator on`, which would start a second loop.
-            from dictator import dictate
+            from dictator_core import dictate
             running = dictate.loop_running()
             if "--json" in rest:
-                from dictator import views
+                from dictator_core import views
                 out = views.status()
                 out["login_item"] = None
                 out["running"] = running
@@ -247,7 +247,7 @@ def main(argv) -> int:
                   f" ({state}). Open at login is in Dictator > Settings.")
             return 0
         if "--json" in rest:
-            from dictator import views
+            from dictator_core import views
             out = views.status()
             out["login_item"] = always.installed()
             out["running"] = always.running()
@@ -256,7 +256,7 @@ def main(argv) -> int:
         return 0
 
     if cmd == "build":
-        from dictator import always
+        from dictator_core import always
         # Everything, not just the app. Building the helpers lazily put a
         # swiftc run in the middle of the first holds, which is where a new
         # user decides whether this works at all.
@@ -269,7 +269,7 @@ def main(argv) -> int:
         return 0 if built.get("app") else 1
 
     if cmd == "dictate":
-        from dictator import dictate
+        from dictator_core import dictate
         return dictate.run(_key_from(rest), send="--send" in rest,
                            debug="--quiet" not in rest)
 
@@ -302,7 +302,7 @@ def main(argv) -> int:
         if not term:
             print('usage: dictator learn "Whisper Flow"')
             return 2
-        from dictator import vocab
+        from dictator_core import vocab
         rec = vocab.shared().add(term)
         if rec.get("mode") == "fuzzy":
             print(f'learned "{term}". I will fix things that sound like it.')
@@ -311,7 +311,7 @@ def main(argv) -> int:
         return 0
 
     if cmd == "truth":
-        from dictator import truth as _t
+        from dictator_core import truth as _t
         n = int(rest[0]) if rest and rest[0].isdigit() else 40
         if "--status" in rest:
             g = _t.progress(n)
@@ -388,7 +388,7 @@ def main(argv) -> int:
         return 0
 
     if cmd == "review":
-        from dictator import review as _review
+        from dictator_core import review as _review
         n = int(rest[0]) if rest and rest[0].isdigit() else 300
         rows = _review.words(n)
         if not rows:
@@ -429,9 +429,9 @@ def main(argv) -> int:
 
     if cmd == "words":
         if "--json" in rest:
-            from dictator import views
+            from dictator_core import views
             return _json(views.words())
-        from dictator import vocab
+        from dictator_core import vocab
         terms = vocab.shared().terms
         if not terms:
             print('nothing learned yet. Teach it with: dictator learn "Whisper Flow"')
@@ -443,7 +443,7 @@ def main(argv) -> int:
                   + (f"   heard as: {heard}" if heard else ""))
         # Corrections seen once. Shown because a word that is "nearly learned"
         # is the most common thing a user wonders about.
-        from dictator import learn
+        from dictator_core import learn
         pending = learn.waiting()
         if pending:
             print("\n  noticed once, learning on the next one:")
@@ -455,17 +455,17 @@ def main(argv) -> int:
 
     if cmd == "unlearn":
         term = " ".join(rest).strip()
-        from dictator import vocab
+        from dictator_core import vocab
         print(f'forgot "{term}".' if vocab.shared().remove(term)
               else f'"{term}" was not learned.')
         return 0
 
     if cmd == "history":
-        from dictator import history
+        from dictator_core import history
         import time as _t
         n = int(rest[0]) if rest and rest[0].isdigit() else 20
         if "--json" in rest:
-            from dictator import views
+            from dictator_core import views
             day = None
             if "--day" in rest:
                 i = rest.index("--day")
@@ -481,7 +481,7 @@ def main(argv) -> int:
             # The engine, because the two are not equally good and this is
             # where somebody looks when they are trying to work out why one
             # hold was fine and the next was not.
-            from dictator.dictate import _engine_name
+            from dictator_core.dictate import _engine_name
             who = _engine_name(r.get("engine") or "")
             print(f"  {when}  {line[:76]}")
             print(f"{'':16}  {who}")
@@ -490,7 +490,7 @@ def main(argv) -> int:
         return 0
 
     if cmd == "stats":
-        from dictator import views
+        from dictator_core import views
         got = views.stats()
         if "--json" in rest:
             return _json(got)
@@ -504,7 +504,7 @@ def main(argv) -> int:
         return 0
 
     if cmd == "models":
-        from dictator import fetch, stt
+        from dictator_core import fetch, stt
         args = [a for a in rest[1:] if not a.startswith("-")]
         try:
             named = [stt.resolve_model(a) for a in args]
@@ -578,7 +578,7 @@ def main(argv) -> int:
         return 0
 
     if cmd == "recap":
-        from dictator import recap as _recap
+        from dictator_core import recap as _recap
         when = next((a for a in rest if not a.startswith("-")), "today")
         plain = "--plain" in rest or "--no-model" in rest
         # Said before the wait rather than after it. Loading a 2.5GB model
@@ -591,7 +591,7 @@ def main(argv) -> int:
         return 0
 
     if cmd == "forget":
-        from dictator import history
+        from dictator_core import history
         import time as _t
         what = " ".join(rest).strip()
         # Deleting everything used to be the only thing this command did, and
@@ -648,7 +648,7 @@ def main(argv) -> int:
         if rest and rest[0] == "in":
             return format_in(rest[1:])
         import json
-        from dictator import api as _d
+        from dictator_core import api as _d
         flags = _d.shaping_flags()
         if not rest:
             for k in _d.DEFAULT_SHAPING:
@@ -674,9 +674,9 @@ def main(argv) -> int:
 
     if cmd in ("snippets", "expansions"):
         if "--json" in rest:
-            from dictator import views
+            from dictator_core import views
             return _json(views.snippets())
-        from dictator import snippets as _sn
+        from dictator_core import snippets as _sn
         items = _sn.shared().items
         if not items:
             print('nothing yet. Add one with:\n'
@@ -696,7 +696,7 @@ def main(argv) -> int:
         if not trigger:
             print('usage: dictator unsnippet "my work email"')
             return 2
-        from dictator import snippets as _sn
+        from dictator_core import snippets as _sn
         print(f'removed "{trigger}".' if _sn.shared().remove(trigger)
               else f'"{trigger}" was not a snippet. See: dictator snippets')
         return 0
@@ -705,7 +705,7 @@ def main(argv) -> int:
         return find(rest)
 
     if cmd == "quiet-media":
-        from dictator import media
+        from dictator_core import media
         if rest[:1] in (["on"], ["off"]):
             media.set_enabled(rest[0] == "on")
         if "--json" in rest:
@@ -716,7 +716,7 @@ def main(argv) -> int:
         return 0
 
     if cmd in ("language", "lang"):
-        from dictator import stt
+        from dictator_core import stt
         f = core.STATE_DIR / "lang"
         if rest:
             want = "hinglish" if rest[0].lower().startswith("hing") else "english"
@@ -738,7 +738,7 @@ def main(argv) -> int:
         return permissions("--reset" in rest, "--explain" in rest)
 
     if cmd in ("delivery", "paste"):
-        from dictator import paste as _p
+        from dictator_core import paste as _p
         if rest and rest[0] in ("type", "clipboard"):
             _p.HOW_FILE.parent.mkdir(parents=True, exist_ok=True)
             _p.HOW_FILE.write_text(rest[0])
@@ -756,7 +756,7 @@ def main(argv) -> int:
         return 0
 
     if cmd == "gesture":
-        from dictator import hotkey as _hk
+        from dictator_core import hotkey as _hk
         f = core.STATE_DIR / "gesture"
         if rest and rest[0] in _hk.TOGGLE_KEYS:
             f.parent.mkdir(parents=True, exist_ok=True)
@@ -786,7 +786,7 @@ def main(argv) -> int:
         return notes(rest)
 
     if cmd == "capture":
-        from dictator import api as _api
+        from dictator_core import api as _api
         want = rest[0] if rest else "status"
         if want == "on":
             _api.CAPTURE_FLAG.parent.mkdir(parents=True, exist_ok=True)
@@ -855,7 +855,7 @@ def indicator(rest) -> int:
     """The pill: where it sits, what it does while nobody is dictating, which
     buttons it shows on hover, and which app shortcuts are on. The running
     helper watches the file, so a change shows straight away."""
-    from dictator import orbnative
+    from dictator_core import orbnative
     words = [w for w in rest if w != "--json"]
     usage = ("usage: dictator indicator position "
              + "|".join(orbnative.POSITIONS)
@@ -891,7 +891,8 @@ def indicator(rest) -> int:
         return _json(now)
     idle = {"hover": "hidden, shown when the pointer comes to its place",
             "always": "a small faint pill stays on screen",
-            "hide": "hidden, no buttons"}[now["idle"]]
+            "hide": "hidden, no buttons",
+            "never": "never shown, not even while dictating"}[now["idle"]]
     print(f"  position: {now['position']}")
     print(f"  when not dictating: {now['idle']} ({idle})")
     print(f"  buttons on hover: {', '.join(now['controls']) or 'none'}")
@@ -904,7 +905,7 @@ def indicator(rest) -> int:
 def hands_free(rest) -> int:
     """Start, finish or throw away a hands free session in the running loop,
     exactly as the pill's buttons do. 1 when no loop is listening."""
-    from dictator import control
+    from dictator_core import control
     what = rest[0] if rest else "toggle"
     if what not in control.COMMANDS:
         print("usage: dictator hands-free [toggle|finish|cancel]")
@@ -918,7 +919,7 @@ def hands_free(rest) -> int:
 
 def notes(rest) -> int:
     """The Scratchpad's notes, for the app and for a terminal."""
-    from dictator import notes as n
+    from dictator_core import notes as n
     as_json = "--json" in rest
     words = [w for w in rest if w != "--json"]
     what = words[0] if words else "list"
@@ -981,7 +982,7 @@ def meeting(rest) -> int:
     after a restart, because a recorder somebody forgot they armed is the one
     failure that harms other people rather than the user."""
     import time as _t
-    from dictator import meeting as m
+    from dictator_core import meeting as m
 
     what = rest[0] if rest else ""
     args = rest[1:]
@@ -1072,7 +1073,7 @@ def meeting(rest) -> int:
             m.transcribe(mid, progress)
             print(f"\r  transcribed in {_t.time() - t0:.0f}s"
                   + " " * 30, file=sys.stderr, flush=True)
-            from dictator import recap as _recap
+            from dictator_core import recap as _recap
             if _recap.available():
                 print("  Writing the notes on this machine, a few seconds...",
                       file=sys.stderr, flush=True)
@@ -1147,7 +1148,7 @@ def meeting_permissions() -> int:
     nothing to switch on and no way to make it appear. So this reveals the
     bundle in Finder as well, for the plus button."""
     import time as _t
-    from dictator import meeting as m
+    from dictator_core import meeting as m
 
     app = m.build_app()
     if not app:
@@ -1204,13 +1205,13 @@ def snippet(rest) -> int:
     Two arguments rather than a prompt, because this is a thing people set up
     once and then forget, and an interactive form would be one more thing to
     learn for a command that is used five times in its life."""
-    from dictator import snippets as _sn
+    from dictator_core import snippets as _sn
     force = "--anyway" in rest or "--force" in rest
     args = [a for a in rest if not a.startswith("--")]
     # With nothing to add, --json is the app's Snippets page asking for the
     # list. Adding one from the app is the same two arguments as here.
     if "--json" in rest and len(args) < 2:
-        from dictator import views
+        from dictator_core import views
         return _json(views.snippets())
     if len(args) < 2:
         print('usage: dictator snippet "my work email" "krish@example.com"')
@@ -1236,7 +1237,7 @@ def snippet(rest) -> int:
 
 def find(rest) -> int:
     """Search everything ever dictated, by any of the three texts we keep."""
-    from dictator import mac, search
+    from dictator_core import mac, search
     days, app, limit, copy = 0.0, "", 20, False
     words = []
     i = 0
@@ -1292,7 +1293,7 @@ def format_in(rest) -> int:
 
     `terminal` is a group rather than an application, because nobody wants to
     say the same thing separately about Ghostty, iTerm and Terminal."""
-    from dictator import api as _d, profiles
+    from dictator_core import api as _d, profiles
     if not rest:
         all_rules = profiles.rules()
         if not all_rules:
@@ -1345,7 +1346,7 @@ def doctor() -> int:
     downloaded, an app whose signature had changed so its permissions were
     quietly revoked, and a second listener from another install that pasted
     everything twice."""
-    from dictator import always, signing, stt, tcc
+    from dictator_core import always, signing, stt, tcc
     bad = 0
 
     def ok(label, good, detail="", note=""):
@@ -1369,7 +1370,7 @@ def doctor() -> int:
     # Which of the two installs this is, first, because every hint below
     # depends on it: a checkout fixes a missing helper with swiftc or brew,
     # the app fixes it by being downloaded again.
-    from dictator import views
+    from dictator_core import views
     bundled = core.BUNDLE is not None
     print(f"  ..   {views.mode()}"
           + (f"  {core.BUNDLE}" if bundled else
@@ -1430,7 +1431,7 @@ def doctor() -> int:
 
     # The delivery helper. Without it nothing arrives anywhere, and the only
     # symptom is that the key appears to do nothing.
-    from dictator import paste as _paste
+    from dictator_core import paste as _paste
     exe = _paste.helper()
     ok(f"can deliver the words ({_paste.how()})", bool(exe),
        "" if exe else "the paste helper is missing and could not be built")
@@ -1589,7 +1590,7 @@ def permissions(reset: bool = False, explain: bool = False) -> int:
     "never granted" and "granted to a signature that is no longer ours" this
     is, because they need opposite instructions."""
     import time as _t
-    from dictator import always, signing, tcc
+    from dictator_core import always, signing, tcc
 
     app = always.APP
 
@@ -1731,7 +1732,7 @@ def _forget(info: dict, everything: bool = False) -> list:
     permission the user has granted and that WORKS is the most expensive thing
     this program can do, so only a service we have positively established is
     stale, denied, or unreadable-and-stuck gets cleared."""
-    from dictator import tcc
+    from dictator_core import tcc
     names = {"accessibility": "Accessibility",
              "input monitoring": "ListenEvent",
              "microphone": "Microphone"}

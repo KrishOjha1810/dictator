@@ -6,7 +6,7 @@ words the user never got wrong, in every application, silently.
 """
 import pytest
 
-from dictator import learn
+from dictator_core import learn
 
 
 def _learned(shown, kept):

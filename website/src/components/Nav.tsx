@@ -1,4 +1,5 @@
 import DownloadButton from "./DownloadButton";
+import ThemeToggle from "./ThemeToggle";
 import "./Nav.css";
 
 const links = [
@@ -21,6 +22,7 @@ export default function Nav({ tone = "sky" }: { tone?: "sky" | "panel" }) {
             {l.label}
           </a>
         ))}
+        <ThemeToggle />
         <DownloadButton className="btn btn-dark cta">Download</DownloadButton>
       </nav>
     </header>

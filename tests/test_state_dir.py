@@ -12,7 +12,7 @@ leaves them pointing at a directory this file invented.
 import os
 from pathlib import Path
 
-from dictator import core
+from dictator_core import core
 
 
 def test_it_reads_the_installation_you_point_it_at(tmp_path):

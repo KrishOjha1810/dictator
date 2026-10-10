@@ -11,7 +11,7 @@ that passes.
 """
 import pytest
 
-from dictator import script
+from dictator_core import script
 
 
 REAL_FAILURES = [
@@ -108,7 +108,7 @@ def test_one_stray_character_in_a_long_sentence_is_tolerated():
 
 def _whisper_answering(monkeypatch, tmp_path, text):
     """The multilingual path, with the engine made to answer `text`."""
-    from dictator import stt
+    from dictator_core import stt
 
     class Done:
         stdout, stderr, returncode = text, "", 0
@@ -163,7 +163,7 @@ def test_urdu_is_asked_again_in_hindi_rather_than_dropped(monkeypatch,
     A real hold: the user asked whether he could be heard, got back
     '\\u06a9\\u06cc\\u0627\\u062a\\u0645\\u062c\\u06be\\u06d2\\u0633\\u0646\\u067e\\u0631', and the guard dropped it, so he
     said something and received silence."""
-    from dictator import stt
+    from dictator_core import stt
 
     urdu = "کیاتمجھےسنپر"
     answers = iter([urdu, "kya tumhe sunai de raha hai"])
@@ -198,7 +198,7 @@ def test_urdu_is_asked_again_in_hindi_rather_than_dropped(monkeypatch,
 def test_an_alphabet_that_is_not_indic_is_not_retried(monkeypatch, tmp_path):
     """Cyrillic or Han is the model having lost the thread, not the right
     words in the wrong script, and asking again in Hindi would not help."""
-    from dictator import stt
+    from dictator_core import stt
 
     calls = []
 

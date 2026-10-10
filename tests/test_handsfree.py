@@ -10,7 +10,7 @@ import subprocess
 
 import pytest
 
-from dictator import dictate, hotkey
+from dictator_core import dictate, hotkey
 
 
 # ---- the listener --------------------------------------------------------

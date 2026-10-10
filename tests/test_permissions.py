@@ -31,7 +31,7 @@ from unittest import mock
 
 import pytest
 
-from dictator import always, tcc
+from dictator_core import always, tcc
 
 OURS = 'identifier "com.dictator.dictation" and certificate leaf = ' \
        'H"1111111111111111111111111111111111111111"'
@@ -221,7 +221,7 @@ def test_an_unanswerable_requirement_check_leaves_the_grant_alone():
 def test_the_real_bundle_satisfies_its_own_requirement():
     """End to end against the real thing, so a change in how codesign is
     invoked cannot pass the mocked tests and fail on a machine."""
-    from dictator import signing
+    from dictator_core import signing
     req = signing.requirement(always.APP)
     assert tcc.satisfies(always.APP, req), req
     wrong = req.replace('H"', 'H"00')[:-1] + '"' if 'H"' in req else ""
@@ -262,7 +262,7 @@ def test_the_listener_recovers_without_being_restarted():
 def test_the_app_never_rebuilds_itself_to_explain_itself():
     """Rebuilding changes the signature, which is what causes this state.
     The path the waiting app calls must not be able to trigger one."""
-    src = (Path(__file__).resolve().parent.parent / "dictator" / "cli.py").read_text()
+    src = (Path(__file__).resolve().parent.parent / "dictator_core" / "cli.py").read_text()
     body = src.split("def permissions(", 1)[1].split("\n\ndef ", 1)[0]
     explain = body.split("if explain:", 1)[1].split("\n    if not app.exists()", 1)[0]
     assert "build_app" not in explain, \
@@ -458,9 +458,9 @@ def test_no_listener_record_at_all_changes_nothing():
 
 
 def _cli():
-    # The CLI body lives in dictator.cli now; bin/dictator is just a launcher.
+    # The CLI body lives in dictator_core.cli now; bin/dictator is just a launcher.
     import importlib
-    return importlib.import_module("dictator.cli")
+    return importlib.import_module("dictator_core.cli")
 
 
 def test_a_refused_tccutil_is_reported_rather_than_swallowed(monkeypatch):
@@ -477,7 +477,7 @@ def test_a_refused_tccutil_is_reported_rather_than_swallowed(monkeypatch):
         stderr = "tccutil: Failed to reset Accessibility"
 
     monkeypatch.setattr(cli.subprocess, "run", lambda *a, **k: Refused())
-    from dictator import tcc
+    from dictator_core import tcc
     got = cli._forget({"service": "accessibility", "state": tcc.STALE})
     assert got == [], got
     assert cli._forget.refused, "the refusal was swallowed"
@@ -493,7 +493,7 @@ def test_a_successful_reset_records_no_refusal(monkeypatch):
         stderr = ""
 
     monkeypatch.setattr(cli.subprocess, "run", lambda *a, **k: Done())
-    from dictator import tcc
+    from dictator_core import tcc
     got = cli._forget({"service": "accessibility", "state": tcc.STALE})
     assert got, got
     assert cli._forget.refused == []
@@ -513,7 +513,7 @@ def test_two_accounts_do_not_share_one_permission_row(monkeypatch, tmp_path):
     `certificate leaf = H"8501b12c"` from one account and `H"cbd3aabe"` from
     the other.
     """
-    from dictator import core
+    from dictator_core import core
 
     mine = core.bundle_id()
     monkeypatch.setattr(core.Path, "home",
@@ -530,7 +530,7 @@ def test_the_identifier_carries_no_account_name():
     account name is written into a file or shown in a requirement string."""
     import getpass
 
-    from dictator import core
+    from dictator_core import core
 
     got = core.bundle_id()
     assert getpass.getuser().lower() not in got.lower()
@@ -539,7 +539,7 @@ def test_the_identifier_carries_no_account_name():
 
 def test_the_meeting_app_gets_its_own_identifier_too():
     """Screen Recording is system-wide as well, so the same collision."""
-    from dictator import core
+    from dictator_core import core
     assert core.bundle_id("com.dictator.meeting") != core.bundle_id()
 
 
@@ -548,7 +548,7 @@ def test_rows_from_the_shared_identifier_are_found(monkeypatch):
     belongs to no app that exists, and it still shows in System Settings under
     the SAME NAME as the real entry. Switching on the Dictator you can see then
     switches on nothing, which reads exactly like the fix having failed."""
-    from dictator import tcc
+    from dictator_core import tcc
 
     def rows(service, client=tcc.BUNDLE_ID):
         return [("row",)] if client == "com.dictator.dictation" else []
@@ -561,7 +561,7 @@ def test_rows_from_the_shared_identifier_are_found(monkeypatch):
 
 
 def test_nothing_left_over_is_an_empty_list_not_a_failure(monkeypatch):
-    from dictator import tcc
+    from dictator_core import tcc
     monkeypatch.setattr(tcc, "_rows", lambda service, client=None: [])
     assert tcc.orphans() == []
 
@@ -570,7 +570,7 @@ def test_databases_it_cannot_read_answer_none_rather_than_nothing(monkeypatch):
     """"I looked and there is nothing" and "I could not look" are different
     answers, and reporting the second as the first is how this module's own
     docstring says a doctor comes to pass the state it exists to report."""
-    from dictator import tcc
+    from dictator_core import tcc
     monkeypatch.setattr(tcc, "_rows", lambda service, client=None: None)
     assert tcc.orphans() is None
 
@@ -584,7 +584,7 @@ def test_a_running_listener_is_not_proof_that_macos_trusts_it():
     Told that, a user with a DENIED row spent an hour switching on the two
     OTHER Dictator entries in the list, because the tool had said the
     permission was fine and the problem must be elsewhere."""
-    src = (Path(__file__).resolve().parent.parent / "dictator" / "cli.py").read_text()
+    src = (Path(__file__).resolve().parent.parent / "dictator_core" / "cli.py").read_text()
     watch = src[src.index("Watching. This updates itself"):]
     watch = watch[:watch.index("def ") if "def " in watch else len(watch)]
     assert "if live and trusted:" in watch, \

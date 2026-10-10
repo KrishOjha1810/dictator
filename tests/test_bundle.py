@@ -24,7 +24,7 @@ import pytest
 REPO = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO))
 
-from dictator import core, views  # noqa: E402
+from dictator_core import core, views  # noqa: E402
 
 
 def _fake_bundle(tmp_path, helpers=("dictator-hotkey", "dictator-rec",
@@ -98,7 +98,7 @@ def test_every_module_looks_inside_the_bundle(tmp_path):
     app = _fake_bundle(tmp_path)
     probe = (
         "import json\n"
-        "from dictator import hotkey, recorder, paste, orbnative, readback, "
+        "from dictator_core import hotkey, recorder, paste, orbnative, readback, "
         "always, meeting, media\n"
         "print(json.dumps({'hotkey': str(hotkey.BIN), 'rec': str(recorder.BIN),"
         " 'paste': str(paste._HELPER), 'orb': str(orbnative.BIN),"
@@ -120,7 +120,7 @@ def test_every_module_looks_inside_the_bundle(tmp_path):
 
 
 def test_the_app_never_compiles(tmp_path, monkeypatch):
-    from dictator import swiftbuild
+    from dictator_core import swiftbuild
     app = _fake_bundle(tmp_path)
     monkeypatch.setattr(core, "BUNDLE", app)
     _no_tools(monkeypatch, swiftbuild)
@@ -131,7 +131,7 @@ def test_the_app_never_compiles(tmp_path, monkeypatch):
 
 
 def test_a_missing_helper_in_the_app_is_reported_not_built(tmp_path, monkeypatch):
-    from dictator import swiftbuild
+    from dictator_core import swiftbuild
     app = _fake_bundle(tmp_path, helpers=())
     monkeypatch.setattr(core, "BUNDLE", app)
     _no_tools(monkeypatch, swiftbuild)
@@ -143,7 +143,7 @@ def test_a_missing_helper_in_the_app_is_reported_not_built(tmp_path, monkeypatch
 
 
 def test_whisper_comes_from_the_app_before_homebrew(tmp_path, monkeypatch):
-    from dictator import stt
+    from dictator_core import stt
     app = _fake_bundle(tmp_path)
     monkeypatch.setattr(core, "BUNDLE", app)
     monkeypatch.setattr(stt.shutil, "which", lambda n: f"/opt/homebrew/bin/{n}")
@@ -154,13 +154,13 @@ def test_whisper_comes_from_the_app_before_homebrew(tmp_path, monkeypatch):
 
 
 def test_a_checkout_still_finds_whisper_where_it_did(monkeypatch):
-    from dictator import stt
+    from dictator_core import stt
     monkeypatch.setattr(stt.shutil, "which", lambda n: f"/opt/homebrew/bin/{n}")
     assert stt._find("whisper-cli") == "/opt/homebrew/bin/whisper-cli"
 
 
 def test_the_login_item_is_the_app_itself(tmp_path, monkeypatch):
-    from dictator import always
+    from dictator_core import always
     app = _fake_bundle(tmp_path)
     monkeypatch.setattr(core, "BUNDLE", app)
     _no_tools(monkeypatch, always)
@@ -168,7 +168,7 @@ def test_the_login_item_is_the_app_itself(tmp_path, monkeypatch):
 
 
 def test_the_app_is_never_signed_here(tmp_path, monkeypatch):
-    from dictator import always, meeting, signing
+    from dictator_core import always, meeting, signing
     app = _fake_bundle(tmp_path)
     monkeypatch.setattr(core, "BUNDLE", app)
     _no_tools(monkeypatch, always, meeting, signing)
@@ -180,7 +180,7 @@ def test_the_app_is_never_signed_here(tmp_path, monkeypatch):
 
 
 def test_the_meeting_recorder_is_used_as_shipped(tmp_path, monkeypatch):
-    from dictator import meeting
+    from dictator_core import meeting
     app = _fake_bundle(tmp_path)
     monkeypatch.setattr(core, "BUNDLE", app)
     shipped = app / "Contents" / "Helpers" / "Dictator Meeting.app"
@@ -201,12 +201,12 @@ def test_the_permission_identifier_is_the_one_the_release_carries(tmp_path,
 
 
 def test_doctor_can_say_where_each_helper_came_from(tmp_path, monkeypatch):
-    from dictator import meeting
+    from dictator_core import meeting
     app = _fake_bundle(tmp_path, helpers=("dictator-hotkey", "whisper-cli"))
     monkeypatch.setattr(core, "BUNDLE", app)
     monkeypatch.setattr(meeting, "APP",
                         app / "Contents" / "Helpers" / "Dictator Meeting.app")
-    from dictator import stt
+    from dictator_core import stt
     monkeypatch.setattr(stt.shutil, "which", lambda n: None)
     monkeypatch.setattr(stt, "_BREW_BINS", ())
     got = views.helpers()
@@ -251,7 +251,7 @@ def test_status_is_replaced_whole_and_leaves_no_temporary_file():
 
 def test_model_progress_never_reads_full_before_the_file_lands(tmp_path,
                                                                monkeypatch):
-    from dictator import stt
+    from dictator_core import stt
     monkeypatch.setattr(stt, "MODEL_DIR", tmp_path)
     (tmp_path / "ggml-tiny.bin").write_bytes(b"x")
     name, mb = stt.SHIPPED[2][0], stt.SHIPPED[2][1]
@@ -271,7 +271,7 @@ def test_model_progress_never_reads_full_before_the_file_lands(tmp_path,
 
 def test_a_hold_is_published_as_it_happens(monkeypatch):
     """listening on DOWN, transcribing on UP, ready when it is done."""
-    from dictator import dictate
+    from dictator_core import dictate
     seen = []
     monkeypatch.setattr(dictate, "publish", lambda s, e=None: seen.append(s))
     monkeypatch.setattr(dictate.core, "set_hud", lambda *a, **k: None)
@@ -301,7 +301,7 @@ def test_a_hold_is_published_as_it_happens(monkeypatch):
 
 
 def test_a_mis_press_goes_straight_back_to_ready(monkeypatch):
-    from dictator import dictate
+    from dictator_core import dictate
     seen = []
     monkeypatch.setattr(dictate, "publish", lambda s, e=None: seen.append(s))
     monkeypatch.setattr(dictate.core, "set_hud", lambda *a, **k: None)
@@ -314,7 +314,7 @@ def test_a_mis_press_goes_straight_back_to_ready(monkeypatch):
 
 
 def test_ready_does_not_cover_a_missing_permission(monkeypatch):
-    from dictator import dictate
+    from dictator_core import dictate
     seen = []
     monkeypatch.setattr(dictate, "publish",
                         lambda s, e=None: seen.append((s, e)))
@@ -328,7 +328,7 @@ def test_ready_does_not_cover_a_missing_permission(monkeypatch):
 
 def test_ready_while_english_is_still_arriving_says_downloading(tmp_path,
                                                                 monkeypatch):
-    from dictator import dictate, stt
+    from dictator_core import dictate, stt
     monkeypatch.setattr(stt, "MODEL_DIR", tmp_path)
     (tmp_path / (stt.SHIPPED[1][0] + ".part")).write_bytes(b"x" * 1000)
     dictate.publish("ready")
@@ -345,7 +345,7 @@ def test_ready_while_english_is_still_arriving_says_downloading(tmp_path,
 def _run_with_listener(monkeypatch, script):
     """dictate.run against a fake listener: a python that prints `script`'s
     lines and does whatever it does next. Nothing real is started."""
-    from dictator import dictate
+    from dictator_core import dictate
     monkeypatch.setattr(dictate.orbnative, "show", lambda: True)
     monkeypatch.setattr(dictate.orbnative, "hide", lambda: None)
     monkeypatch.setattr(dictate.warmup, "at_startup", lambda: None)
@@ -379,7 +379,7 @@ def test_a_listener_that_dies_leaves_an_error(monkeypatch):
 
 
 def test_a_listener_that_says_goodbye_leaves_paused(monkeypatch):
-    from dictator import dictate
+    from dictator_core import dictate
     code = _run_with_listener(monkeypatch,
                               "print('READY', flush=True); print('BYE', flush=True)")
     assert core.read_status()["state"] == "paused" and code == 0
@@ -425,7 +425,7 @@ def test_a_model_that_lands_is_published_without_a_key_press(tmp_path,
     """status.json is written on state changes, and a finished download is
     not one. The watcher writes the same state again with the new models."""
     import threading
-    from dictator import dictate, stt
+    from dictator_core import dictate, stt
     monkeypatch.setattr(stt, "MODEL_DIR", tmp_path)
     for name, *_ in stt.SHIPPED[:2]:
         (tmp_path / name).write_bytes(b"x")
@@ -453,7 +453,7 @@ def test_a_model_that_lands_is_published_without_a_key_press(tmp_path,
 def test_ready_waits_for_every_hold_still_transcribing(monkeypatch):
     """Two holds in flight: the first one finishing must not say ready while
     the second is still being transcribed."""
-    from dictator import dictate
+    from dictator_core import dictate
     seen = []
     monkeypatch.setattr(dictate, "publish", lambda s, e=None: seen.append(s))
     monkeypatch.setattr(dictate.core, "set_hud", lambda *a, **k: None)
@@ -476,7 +476,7 @@ def test_ready_waits_for_every_hold_still_transcribing(monkeypatch):
 # ---- what the app's pages read --------------------------------------------------
 
 def _said(text, at, secs=0.0):
-    from dictator import history
+    from dictator_core import history
     row = history.add(heard=text, shown=text, secs=secs)
     con = history._db()
     try:
@@ -570,7 +570,7 @@ def test_history_without_a_day_is_the_newest_first():
 
 
 def test_snippets_and_words_as_data():
-    from dictator import snippets, vocab
+    from dictator_core import snippets, vocab
     assert snippets.shared().add("my work email", "a@b.example",
                                  force=True)["ok"]
     assert views.snippets()["snippets"][0]["trigger"] == "my work email"

@@ -10,10 +10,10 @@ from pathlib import Path
 
 import pytest
 
-from dictator import always, stt
+from dictator_core import always, stt
 
 ROOT = Path(__file__).resolve().parent.parent
-PKG = ROOT / "dictator"
+PKG = ROOT / "dictator_core"
 
 
 def test_no_module_imports_voicebridge():
@@ -60,7 +60,7 @@ def test_built_bundle_points_at_a_real_checkout():
     cli = Path(info["DictatorCLI"])
     assert cli.exists(), f"the app runs {cli}, which is not there"
     assert cli.name == "dictator", cli
-    assert (cli.parent.parent / "dictator" / "stt.py").exists(), \
+    assert (cli.parent.parent / "dictator_core" / "stt.py").exists(), \
         f"{cli} is not inside a dictator checkout"
     assert ".dictator" in info["DictatorLog"], info["DictatorLog"]
 
@@ -72,7 +72,7 @@ def test_state_is_our_own_directory():
     reads source text fails on a rewording and passes on a rewrite."""
     import os
 
-    from dictator import core
+    from dictator_core import core
     assert core.state_dir("") == Path(os.path.expanduser("~/.dictator"))
     assert core.state_dir(None) == Path(os.path.expanduser("~/.dictator")) \
         or os.environ.get("DICTATOR_STATE")
@@ -98,7 +98,7 @@ def test_models_are_found_not_redownloaded(tmp_path, monkeypatch):
 def test_no_second_key_listener_is_flagged():
     """Two hold-to-talk listeners paste everything twice, and the symptom
     reads as a stutter rather than as two programs running."""
-    cli = (ROOT / "dictator" / "cli.py").read_text()
+    cli = (ROOT / "dictator_core" / "cli.py").read_text()
     assert "com.voicebridge.dictate.plist" in cli, \
         "doctor no longer warns about another dictation key"
 
@@ -132,7 +132,7 @@ def test_the_one_outside_dependency_is_installed_and_checked():
     """
     assert "jellyfish" in (ROOT / "scripts" / "install.sh").read_text(), \
         "the installer does not install it"
-    assert "jellyfish" in (ROOT / "dictator" / "cli.py").read_text(), \
+    assert "jellyfish" in (ROOT / "dictator_core" / "cli.py").read_text(), \
         "doctor does not check for it"
 
 
@@ -152,7 +152,7 @@ def test_nothing_else_came_in_from_outside():
                 names = [(node.module or "").split(".")[0]]
             else:
                 continue
-            outside |= {n for n in names if n and n not in std and n != "dictator"}
+            outside |= {n for n in names if n and n not in std and n != "dictator_core"}
     assert outside <= {"jellyfish"}, f"new outside dependencies: {outside}"
 
 
@@ -160,7 +160,7 @@ def test_the_installer_and_the_code_agree_on_the_models():
     """They named different files once: doctor reported ggml-base.bin missing
     while the installer only ever downloaded ggml-large-v3-turbo.bin, so the
     user was sent looking for something that was never going to arrive."""
-    from dictator import stt
+    from dictator_core import stt
     script = (ROOT / "scripts" / "install.sh").read_text()
     for name, mb, why, essential in stt.SHIPPED:
         assert name in script, f"the installer never downloads {name}"
@@ -169,7 +169,7 @@ def test_the_installer_and_the_code_agree_on_the_models():
 def test_english_does_not_wait_for_the_multilingual_model():
     """1.5GB before the first word is ten minutes of progress bar before the
     product has proved it does anything. English needs 712MB of it."""
-    from dictator import stt
+    from dictator_core import stt
     essential = [m[0] for m in stt.SHIPPED if m[3]]
     assert "ggml-large-v3-turbo.bin" not in essential
     assert sum(m[1] for m in stt.SHIPPED if m[3]) < 800
@@ -204,7 +204,7 @@ def test_starting_stops_whatever_was_already_running():
     every sentence pasted twice. The symptom reads as a bug in the paste path,
     which is where the time goes looking for it."""
     import ast, inspect
-    from dictator import always
+    from dictator_core import always
     src = inspect.getsource(always.on)
     assert "_stop_everything()" in src, "on() is not idempotent again"
     # And the cleanup must be scoped to this user: another account on the same
@@ -216,7 +216,7 @@ def test_no_listener_is_reported_as_a_problem():
     """The check was n <= 1, so zero listeners passed. Zero is the state where
     the key does nothing at all, which is the exact complaint this check was
     added to answer."""
-    src = (ROOT / "dictator" / "cli.py").read_text()
+    src = (ROOT / "dictator_core" / "cli.py").read_text()
     assert "n == 1" in src, "the listener count check accepts zero again"
 
 
@@ -231,8 +231,8 @@ def test_permissions_clears_a_grant_made_to_an_older_identity():
     It is now read off the TCC row's stored code requirement, so the check is
     on the answer rather than on the shape of the guess. The full set of cases
     lives in test_permissions.py."""
-    from dictator import tcc
-    src = (ROOT / "dictator" / "cli.py").read_text()
+    from dictator_core import tcc
+    src = (ROOT / "dictator_core" / "cli.py").read_text()
     assert "tccutil" in src, "it no longer clears what macOS remembers"
     assert "tcc.state(" in src, "permissions no longer asks what macOS remembers"
     assert tcc.verdict({"state": tcc.STALE})[0] == "bad", \
@@ -253,7 +253,7 @@ def test_a_bundle_pointing_at_another_checkout_is_rebuilt(tmp_path,
     invisible."""
     import plistlib
 
-    from dictator import always
+    from dictator_core import always
 
     app = tmp_path / "Dictator.app"
     (app / "Contents" / "MacOS").mkdir(parents=True)
@@ -283,7 +283,7 @@ def test_a_bundle_sharing_the_identifier_with_another_account_is_rebuilt(
     to be rebuilt, and nothing else here would notice."""
     import plistlib
 
-    from dictator import always
+    from dictator_core import always
 
     app = tmp_path / "Dictator.app"
     (app / "Contents" / "MacOS").mkdir(parents=True)
@@ -304,7 +304,7 @@ def test_a_bundle_logging_somewhere_else_counts_as_wrong_too(tmp_path,
     the log it is writing."""
     import plistlib
 
-    from dictator import always
+    from dictator_core import always
 
     app = tmp_path / "Dictator.app"
     (app / "Contents" / "MacOS").mkdir(parents=True)
@@ -318,7 +318,7 @@ def test_a_bundle_logging_somewhere_else_counts_as_wrong_too(tmp_path,
 
 def test_a_bundle_with_no_plist_is_not_assumed_to_be_ours(tmp_path,
                                                           monkeypatch):
-    from dictator import always
+    from dictator_core import always
     app = tmp_path / "Dictator.app"
     (app / "Contents").mkdir(parents=True)
     monkeypatch.setattr(always, "APP", app)
@@ -348,7 +348,7 @@ def test_the_installer_does_not_take_a_name_another_install_owns():
 def test_doctor_checks_the_command_on_path_is_this_checkout():
     """The failure is completely silent: every command reports success and
     none of them is running your code."""
-    src = (Path(__file__).resolve().parent.parent / "dictator" / "cli.py").read_text()
+    src = (Path(__file__).resolve().parent.parent / "dictator_core" / "cli.py").read_text()
     assert '"and it is this checkout"' in src
     assert "realpath" in src, "comparing unresolved paths misses a symlink"
 
@@ -364,7 +364,7 @@ def test_the_bundle_is_registered_after_its_identifier_changes(tmp_path,
     `tccutil reset Accessibility com.dictator.dictation.<id>` answered
     `No such bundle identifier` with OSStatus -10814, so the permission could
     not be cleared, and macOS had no registered app to attach a grant to."""
-    from dictator import always
+    from dictator_core import always
 
     ran = []
     monkeypatch.setattr(always.subprocess, "run",
@@ -381,7 +381,7 @@ def test_the_bundle_is_registered_after_its_identifier_changes(tmp_path,
 
 def test_registering_is_attempted_as_part_of_building_the_app():
     src = (Path(__file__).resolve().parent.parent
-           / "dictator" / "always.py").read_text()
+           / "dictator_core" / "always.py").read_text()
     build = src[src.index("def build_app"):]
     assert "_register(APP)" in build, \
         "the bundle is signed and then never registered"
@@ -440,14 +440,14 @@ def test_no_module_keeps_a_path_into_the_real_state_directory():
     import importlib
     import pkgutil
 
-    import dictator
-    from dictator import core
+    import dictator_core
+    from dictator_core import core
 
     real = str(Path.home() / ".dictator")
     leaked = []
-    for mod in pkgutil.iter_modules(dictator.__path__):
+    for mod in pkgutil.iter_modules(dictator_core.__path__):
         try:
-            m = importlib.import_module(f"dictator.{mod.name}")
+            m = importlib.import_module(f"dictator_core.{mod.name}")
         except Exception:
             continue
         for name in dir(m):

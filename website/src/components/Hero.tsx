@@ -63,7 +63,7 @@ function useDemo(ref: RefObject<HTMLDivElement | null>) {
 
       demo!.dataset.phase = "listening";
       state.textContent = "Listening…";
-      chip.textContent = "Holding ⌥";
+      chip.textContent = "Holding key";
       await wait(reduced ? 600 : 2600);
 
       demo!.dataset.phase = "working";
@@ -113,7 +113,7 @@ export default function Hero() {
               <h1>Talk. It types where your cursor is.</h1>
               <div className="lede">
                 <p>
-                  Hold right <kbd>⌥</kbd>, speak in English, Hindi or Hinglish, let go. Dictator writes it into any app
+                  Hold your key, speak in English, Hindi or Hinglish, let go. Dictator writes it into any app
                   on your Mac, and no audio ever leaves it.
                 </p>
                 <div className="actions">
@@ -179,7 +179,7 @@ export default function Hero() {
                     ))}
                   </div>
                   <span className="chip" data-chip="">
-                    Hold ⌥
+                    Hold key
                   </span>
                 </div>
               </div>

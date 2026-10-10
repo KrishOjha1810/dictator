@@ -9,7 +9,7 @@ import json
 
 import pytest
 
-from dictator import api, profiles, shape
+from dictator_core import api, profiles, shape
 
 
 @pytest.fixture

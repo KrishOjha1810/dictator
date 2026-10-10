@@ -19,11 +19,19 @@ const petals = Array.from({ length: 150 }, () => {
   return { x, y, color, size, o: 0.55 + rand() * 0.45 };
 });
 
-function OptionKey({ reflection = false }: { reflection?: boolean }) {
+// A key with a microphone on it, not any one key: people hold fn, Option
+// or Command, whichever they pick in Settings.
+function TalkKey({ reflection = false }: { reflection?: boolean }) {
   return (
     <div className={reflection ? "key reflection" : "key"}>
-      <span>⌥</span>
-      <small>option</small>
+      <span>
+        <svg viewBox="0 0 24 24" width="1em" height="1em" fill="none" stroke="currentColor"
+          strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+          <rect x="9" y="3" width="6" height="11" rx="3" />
+          <path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21" />
+        </svg>
+      </span>
+      <small>hold</small>
     </div>
   );
 }
@@ -69,8 +77,8 @@ export default function Sky() {
 
       <div className="key-scene">
         <div className="glow"></div>
-        <OptionKey />
-        <OptionKey reflection />
+        <TalkKey />
+        <TalkKey reflection />
       </div>
 
       <div className="meadow">

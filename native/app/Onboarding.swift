@@ -57,8 +57,8 @@ struct OnboardingView: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .padding(.horizontal, 56)
             }
-            // The first card is the brand moment: the icon's gradient, full
-            // bleed, with the grille's lines drifting off the corner.
+            // The first card is the brand moment: the mark's blue, full
+            // bleed, with lines of text drifting off the corner.
             .background(Group {
                 if st.card == 0 {
                     ZStack {
@@ -179,7 +179,7 @@ struct OnboardingView: View {
                     .fill(Theme.brand))
                 .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous)
                     .strokeBorder(Color.white.opacity(0.18), lineWidth: 1))
-                .shadow(color: Color(nsColor: Palette.gradViolet).opacity(0.3), radius: 8, y: 3)
+                .shadow(color: Color(nsColor: Palette.markBottom).opacity(0.3), radius: 8, y: 3)
                 .padding(.bottom, Theme.s1)
             Text(title).font(.display(26)).foregroundColor(Theme.text)
                 .multilineTextAlignment(.center)
@@ -219,7 +219,7 @@ struct OnboardingView: View {
     private var welcome: some View {
         VStack(spacing: Theme.s4) {
             BrandMark(size: 96)
-                .shadow(color: .black.opacity(0.3), radius: 16, y: 8)
+                .shadow(color: .black.opacity(0.25), radius: 16, y: 8)
                 .padding(.bottom, Theme.s2)
             Text("Talk, and it types").font(.display(34))
                 .foregroundColor(.white)
@@ -235,7 +235,7 @@ struct OnboardingView: View {
             .foregroundColor(.white)
             .padding(.horizontal, 12).padding(.vertical, 6)
             .background(Capsule().fill(Color.black.opacity(0.2)))
-            .overlay(Capsule().strokeBorder(Theme.cursorGlow.opacity(0.6), lineWidth: 1))
+            .overlay(Capsule().strokeBorder(Color(nsColor: hex(0x70E1C1)).opacity(0.7), lineWidth: 1))
             .padding(.top, Theme.s1)
         }
     }

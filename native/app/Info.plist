@@ -40,10 +40,10 @@
 	<key>SUEnableAutomaticChecks</key>
 	<true/>
 	<key>SUFeedURL</key>
-	<string>https://github.com/cc-vb/dictator/releases/latest/download/appcast.xml</string>
+	<string>https://pub-ebefc1fa5188430eb7cb4d67334d44c6.r2.dev/appcast.xml</string>
 	<key>SUPublicEDKey</key>
 	<string>N9EQ56mpe6sTWXB3nhgyGYLGl8JhvW+xPpp7n+E4bMY=</string>
 	<key>SUScheduledCheckInterval</key>
-	<integer>86400</integer>
+	<integer>172800</integer>
 </dict>
 </plist>

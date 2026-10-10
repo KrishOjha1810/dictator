@@ -148,17 +148,18 @@ struct SettingsPage: View {
                 .labelsHidden().fixedSize()
             }
             Hairline()
-            SettingRow("When not dictating",
-                       "While the microphone is open the pill always shows, dark with moving "
-                       + "bars. Show on hover: nothing until the pointer comes to its place, "
-                       + "then the pill and its buttons.") {
+            SettingRow("Show the pill",
+                       "On hover: nothing until the pointer comes to its place, then the pill "
+                       + "and its buttons. While dictating, it shows with moving bars unless "
+                       + "set to Never; macOS's orange microphone dot still shows either way.") {
                 Picker("", selection: Binding(get: { st.idle }, set: { v in
                     st.idle = v
                     setIndicator(["idle", v])
                 })) {
-                    Text("Show on hover").tag("hover")
-                    Text("Always show").tag("always")
-                    Text("Hide").tag("hide")
+                    Text("On hover").tag("hover")
+                    Text("Always").tag("always")
+                    Text("Only while dictating").tag("hide")
+                    Text("Never").tag("never")
                 }
                 .labelsHidden().fixedSize()
             }
@@ -176,7 +177,7 @@ struct SettingsPage: View {
                     }
                 }
                 .foregroundColor(Theme.secondary)
-                .disabled(st.idle == "hide")
+                .disabled(st.idle == "hide" || st.idle == "never")
             }
             Hairline()
             SettingRow("Notetaker shortcut",
@@ -507,12 +508,12 @@ struct AppearanceChoice: View {
         .buttonStyle(.plain)
     }
 
-    /// The rail, a page, and two lines of text.
+    /// The sidebar, a page, and two lines of text.
     private func thumb(dark: Bool) -> some View {
         HStack(spacing: 0) {
-            Color(nsColor: dark ? hex(0x0B0A18) : hex(0x1C1A45)).frame(width: 14)
+            Color(nsColor: dark ? hex(0x0C1016) : hex(0xF0F0EA)).frame(width: 14)
             ZStack(alignment: .topLeading) {
-                Color(nsColor: dark ? hex(0x121124) : hex(0xF5F4FA))
+                Color(nsColor: dark ? hex(0x10141B) : hex(0xF7F7F2))
                 VStack(alignment: .leading, spacing: 4) {
                     RoundedRectangle(cornerRadius: 2).fill(Theme.brand).frame(width: 34, height: 9)
                     Capsule().fill(dark ? Color.white.opacity(0.5) : Color.black.opacity(0.35))

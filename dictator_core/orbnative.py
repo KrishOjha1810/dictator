@@ -9,7 +9,7 @@ device is ours, so it cannot sit showing "idle" while a mic is open.
 Its settings live in STATE_DIR/indicator.json:
 
     {"position": "top",
-     "idle": "hover",                 # hover | always | hide
+     "idle": "hover",                 # hover | always | hide | never
      "controls": ["dictate", "notetaker", "scratchpad"],
      "shortcuts": {"notetaker": true, "scratchpad": true},
      "hide_idle": false}              # kept for older readers: idle == "hide"
@@ -17,7 +17,9 @@ Its settings live in STATE_DIR/indicator.json:
 `idle` is what the pill does while nobody is dictating. "hover" (the default)
 draws nothing at all until the pointer comes to its place, then shows it with
 the buttons in `controls`; "always" keeps the small faint pill on screen, as
-before; "hide" shows it only while dictating, with no buttons. `shortcuts`
+before; "hide" shows it only while dictating, with no buttons; "never" does
+not show it at all, not even while dictating, for people who would rather go
+by macOS's own microphone dot in the menu bar. `shortcuts`
 says which of the app's global shortcuts (Option-M for the Notetaker, Option-S
 for the Scratchpad) are on; the app registers them and the pill prints them in
 its labels.
@@ -43,7 +45,7 @@ SETTINGS = core.STATE_DIR / "indicator.json"
 # `Spot` in native/orb.swift and the picker in the app's Settings.
 POSITIONS = ("top", "bottom", "left", "right",
              "top-left", "top-right", "bottom-left", "bottom-right")
-IDLE = ("hover", "always", "hide")
+IDLE = ("hover", "always", "hide", "never")
 CONTROLS = ("dictate", "notetaker", "scratchpad")
 SHORTCUTS = ("notetaker", "scratchpad")
 DEFAULTS = {"position": "top", "idle": "hover", "controls": list(CONTROLS),
@@ -73,7 +75,7 @@ def settings() -> dict:
         for k in SHORTCUTS:
             if isinstance(raw["shortcuts"].get(k), bool):
                 out["shortcuts"][k] = raw["shortcuts"][k]
-    out["hide_idle"] = out["idle"] == "hide"
+    out["hide_idle"] = out["idle"] in ("hide", "never")
     return out
 
 
@@ -112,7 +114,9 @@ def save(**changes) -> dict:
         raw = {}
     raw.update(now)
     raw.update(changes)
-    raw["hide_idle"] = raw["idle"] == "hide"
+    # An older pill that does not know "never" reads hide_idle and stays
+    # hidden while idle, the nearest thing it can do.
+    raw["hide_idle"] = raw["idle"] in ("hide", "never")
     SETTINGS.parent.mkdir(parents=True, exist_ok=True)
     tmp = SETTINGS.with_name(SETTINGS.name + ".tmp")
     tmp.write_text(json.dumps(raw, indent=1))

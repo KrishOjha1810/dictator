@@ -24,6 +24,8 @@
 //   always  the small faint grey pill stays on screen, as before; hovering it
 //           shows the buttons.
 //   hide    nothing, and no buttons; it appears only while dictating.
+//   never   nothing, ever, not even while dictating: the one setting that
+//           hides listening. For people who go by macOS's microphone dot.
 //
 // So no pill means our microphone is closed, or this helper is not running. It
 // says nothing about OTHER apps: another program may have the microphone while
@@ -59,10 +61,10 @@
 //
 //   the pill itself (dictate)   click: start hands free dictation; click again,
 //                               or press the key once, to finish and paste
-//   notetaker                   start or stop recording a meeting, through the
-//                               app (which asks for consent the first time);
-//                               red while a meeting records
-//   scratchpad                  open the Scratchpad window in the app
+//   notetaker                   open the app on its Meetings page (planned: and
+//                               start taking notes there); red while a
+//                               meeting records
+//   scratchpad                  open the app on its Scratchpad page
 //
 // They stack from the pill toward the middle of the screen. Hovering one slides
 // out a label with its name and shortcut, on the inside: left of the stack at
@@ -71,7 +73,7 @@
 // (stop and throw away, as Escape) and check (stop, transcribe and paste).
 //
 // HOW A CLICK GETS ANYWHERE. Dictation commands go to the loop as one datagram
-// on STATE/dictate.sock (dictator/control.py), which hands them to the key
+// on STATE/dictate.sock (dictator_core/control.py), which hands them to the key
 // listener, so a session started by a click and one started by a double tap
 // are the same session. Notetaker and Scratchpad open dictator://notetaker and
 // dictator://scratchpad in the app whose path is in STATE/app.lock, and only
@@ -313,7 +315,9 @@ let STATE: URL = {
     return FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".dictator")
 }()
 
-enum IdleMode: String { case hover, always, hide }
+/// "never" is not about idle only: no pill at all, not even while
+/// dictating. The person chose to go by macOS's own microphone dot.
+enum IdleMode: String { case hover, always, hide, never }
 
 /// indicator.json, as orbnative.settings() reads it.
 struct IndicatorSettings: Equatable {
@@ -508,7 +512,7 @@ func lockHeld(_ name: String) -> Bool {
     return errno == EWOULDBLOCK
 }
 
-/// One command to the dictation loop (dictator/control.py): toggle, finish or
+/// One command to the dictation loop (dictator_core/control.py): toggle, finish or
 /// cancel. A datagram: nobody bound means it fails at once, never reaches a
 /// stranger.
 @discardableResult
@@ -1050,6 +1054,9 @@ struct Scene: Equatable {
 /// can be read in one place: listening is never hidden and never replaced.
 func scene(look: Look, handsFree: Bool, revealed: Bool, idle: IdleMode,
            controls: [Control], loop: Bool, app: Bool, spot: Spot) -> Scene? {
+    // The one exception to "listening is never hidden": the person turned
+    // the pill off in Settings.
+    if idle == .never { return nil }
     let o = spot.orientation
     let extra = controls.filter {
         $0 != .dictate && app && (idle != .hide)
@@ -1346,7 +1353,7 @@ final class App: NSObject, NSApplicationDelegate, OrbDelegate {
         } else if revealed && Date().timeIntervalSince(lastNear) > 1.0 {
             revealed = false
         }
-        if settings.idle == .hide { revealed = false }
+        if settings.idle == .hide || settings.idle == .never { revealed = false }
 
         let sc = scene(look: look, handsFree: handsFree, revealed: revealed, idle: settings.idle,
                        controls: settings.controls, loop: loopUp, app: appURL != nil,
@@ -1394,7 +1401,7 @@ final class App: NSObject, NSApplicationDelegate, OrbDelegate {
             }
         case .cancel: tellLoop("cancel")
         case .finish: tellLoop("finish")
-        case .button(.notetaker): openInApp("notetaker", activate: false)
+        case .button(.notetaker): openInApp("notetaker", activate: true)
         case .button(.scratchpad): openInApp("scratchpad", activate: true)
         case .button(.dictate): tellLoop("toggle")
         }
@@ -1418,11 +1425,12 @@ final class App: NSObject, NSApplicationDelegate, OrbDelegate {
             }
         case .cancel: return LabelView.make("Cancel, paste nothing", "esc")
         case .finish: return LabelView.make("Finish and paste", KEY_NAME)
+        // Both open the app on its page. ⌥M still starts and stops a
+        // recording, which a click no longer does, so it is not shown here.
         case .button(.notetaker):
-            return LabelView.make(recording ? "Stop Notetaker" : "Start Notetaker",
-                                  s.shortcutNotetaker ? "⌥ M" : nil)
+            return LabelView.make(recording ? "Recording, open Meetings" : "Open Meetings", nil)
         case .button(.scratchpad):
-            return LabelView.make("Scratchpad", s.shortcutScratchpad ? "⌥ S" : nil)
+            return LabelView.make("Open Scratchpad", s.shortcutScratchpad ? "⌥ S" : nil)
         case .button(.dictate): return nil
         }
     }
@@ -1679,8 +1687,8 @@ enum Snapshot {
         if sc != nil, let h = hover {
             let t: NSAttributedString?
             switch h {
-            case .button(.notetaker): t = LabelView.make(recording ? "Stop Notetaker" : "Start Notetaker", "⌥ M")
-            case .button(.scratchpad): t = LabelView.make("Scratchpad", "⌥ S")
+            case .button(.notetaker): t = LabelView.make(recording ? "Recording, open Meetings" : "Open Meetings", nil)
+            case .button(.scratchpad): t = LabelView.make("Open Scratchpad", "⌥ S")
             case .cancel: t = LabelView.make("Cancel, paste nothing", "esc")
             case .finish: t = LabelView.make("Finish and paste", KEY_NAME)
             case .pill: t = LabelView.make("Dictate hands free", "double-tap \(KEY_NAME)")

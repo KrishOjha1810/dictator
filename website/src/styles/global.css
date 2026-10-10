@@ -23,7 +23,8 @@
 
   --peach: #f3bba4;
   --rose: #e8a097;
-  --violet: #6e4ff0;
+  /* the app's cobalt blue: focus rings */
+  --focus: #315cff;
   --cursor: #8ff3e3;
 
   --ink: #14211d;
@@ -47,8 +48,74 @@
 
   --shadow-card: 0 1px 2px rgba(20, 33, 29, 0.06), 0 12px 32px -12px rgba(20, 33, 29, 0.18);
 
-  /* One light theme for everyone: the design is a daylight sky. */
+  /* the backdrop behind the page and the rim around each framed panel */
+  --backdrop: linear-gradient(180deg, var(--sage) 0%, var(--sage) 30%, var(--powder) 100%) fixed;
+  --rim: rgba(255, 255, 255, 0.55);
+  --rim-shadow: 0 30px 80px -40px rgba(20, 50, 44, 0.45);
+
+  /* white cards inside coloured tiles, and the greys on them */
+  --surface: #ffffff;
+  --surface-text: #14211d;
+  --surface-soft: #eef3f1;
+  --surface-faint: #8a9b95;
+  --surface-muted: #4d5d58;
+
+  /* the mint tiles */
+  --tile: linear-gradient(170deg, #94c6b2 0%, #7fb3a2 55%, #6aa392 100%);
+
+  --btn-dark: #14211d;
+  --btn-dark-hover: #1f312b;
+  --btn-dark-text: #f4f7f5;
+
   color-scheme: light;
+}
+
+/* Dark: a night sky. The same layout and the same mint, on the app's
+   blue-black canvas and slate cards. index.html sets data-theme before the
+   first paint, from the visitor's choice or else their system's. */
+:root[data-theme="dark"] {
+  --sage: #0f1b1c;
+  --sage-deep: #0b1415;
+  --powder: #142430;
+
+  --mint-50: #172120;
+  --mint-100: #1c2a27;
+  --mint-200: #263833;
+  --mint-400: #4f8a78;
+  --mint-500: #6fb59f;
+  --mint-600: #7cc7b0;
+  --mint-700: #9ad8c4;
+
+  --focus: #6f8bff;
+
+  --ink: #f4f5f0;
+  --ink-soft: #d4dad7;
+  --text: #f4f5f0;
+  --muted: #a9b3b0;
+  --faint: #86918e;
+
+  --panel: #10141b;
+  --card: #1b212b;
+  --line: rgba(255, 255, 255, 0.08);
+
+  --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.4), 0 12px 32px -12px rgba(0, 0, 0, 0.6);
+
+  --rim: rgba(255, 255, 255, 0.06);
+  --rim-shadow: 0 30px 80px -40px rgba(0, 0, 0, 0.8);
+
+  --surface: #1b212b;
+  --surface-text: #f4f5f0;
+  --surface-soft: #252c38;
+  --surface-faint: #86918e;
+  --surface-muted: #b5bfbc;
+
+  --tile: linear-gradient(170deg, #2c5a4e 0%, #234a40 55%, #1b3c34 100%);
+
+  --btn-dark: #f4f5f0;
+  --btn-dark-hover: #ffffff;
+  --btn-dark-text: #10141b;
+
+  color-scheme: dark;
 }
 
 /* ---------- base ---------- */
@@ -62,6 +129,9 @@
 html {
   -webkit-text-size-adjust: 100%;
   scroll-behavior: smooth;
+  /* iOS Safari ignores overflow-x on body alone; without this a phone can
+     scroll the page sideways by a few pixels */
+  overflow-x: clip;
 }
 
 body {
@@ -70,7 +140,7 @@ body {
   font-size: 17px;
   line-height: 1.5;
   color: var(--text);
-  background: linear-gradient(180deg, var(--sage) 0%, var(--sage) 30%, var(--powder) 100%) fixed;
+  background: var(--backdrop);
   background-color: var(--sage);
   -webkit-font-smoothing: antialiased;
   overflow-x: hidden;
@@ -101,7 +171,7 @@ p {
 }
 
 :focus-visible {
-  outline: 2px solid var(--violet);
+  outline: 2px solid var(--focus);
   outline-offset: 3px;
   border-radius: 6px;
 }
@@ -132,12 +202,18 @@ p {
   gap: var(--gutter);
 }
 
+/* Grid items do not shrink below their content's width by default, so one
+   long line (the marquee rows) made every panel wider than a phone screen. */
+.page > * {
+  min-width: 0;
+}
+
 /* the framed panels: a white rim around a rounded inner surface */
 .frame {
   border-radius: calc(var(--radius-xl) + var(--frame));
   padding: var(--frame);
-  background: rgba(255, 255, 255, 0.55);
-  box-shadow: 0 30px 80px -40px rgba(20, 50, 44, 0.45);
+  background: var(--rim);
+  box-shadow: var(--rim-shadow);
 }
 
 .panel {
@@ -210,13 +286,13 @@ p {
 }
 
 .btn-dark {
-  background: #14211d;
-  color: #f4f7f5;
+  background: var(--btn-dark);
+  color: var(--btn-dark-text);
   box-shadow: 0 10px 24px -10px rgba(10, 20, 17, 0.6);
 }
 
 .btn-dark:hover {
-  background: #1f312b;
+  background: var(--btn-dark-hover);
 }
 
 .btn-glass {

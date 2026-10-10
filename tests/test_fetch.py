@@ -9,7 +9,7 @@ import threading
 
 import pytest
 
-from dictator import core, fetch, stt
+from dictator_core import core, fetch, stt
 
 
 @pytest.fixture
@@ -262,7 +262,7 @@ def test_the_pid_file_is_gone_once_the_download_ends(models):
 
 
 def test_the_command_removes_only_with_yes(here, capsys, monkeypatch):
-    from dictator import cli
+    from dictator_core import cli
     monkeypatch.setattr("builtins.input", lambda *_: "n")
     assert cli.main(["dictator", "models", "remove", "hi.bin"]) == 0
     assert (here / "hi.bin").exists()
@@ -272,7 +272,7 @@ def test_the_command_removes_only_with_yes(here, capsys, monkeypatch):
 
 
 def test_ready_with_the_english_model_removed_says_so(here, monkeypatch):
-    from dictator import dictate
+    from dictator_core import dictate
     monkeypatch.setattr(stt, "ALIASES", {"english": "en.bin"})
     stt.remove("en.bin")
     dictate.publish("ready")

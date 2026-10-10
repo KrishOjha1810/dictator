@@ -22,8 +22,8 @@ const steps = [
     body: "Dictator asks for both. The microphone is for hearing you; Accessibility is what lets it paste into other apps. The speech models then download: English first (about 700 MB), then Hindi and Hinglish in the background (about 1.5 GB). Each is checked against its SHA256 before use.",
   },
   {
-    title: "Hold right ⌥ and talk",
-    body: "That's the key unless you change it. Double-tap it for hands free. If you switch to fn, set System Settings → Keyboard → Press 🌐 key to → Do Nothing, so macOS doesn't open the emoji picker on a tap.",
+    title: "Hold your key and talk",
+    body: "Pick it in Settings: fn, Option or Command. Double-tap it for hands free. If you pick fn, set System Settings → Keyboard → Press 🌐 key to → Do Nothing, so macOS doesn't open the emoji picker on a tap.",
   },
 ];
 
@@ -74,7 +74,10 @@ export default function Download() {
         </div>
       </section>
 
-      <Platforms heading="Every platform" intro="macOS is available now. iOS and Windows are on the way." />
+      <Platforms
+        heading="Every platform"
+        intro={`${latest ? "macOS is available now" : "macOS comes first, with the next release"}. iOS and Windows are on the way.`}
+      />
     </>
   );
 }

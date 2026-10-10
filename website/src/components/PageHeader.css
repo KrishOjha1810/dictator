@@ -43,3 +43,11 @@
   max-width: 52ch;
   color: rgba(255, 255, 255, 0.92);
 }
+
+/* Dark: the same dusk as the home page's sky, after sunset. */
+[data-theme="dark"] .c-pagehead .backdrop::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: rgba(6, 12, 20, 0.6);
+}

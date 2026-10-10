@@ -10,30 +10,24 @@ import AppKit
 import SwiftUI
 
 enum Page: String, CaseIterable, Identifiable {
-    case home = "Home", history = "History", words = "Words", snippets = "Snippets"
-    case scratchpad = "Scratchpad", style = "Style"
+    case home = "Home", words = "Words", snippets = "Snippets", scratchpad = "Scratchpad"
+    case style = "Style"
     case review = "Review", meetings = "Meetings", settings = "Settings", help = "Help"
     var id: String { rawValue }
 
-    /// The sidebar, in the order of a day: see what just happened, go back
-    /// through it, teach it, keep things.
-    ///
-    /// Six, because a list long enough to read is a list nobody reads. The
-    /// four that are not here (Scratchpad, Style, Review, Help) are a key
-    /// press away in the palette, which indexes every page by name.
-    static let main: [Page] = [.home, .history, .words, .snippets, .meetings, .settings]
+    /// The pages in the top of the sidebar; Settings and Help sit at the bottom.
+    static let main: [Page] = [.home, .words, .snippets, .scratchpad, .style, .review, .meetings]
 
     var symbol: String {
         switch self {
         case .home: return "house"
-        case .history: return "magnifyingglass"
         case .words: return "character.book.closed"
-        case .snippets: return "chevron.left.forwardslash.chevron.right"
+        case .snippets: return "text.badge.plus"
         case .scratchpad: return "note.text"
         case .style: return "textformat"
         case .review: return "checkmark.seal"
-        case .meetings: return "calendar"
-        case .settings: return "sun.max"
+        case .meetings: return "person.2"
+        case .settings: return "gearshape"
         case .help: return "questionmark.circle"
         }
     }
@@ -260,14 +254,19 @@ final class UI: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWindowDelegat
     }
 
     /// dictator://scratchpad and dictator://notetaker, from the pill's
-    /// buttons (native/orb.swift). The pill opens the Notetaker one without
-    /// bringing the app forward; the consent question brings it forward
-    /// itself, the first time only.
+    /// buttons (native/orb.swift). Both open the app on its own page: the
+    /// Scratchpad page, and Meetings.
+    ///
+    /// Planned: once the Meetings page records and takes notes itself (it
+    /// will get a window of its own), the Notetaker button should open it
+    /// and start taking notes for the meeting in one click. Until then it
+    /// only opens the page; ⌥M and the menu still start and stop a recording
+    /// through Notetaker.shared.toggle().
     func application(_ application: NSApplication, open urls: [URL]) {
         for u in urls where u.scheme == "dictator" {
             switch u.host ?? "" {
-            case "scratchpad": showScratchpad(nil)
-            case "notetaker": Notetaker.shared.toggle()
+            case "scratchpad": showHub(.scratchpad)
+            case "notetaker": showHub(.meetings)
             default: NSLog("dictator: unknown link \(u)")
             }
         }
@@ -619,13 +618,7 @@ final class UI: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWindowDelegat
         w.titlebarAppearsTransparent = true
         w.titleVisibility = .hidden
         w.isMovableByWindowBackground = true
-        // The glass is inside the window, not behind it: the view carries
-        // its own sky (Backdrop.swift) and the panels sit on that. So the
-        // window is opaque like any other, and unlike a window that blurs
-        // the desktop, it looks the same on every Mac. It also means a
-        // snapshot run photographs the real thing rather than a grey
-        // rectangle, which the earlier version could not.
-        w.backgroundColor = Glass.on ? .black : Palette.background
+        w.backgroundColor = Palette.background
         w.isReleasedWhenClosed = false
         w.delegate = self
         w.contentViewController = NSHostingController(

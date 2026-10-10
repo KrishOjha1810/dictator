@@ -9,7 +9,7 @@ actually spoke, while the encoder is around 85 percent of the bill.
 """
 import pytest
 
-from dictator import stt
+from dictator_core import stt
 
 
 @pytest.mark.parametrize("secs,window", [
@@ -89,7 +89,7 @@ def test_the_model_is_read_while_the_key_is_still_down(monkeypatch, tmp_path):
     do the work and nothing calling it from where the work happens. A warm-up
     nobody calls on key down is exactly that bug, and it costs a second on
     every hold that an install has not already paid for."""
-    from dictator import dictate, mac, warmup
+    from dictator_core import dictate, mac, warmup
 
     called = []
     monkeypatch.setattr(warmup, "models", lambda *a, **k: called.append(1))
@@ -104,7 +104,7 @@ def test_the_recorder_starts_before_the_model_is_read(monkeypatch, tmp_path):
     """The microphone is the one thing that must not wait. Reading 1.6GB
     before opening it would eat the first word, which is the failure the
     recorder was rewritten to avoid in the first place."""
-    from dictator import dictate, mac, warmup
+    from dictator_core import dictate, mac, warmup
 
     order = []
     monkeypatch.setattr(mac, "frontmost_app", lambda: "Terminal")
@@ -119,7 +119,7 @@ def test_the_recorder_starts_before_the_model_is_read(monkeypatch, tmp_path):
 def test_the_warm_up_reads_the_model_the_next_hold_will_open(monkeypatch):
     """Warming the wrong file is worse than warming nothing: it reads a
     gigabyte, reports success, and leaves the hold paying the disk anyway."""
-    from dictator import stt, warmup
+    from dictator_core import stt, warmup
 
     monkeypatch.setattr(stt, "language", lambda: "hinglish")
     monkeypatch.setattr(stt, "parakeet_ready", lambda: True)
@@ -135,13 +135,13 @@ def test_the_warm_up_reads_the_model_the_next_hold_will_open(monkeypatch):
 def test_a_missing_model_is_not_an_error(tmp_path):
     """A warm-up that raises would take the hold down with it, and the hold
     works perfectly well without one."""
-    from dictator import warmup
+    from dictator_core import warmup
     assert warmup.read_through(tmp_path / "not-here.bin") == 0.0
 
 
 def test_the_warm_up_does_not_stack(monkeypatch, tmp_path):
     """Two holds in a row must not send two threads through the same 1.6GB."""
-    from dictator import warmup
+    from dictator_core import warmup
 
     p = tmp_path / "model.bin"
     p.write_bytes(b"x" * 1024)
@@ -165,7 +165,7 @@ def test_the_helpers_are_run_once_before_any_hold(monkeypatch):
     still cost 695ms for the recorder and 547ms for the paste helper against
     5ms for every run after. The recorder's share of that is not a wait, it is
     the start of the sentence never reaching the file."""
-    from dictator import core, warmup
+    from dictator_core import core, warmup
 
     ran = []
     monkeypatch.setattr(warmup.subprocess, "run",
@@ -182,7 +182,7 @@ def test_the_helpers_are_run_with_no_arguments(monkeypatch):
     """With no arguments both print their usage and exit, which is the whole
     reason this is safe to do at startup: the recorder never reaches the
     microphone and the paste helper never touches the clipboard."""
-    from dictator import core, warmup
+    from dictator_core import core, warmup
 
     seen = []
     monkeypatch.setattr(warmup.subprocess, "run",
@@ -198,7 +198,7 @@ def test_the_listener_warms_everything_before_it_says_it_is_listening(monkeypatc
     """Same bug family as every other entry in docs/findings.md: something
     that knows how to do the work, and nothing calling it."""
     import inspect
-    from dictator import dictate
+    from dictator_core import dictate
     src = inspect.getsource(dictate.run)
     assert "warmup.at_startup()" in src
 

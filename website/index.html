@@ -7,6 +7,30 @@
     <link rel="icon" type="image/png" href="/favicon.png" />
     <link rel="apple-touch-icon" href="/icon.png" />
     <meta name="theme-color" content="#6e9f93" />
+    <script>
+      // Light or dark before the first paint: the visitor's choice from the
+      // switch in the nav, or else their system's, followed while it changes.
+      (function () {
+        var m = window.matchMedia("(prefers-color-scheme: dark)");
+        var saved = function () {
+          try {
+            var t = localStorage.getItem("theme");
+            return t === "light" || t === "dark" ? t : null;
+          } catch (e) {
+            return null;
+          }
+        };
+        var set = function (t) {
+          document.documentElement.dataset.theme = t;
+          var c = document.querySelector('meta[name="theme-color"]');
+          if (c) c.setAttribute("content", t === "dark" ? "#0f1b1c" : "#6e9f93");
+        };
+        set(saved() || (m.matches ? "dark" : "light"));
+        m.addEventListener("change", function (e) {
+          if (!saved()) set(e.matches ? "dark" : "light");
+        });
+      })();
+    </script>
   </head>
   <body>
     <div id="root"><!--app-html--></div>

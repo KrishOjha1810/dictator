@@ -18,7 +18,7 @@ alone when one is not. Both are honest and the report says which it is. What it
 will never do is call a server that is not on this machine, because a summary
 is a nice-to-have and the privacy claim is the product.
 
-    from dictator import Dictator
+    from dictator_core import Dictator
     print(Dictator().recap("today"))
 """
 import json

@@ -19,7 +19,7 @@ const pills = [
 ];
 
 const keys = [
-  { label: "right ⌥", note: "default", on: true },
+  { label: "right ⌥", note: "option", on: true },
   { label: "fn", note: "globe" },
   { label: "right ⌘", note: "" },
   { label: "left ⌘", note: "" },

@@ -18,7 +18,7 @@ from pathlib import Path
 
 import pytest
 
-from dictator import Dictator, history, recap
+from dictator_core import Dictator, history, recap
 
 ROOT = Path(__file__).resolve().parent.parent
 DAY = 86400
@@ -218,7 +218,7 @@ def test_the_report_never_shows_a_summary_the_guard_rejected(monkeypatch):
 def test_nothing_is_ever_sent_off_this_machine():
     """The product's whole claim. A recap is a convenience, and a convenience
     does not get to break it."""
-    src = (ROOT / "dictator" / "recap.py").read_text()
+    src = (ROOT / "dictator_core" / "recap.py").read_text()
     for url in re.findall(r"https?://[^\"'\s{}]*", src):
         assert recap.local_only(url) or "127.0.0.1" in url, url
     assert "https://" not in src
@@ -489,8 +489,8 @@ def test_the_library_exposes_it(monkeypatch):
 def test_the_public_surface_did_not_grow():
     """Recap is reached through the method that returns it. The four names in
     __all__ are the promise and a fifth is a new thing to keep working."""
-    import dictator
-    assert dictator.__all__ == ["Dictator", "Transcript", "transcribe", "VERSION"]
+    import dictator_core
+    assert dictator_core.__all__ == ["Dictator", "Transcript", "transcribe", "VERSION"]
     assert hasattr(Dictator, "recap")
 
 

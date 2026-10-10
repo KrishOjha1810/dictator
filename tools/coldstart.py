@@ -54,7 +54,7 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE.parent))
-from dictator import core, stt                    # noqa: E402
+from dictator_core import core, stt                    # noqa: E402
 
 # ---- the page cache, read and emptied ---------------------------------------
 # macOS has `purge`, which needs root and empties the whole cache, so it is no
@@ -187,7 +187,7 @@ def _exec_ms(exe: Path) -> float:
 
 
 _IMPORT = ("import sys; sys.path.insert(0, %r); "
-           "from dictator import api, stt  # noqa")
+           "from dictator_core import api, stt  # noqa")
 
 
 def _spawn_ms() -> float:
@@ -198,7 +198,7 @@ def _spawn_ms() -> float:
 
 
 def _polish_ms(text: str) -> float:
-    from dictator.api import Dictator
+    from dictator_core.api import Dictator
     d = Dictator(learn=False, remember=False)
     t0 = time.time()
     d.polish(d.romanise(text))
@@ -262,7 +262,7 @@ def one_hold(model: Path, wav: Path, lang: str, cold: bool,
         # counted in what the user waits for, because it happens during the
         # hold and not after it. Counting it would be measuring the fix
         # against a hold nobody made.
-        from dictator import warmup
+        from dictator_core import warmup
         t0 = time.time()
         warmup.models(background=False)
         row["preload"] = (time.time() - t0) * 1000.0
