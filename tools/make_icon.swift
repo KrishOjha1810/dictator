@@ -22,10 +22,17 @@ let out = URL(fileURLWithPath: CommandLine.arguments[1])
 
 // Deep indigo into violet into teal: a night sky the white microphone stands
 // out against in a Dock full of white and blue icons.
-let deep   = NSColor(srgbRed: 0.10, green: 0.09, blue: 0.30, alpha: 1)
-let violet = NSColor(srgbRed: 0.36, green: 0.20, blue: 0.78, alpha: 1)
-let teal   = NSColor(srgbRed: 0.10, green: 0.72, blue: 0.70, alpha: 1)
-let ink    = NSColor(srgbRed: 0.30, green: 0.22, blue: 0.72, alpha: 1)
+// Teal into deep slate. The ramp used to run through a saturated violet,
+// which is the single most recognisable mark of a generated interface and
+// the first thing anyone said about this icon. Teal is the one colour the
+// product means something by (the microphone is live); the rest is the
+// depth that keeps a 32 point icon from dissolving in the Dock.
+let deep   = NSColor(srgbRed: 0.055, green: 0.125, blue: 0.150, alpha: 1)
+let violet = NSColor(srgbRed: 0.090, green: 0.330, blue: 0.390, alpha: 1)
+let teal   = NSColor(srgbRed: 0.100, green: 0.720, blue: 0.690, alpha: 1)
+let ink    = NSColor(srgbRed: 0.070, green: 0.235, blue: 0.280, alpha: 1)
+let slateTop    = NSColor(srgbRed: 0.231, green: 0.247, blue: 0.267, alpha: 1)
+let slateBottom = NSColor(srgbRed: 0.102, green: 0.114, blue: 0.129, alpha: 1)
 
 func capsule(_ r: NSRect) -> NSBezierPath {
     NSBezierPath(roundedRect: r, xRadius: r.width / 2, yRadius: r.width / 2)
@@ -61,17 +68,20 @@ func draw(_ px: Int) -> Data {
         NSGraphicsContext.restoreGraphicsState()
     }
 
-    // Background: diagonal indigo to violet to teal, then light from above.
+    // Background: a dark slate tile with a little light from above, and
+    // nothing else. It was a diagonal teal to violet to indigo ramp, which
+    // is the look every generated app icon has; the mark is the microphone,
+    // so the tile's job is to stay out of its way and to read at 32 points
+    // in a Dock full of saturated squares by being the quiet one.
     NSGraphicsContext.saveGraphicsState()
     shape.addClip()
-    NSGradient(colors: [teal, violet, deep], atLocations: [0, 0.48, 1],
-               colorSpace: .sRGB)!.draw(in: body, angle: -55)
-    NSGradient(colors: [NSColor.white.withAlphaComponent(0.30),
+    NSGradient(colors: [slateTop, slateBottom], atLocations: [0, 1],
+               colorSpace: .sRGB)!.draw(in: body, angle: -90)
+    NSGradient(colors: [NSColor.white.withAlphaComponent(0.10),
                         NSColor.white.withAlphaComponent(0.0)])!
-        .draw(fromCenter: NSPoint(x: body.midX - body.width * 0.18, y: body.maxY),
-              radius: 0,
-              toCenter: NSPoint(x: body.midX - body.width * 0.18, y: body.maxY),
-              radius: body.width * 0.85, options: [])
+        .draw(fromCenter: NSPoint(x: body.midX, y: body.maxY), radius: 0,
+              toCenter: NSPoint(x: body.midX, y: body.maxY),
+              radius: body.width * 0.9, options: [])
     NSGraphicsContext.restoreGraphicsState()
 
     // A thin glassy rim, brighter at the top.
@@ -86,9 +96,9 @@ func draw(_ px: Int) -> Data {
     }
 
     // The microphone: a glossy white capsule on a stand.
-    let mw = body.width * 0.30, mh = body.height * 0.44
-    let mic = NSRect(x: body.midX - mw / 2 - body.width * 0.04,
-                     y: body.midY - mh / 2 + body.height * 0.08, width: mw, height: mh)
+    let mw = body.width * 0.27, mh = body.height * 0.40
+    let mic = NSRect(x: body.midX - mw / 2,
+                     y: body.midY - mh / 2 + body.height * 0.10, width: mw, height: mh)
     let micShadow = NSShadow()
     micShadow.shadowColor = NSColor.black.withAlphaComponent(0.30)
     micShadow.shadowBlurRadius = s * 0.035
@@ -104,19 +114,6 @@ func draw(_ px: Int) -> Data {
     NSGradient(colors: [NSColor.white, NSColor(srgbRed: 0.88, green: 0.88, blue: 0.96, alpha: 1)])!
         .draw(in: mic, angle: 0)
     NSGraphicsContext.restoreGraphicsState()
-
-    // The grille is lines of text: speech turning into writing.
-    let lines: [CGFloat] = [0.62, 0.78, 0.52, 0.70]
-    let lh = mh * (small ? 0.09 : 0.065)
-    let lgap = mh * 0.115
-    var ly = mic.midY + lgap * 1.5 - lh / 2
-    for w in lines {
-        let lw = mw * w
-        let r = NSRect(x: mic.midX - mw * 0.36, y: ly, width: lw, height: lh)
-        NSGradient(starting: ink, ending: teal)!
-            .draw(in: NSBezierPath(roundedRect: r, xRadius: lh / 2, yRadius: lh / 2), angle: 0)
-        ly -= lgap
-    }
 
     // The stand: a U around the capsule, a stem and a foot.
     let stand = NSBezierPath()
@@ -138,21 +135,6 @@ func draw(_ px: Int) -> Data {
     NSColor.white.setStroke()
     stand.stroke()
     NSGraphicsContext.restoreGraphicsState()
-
-    // A glowing text cursor beside it, where the words land.
-    if !small {
-        let cw = body.width * 0.035, ch = mh * 0.62
-        let cur = NSRect(x: mic.maxX + body.width * 0.15, y: mic.midY - ch / 2, width: cw, height: ch)
-        let glow = NSShadow()
-        glow.shadowColor = teal.withAlphaComponent(0.95)
-        glow.shadowBlurRadius = s * 0.04
-        glow.shadowOffset = .zero
-        NSGraphicsContext.saveGraphicsState()
-        glow.set()
-        NSColor(srgbRed: 0.55, green: 1.0, blue: 0.92, alpha: 1).setFill()
-        NSBezierPath(roundedRect: cur, xRadius: cw / 2, yRadius: cw / 2).fill()
-        NSGraphicsContext.restoreGraphicsState()
-    }
 
     NSGraphicsContext.restoreGraphicsState()
     return rep.representation(using: .png, properties: [:])!
