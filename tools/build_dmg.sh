@@ -374,9 +374,9 @@ run_bundled() {
     (cd "$SMOKE" && env -i HOME="$SMOKE" DICTATOR_STATE="$SMOKE/state" DICTATOR_BUNDLE="$APP" \
         PYTHONPATH="$C/Resources:$C/Resources/site-packages" "$PY" "$@")
 }
-run_bundled -P -c 'import importlib, pkgutil, dictator
+run_bundled -P -c 'import importlib, pkgutil, dictator_core
 for m in pkgutil.iter_modules(dictator_core.__path__):
-    importlib.import_module("dictator." + m.name)'
+    importlib.import_module("dictator_core." + m.name)'
 run_bundled "$C/Resources/bin/dictator" help >/dev/null
 rm -rf "$SMOKE"
 codesign --verify --deep --strict "$APP"
