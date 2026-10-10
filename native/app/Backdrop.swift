@@ -36,28 +36,28 @@ private struct Ridge {
 }
 
 private let ridges: [Ridge] = [
-    Ridge(points: [(0, 0.655), (0.119, 0.588), (0.206, 0.636), (0.325, 0.562),
-                   (0.438, 0.644), (0.550, 0.584), (0.663, 0.656), (0.781, 0.592),
-                   (0.888, 0.648), (1, 0.606)],
-          grey: 0.52, alpha: 0.17, fog: 0.644),
-    Ridge(points: [(0, 0.722), (0.106, 0.666), (0.200, 0.714), (0.313, 0.640),
-                   (0.431, 0.726), (0.544, 0.666), (0.656, 0.732), (0.775, 0.668),
-                   (0.881, 0.726), (1, 0.684)],
-          grey: 0.42, alpha: 0.22, fog: 0.714),
-    Ridge(points: [(0, 0.790), (0.113, 0.736), (0.206, 0.782), (0.319, 0.704),
-                   (0.438, 0.792), (0.550, 0.730), (0.663, 0.798), (0.781, 0.734),
-                   (0.888, 0.790), (1, 0.748)],
-          grey: 0.32, alpha: 0.30, fog: 0.782),
-    Ridge(points: [(0, 0.858), (0.100, 0.812), (0.213, 0.862), (0.325, 0.800),
-                   (0.438, 0.868), (0.550, 0.814), (0.669, 0.874), (0.788, 0.818),
-                   (0.900, 0.872), (1, 0.834)],
-          grey: 0.22, alpha: 0.40, fog: 0.852),
-    Ridge(points: [(0, 0.918), (0.150, 0.886), (0.294, 0.924), (0.438, 0.880),
-                   (0.588, 0.928), (0.738, 0.884), (0.875, 0.926), (1, 0.892)],
-          grey: 0.13, alpha: 0.55, fog: nil),
-    Ridge(points: [(0, 0.964), (0.188, 0.946), (0.388, 0.968), (0.588, 0.944),
-                   (0.800, 0.970), (1, 0.948)],
-          grey: 0.07, alpha: 0.72, fog: nil),
+    Ridge(points: [(0, 0.470), (0.119, 0.370), (0.206, 0.442), (0.325, 0.332),
+                   (0.438, 0.456), (0.550, 0.364), (0.663, 0.474), (0.781, 0.378),
+                   (0.888, 0.460), (1, 0.398)],
+          grey: 0.72, alpha: 0.34, fog: 0.452),
+    Ridge(points: [(0, 0.566), (0.106, 0.478), (0.200, 0.552), (0.313, 0.438),
+                   (0.431, 0.570), (0.544, 0.474), (0.656, 0.578), (0.775, 0.480),
+                   (0.881, 0.568), (1, 0.504)],
+          grey: 0.58, alpha: 0.44, fog: 0.550),
+    Ridge(points: [(0, 0.660), (0.113, 0.576), (0.206, 0.648), (0.319, 0.530),
+                   (0.438, 0.664), (0.550, 0.570), (0.663, 0.674), (0.781, 0.576),
+                   (0.888, 0.660), (1, 0.598)],
+          grey: 0.42, alpha: 0.58, fog: 0.646),
+    Ridge(points: [(0, 0.756), (0.100, 0.682), (0.213, 0.760), (0.325, 0.662),
+                   (0.438, 0.772), (0.550, 0.688), (0.669, 0.782), (0.788, 0.694),
+                   (0.900, 0.778), (1, 0.718)],
+          grey: 0.28, alpha: 0.74, fog: 0.744),
+    Ridge(points: [(0, 0.858), (0.150, 0.804), (0.294, 0.868), (0.438, 0.796),
+                   (0.588, 0.874), (0.738, 0.802), (0.875, 0.876), (1, 0.816)],
+          grey: 0.17, alpha: 0.90, fog: nil),
+    Ridge(points: [(0, 0.942), (0.188, 0.912), (0.388, 0.948), (0.588, 0.908),
+                   (0.800, 0.950), (1, 0.914)],
+          grey: 0.09, alpha: 1.0, fog: nil),
 ]
 
 struct Backdrop: View {
@@ -79,10 +79,12 @@ struct Backdrop: View {
             // Drawn a little larger than the window and clipped, so the blur
             // below does not pull transparent pixels in from outside the
             // edges and leave a pale rim.
+            .frame(width: w + Glass.blur * 4, height: h + Glass.blur * 4)
+            .blur(radius: Glass.blur)
             .frame(width: w, height: h)
-            .blur(radius: Glass.blur, opaque: true)
             .clipped()
             .overlay(Color.white.opacity(Glass.tint))
+            .drawingGroup()
         }
         .ignoresSafeArea()
         .allowsHitTesting(false)
@@ -92,21 +94,21 @@ struct Backdrop: View {
     /// hills in front of it read as distance rather than as shapes.
     private var sky: some View {
         LinearGradient(stops: [
-            .init(color: grey(0.055), location: 0.00),
-            .init(color: grey(0.105), location: 0.42),
-            .init(color: grey(0.195), location: 0.70),
-            .init(color: grey(0.300), location: 0.88),
-            .init(color: grey(0.380), location: 1.00),
+            .init(color: grey(0.115), location: 0.00),
+            .init(color: grey(0.215), location: 0.34),
+            .init(color: grey(0.360), location: 0.60),
+            .init(color: grey(0.520), location: 0.82),
+            .init(color: grey(0.620), location: 1.00),
         ], startPoint: .top, endPoint: .bottom)
     }
 
     /// The low sun, as a glow rather than a disc with an edge. An edge would
     /// survive the blur and read as a bright blob behind the cards.
     private func haze(_ w: CGFloat, _ h: CGFloat) -> some View {
-        RadialGradient(colors: [Color(white: 0.94).opacity(0.17),
-                                Color(white: 0.94).opacity(0)],
-                       center: .init(x: 0.70, y: 0.60),
-                       startRadius: 0, endRadius: max(w, h) * 0.46)
+        RadialGradient(colors: [Color(white: 0.97).opacity(0.46),
+                                Color(white: 0.97).opacity(0)],
+                       center: .init(x: 0.70, y: 0.46),
+                       startRadius: 0, endRadius: max(w, h) * 0.50)
     }
 
     private func hills(_ w: CGFloat, _ h: CGFloat) -> some View {
@@ -117,7 +119,7 @@ struct Backdrop: View {
                     shape(r, w, h).fill(grey(r.grey).opacity(r.alpha))
                     if let y = r.fog {
                         LinearGradient(colors: [Color(white: 0.82).opacity(0),
-                                                Color(white: 0.82).opacity(0.14),
+                                                Color(white: 0.86).opacity(0.26),
                                                 Color(white: 0.82).opacity(0)],
                                        startPoint: .top, endPoint: .bottom)
                             .frame(height: h * 0.08)

@@ -12,10 +12,38 @@
 import AppKit
 import SwiftUI
 
+/// How wide the window is, for the two places that have to adapt to it.
+///
+/// Read from one GeometryReader at the root rather than measured again in
+/// each view: a sidebar cannot see the window from inside its own fixed
+/// width, which is how this came to be laid out for 1020 points and then
+/// clipped on both sides at anything narrower.
+private struct WindowWidthKey: EnvironmentKey { static let defaultValue: CGFloat = 1180 }
+
+extension EnvironmentValues {
+    var windowWidth: CGFloat {
+        get { self[WindowWidthKey.self] }
+        set { self[WindowWidthKey.self] = newValue }
+    }
+}
+
+/// Below this the right hand column folds into the page instead of sitting
+/// beside it. Nothing is lost, it just stacks.
+let roomForRecent: CGFloat = 1000
+/// Below this the sidebar keeps its icons and drops its words.
+let roomForRailLabels: CGFloat = 840
+
 struct HubView: View {
     @EnvironmentObject var model: AppModel
 
     var body: some View {
+        GeometryReader { geo in
+            shell.environment(\.windowWidth, geo.size.width)
+        }
+        .ignoresSafeArea()
+    }
+
+    private var shell: some View {
         HStack(spacing: 0) {
             Sidebar()
             Group {
@@ -44,7 +72,17 @@ struct HubView: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             .background(Theme.background)
         }
-        .frame(minWidth: 1020, minHeight: 620)
+        // No minimum width here. It used to be 1020, which did not stop the
+        // window being resized smaller: it made the content stay 1020 wide
+        // and sit centred, so the sidebar was cut off on the left and the
+        // recent column on the right. The window has a minimum; the layout
+        // adapts instead of insisting.
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        // A soft shadow under everything, so white type stays readable where
+        // the sky is pale near the horizon. The alternative was darkening the
+        // sky until it was black, which was tried and is how this ended up
+        // looking like a plain dark window.
+        .shadow(color: .black.opacity(Glass.on ? 0.42 : 0), radius: 2.5, y: 1)
         .background(Group {
             // The app's own sky, not the user's desktop. Why, in Backdrop.
             if Glass.on { Backdrop() } else { Theme.background }
@@ -73,22 +111,32 @@ final class RailState: ObservableObject {
 
 struct Sidebar: View {
     @EnvironmentObject var model: AppModel
+    @Environment(\.windowWidth) private var windowWidth
     @StateObject private var st = RailState()
 
     var body: some View {
+        let wide = windowWidth >= roomForRailLabels
+        return content(wide)
+    }
+
+    private func content(_ wide: Bool) -> some View {
         VStack(alignment: .leading, spacing: 0) {
             HStack(spacing: 10) {
                 BrandMark(size: 25)
-                Text("Dictator").font(.display(15, .semibold)).foregroundColor(Theme.text)
+                if wide {
+                    Text("Dictator").font(.display(15, .semibold)).foregroundColor(Theme.text)
+                }
             }
             .padding(.horizontal, 8)
             .padding(.bottom, 20)
 
             VStack(spacing: 2) {
-                ForEach(Page.main) { SidebarItem(page: $0, count: st.counts[$0]) }
+                ForEach(Page.main) {
+                    SidebarItem(page: $0, count: wide ? st.counts[$0] : nil, labelled: wide)
+                }
             }
 
-            if !st.taught.isEmpty {
+            if wide, !st.taught.isEmpty {
                 Text("Words you taught it")
                     .font(.system(size: 11)).foregroundColor(Theme.tertiary)
                     .padding(.horizontal, 12).padding(.top, 24).padding(.bottom, 8)
@@ -122,12 +170,16 @@ struct Sidebar: View {
                             .fill(Color.white.opacity(0.12)))
                         .overlay(RoundedRectangle(cornerRadius: 6, style: .continuous)
                             .strokeBorder(Color.white.opacity(0.22), lineWidth: 1))
-                    Text("hold to talk").font(.system(size: 12))
-                        .foregroundColor(Theme.secondary)
+                    if wide {
+                        Text("hold to talk").font(.system(size: 12))
+                            .foregroundColor(Theme.secondary)
+                    }
                 }
-                Text("double tap for hands free")
-                    .font(.system(size: 11)).foregroundColor(Theme.tertiary)
-                StatusLine().padding(.top, 2)
+                if wide {
+                    Text("double tap for hands free")
+                        .font(.system(size: 11)).foregroundColor(Theme.tertiary)
+                    StatusLine().padding(.top, 2)
+                }
             }
             .padding(.horizontal, 12)
         }
@@ -137,7 +189,7 @@ struct Sidebar: View {
         // points wider than the rail made the padded view wider than the
         // frame, and the whole column slid left until the inset looked like
         // it had been forgotten.
-        .frame(width: 192, alignment: .leading)
+        .frame(width: wide ? 192 : 42, alignment: .leading)
         .padding(.horizontal, 11)
         .frame(maxHeight: .infinity, alignment: .top)
         .clipped()
@@ -172,6 +224,8 @@ struct SidebarItem: View {
     /// How many of the thing the page holds, shown small and right aligned.
     /// Nil for a page where a number means nothing.
     var count: Int? = nil
+    /// False in a narrow window: the icon alone, with the name as its help.
+    var labelled = true
     @StateObject private var hover = Hover()
 
     var body: some View {
@@ -182,17 +236,19 @@ struct SidebarItem: View {
                     .font(.system(size: 13, weight: .regular))
                     .foregroundColor(on ? Theme.text : Theme.secondary)
                     .frame(width: 16)
-                Text(page.rawValue)
-                    .font(.system(size: 13.5, weight: on ? .medium : .regular))
-                    .foregroundColor(on ? Theme.text : Theme.secondary)
-                Spacer(minLength: 6)
+                if labelled {
+                    Text(page.rawValue)
+                        .font(.system(size: 13.5, weight: on ? .medium : .regular))
+                        .foregroundColor(on ? Theme.text : Theme.secondary)
+                }
+                Spacer(minLength: 0)
                 if let c = count {
                     Text(c.formatted())
                         .font(.system(size: 11, design: .monospaced))
                         .foregroundColor(Theme.tertiary)
                 }
             }
-            .padding(.horizontal, 12)
+            .padding(.horizontal, labelled ? 12 : 7)
             .frame(height: 36)
             // Selection is a lighter sheet of the same glass with a hairline
             // round it, not a coloured pill: one accent in the app, and it
@@ -204,6 +260,7 @@ struct SidebarItem: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .help(labelled ? "" : page.rawValue)
         .onHover { hover.on = $0 && !snapshotRun }
     }
 }
@@ -410,24 +467,36 @@ struct HomePage: View {
     // working, and what has it learned. Everything that is a list to go
     // through lives in History, because a page that is both a dashboard and
     // an archive is neither.
+    @Environment(\.windowWidth) private var windowWidth
+
     var body: some View {
-        HStack(spacing: 0) {
+        let beside = windowWidth >= roomForRecent
+        return HStack(spacing: 0) {
             PageScroll {
                 if let r = model.clash { RivalBanner(running: r) }
                 greetingRow
                 lastSaid
                 cards
                 learned
+                // Narrow window: the same column, stacked under the page
+                // rather than clipped off the side of it.
+                if !beside { recent.padding(.top, Theme.s3) }
             }
-            Rectangle().fill(Theme.hairline).frame(width: 1)
-            RecentColumn(said: Array(st.said.prefix(5)),
-                         listening: model.status.state == "ready" && !model.paused)
+            if beside {
+                Rectangle().fill(Theme.hairline).frame(width: 1)
+                recent.frame(width: 274)
+            }
         }
         .onAppear {
             if let q = model.takeSeed(.home) { st.query = q }
             load()
             model.checkRivals()
         }
+    }
+
+    private var recent: some View {
+        RecentColumn(said: Array(st.said.prefix(5)),
+                     listening: model.status.state == "ready" && !model.paused)
     }
 
     // -----------------------------------------------------------------------
@@ -440,10 +509,12 @@ struct HomePage: View {
                     .lineLimit(1).minimumScaleFactor(0.75).fixedSize(horizontal: false, vertical: true)
                 HStack(spacing: 9) {
                     Chip(text: "nothing left this Mac", symbol: "lock.fill")
-                    Text(st.words.map { "\($0.formatted()) dictations, all of them here" }
-                         ?? "everything stays here")
-                        .font(.system(size: 13)).foregroundColor(Theme.tertiary)
-                        .lineLimit(1).fixedSize()
+                    if windowWidth >= roomForRecent {
+                        Text(st.words.map { "\($0.formatted()) dictations, all of them here" }
+                             ?? "everything stays here")
+                            .font(.system(size: 13)).foregroundColor(Theme.tertiary)
+                            .lineLimit(1)
+                    }
                 }
             }
             Spacer(minLength: 0)
@@ -480,17 +551,15 @@ struct HomePage: View {
 
             Rectangle().fill(Theme.hairline).frame(height: 1).padding(.top, 20)
 
-            HStack(spacing: 16) {
-                if let a = l?.app, !a.isEmpty { fact("went to", a) }
-                if let s = st.said.first?.secs, s > 0 {
-                    fact("held", String(format: "%.1fs", s))
+            Group {
+                if windowWidth >= 1080 {
+                    HStack(spacing: 16) { facts(l); Spacer(minLength: 12); actions(l) }
+                } else {
+                    VStack(alignment: .leading, spacing: 12) {
+                        HStack(spacing: 16) { facts(l); Spacer(minLength: 0) }
+                        HStack(spacing: 8) { actions(l); Spacer(minLength: 0) }
+                    }
                 }
-                if let ms = l?.ms { fact("pasted", "\(waited(ms)) later") }
-                Spacer(minLength: 0)
-                quiet("Undo the paste") { _ = CLI.act(["undo"]) }
-                quiet("Copy") { if let s = l?.text { NSPasteboard.general.clearContents()
-                    NSPasteboard.general.setString(s, forType: .string) } }
-                quiet("Fix a word") { model.page = .words }
             }
             .padding(.top, 14)
         }
@@ -498,6 +567,25 @@ struct HomePage: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous)
             .strokeBorder(Theme.hairline, lineWidth: 1))
+    }
+
+    @ViewBuilder
+    private func facts(_ l: Last?) -> some View {
+        if let a = l?.app, !a.isEmpty { fact("went to", a) }
+        if let s = st.said.first?.secs, s > 0 { fact("held", String(format: "%.1fs", s)) }
+        if let ms = l?.ms { fact("pasted", "\(waited(ms)) later") }
+    }
+
+    @ViewBuilder
+    private func actions(_ l: Last?) -> some View {
+        quiet("Undo the paste") { _ = CLI.act(["undo"]) }
+        quiet("Copy") {
+            if let s = l?.text {
+                NSPasteboard.general.clearContents()
+                NSPasteboard.general.setString(s, forType: .string)
+            }
+        }
+        quiet("Fix a word") { model.page = .words }
     }
 
     private func fact(_ label: String, _ value: String) -> some View {

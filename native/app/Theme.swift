@@ -153,10 +153,14 @@ enum Palette {
     static let warn = dynamic(hex(0xB8650A), hex(0xF2A649))
     static let bad = dynamic(hex(0xC23A30), hex(0xFF7A6E))
 
-    // The icon's gradient stops.
-    static let gradTeal = hex(0x18AFAB)
-    static let gradViolet = hex(0x5C33C7)
-    static let gradDeep = hex(0x1D1852)
+    // The brand's stops. These were teal, violet and deep indigo, and the
+    // violet is gone: a saturated violet to teal ramp is the single most
+    // recognisable mark of a generated interface, and over a photograph it
+    // fights everything behind it. Teal into slate keeps the one colour the
+    // product means something by and drops the one it did not.
+    static let gradTeal = hex(0x19B3AD)
+    static let gradViolet = hex(0x1E5F6B)
+    static let gradDeep = hex(0x12242B)
     static let cursorGlow = hex(0x8CFFEB)
 }
 

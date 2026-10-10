@@ -22,10 +22,15 @@ let out = URL(fileURLWithPath: CommandLine.arguments[1])
 
 // Deep indigo into violet into teal: a night sky the white microphone stands
 // out against in a Dock full of white and blue icons.
-let deep   = NSColor(srgbRed: 0.10, green: 0.09, blue: 0.30, alpha: 1)
-let violet = NSColor(srgbRed: 0.36, green: 0.20, blue: 0.78, alpha: 1)
-let teal   = NSColor(srgbRed: 0.10, green: 0.72, blue: 0.70, alpha: 1)
-let ink    = NSColor(srgbRed: 0.30, green: 0.22, blue: 0.72, alpha: 1)
+// Teal into deep slate. The ramp used to run through a saturated violet,
+// which is the single most recognisable mark of a generated interface and
+// the first thing anyone said about this icon. Teal is the one colour the
+// product means something by (the microphone is live); the rest is the
+// depth that keeps a 32 point icon from dissolving in the Dock.
+let deep   = NSColor(srgbRed: 0.055, green: 0.125, blue: 0.150, alpha: 1)
+let violet = NSColor(srgbRed: 0.090, green: 0.330, blue: 0.390, alpha: 1)
+let teal   = NSColor(srgbRed: 0.100, green: 0.720, blue: 0.690, alpha: 1)
+let ink    = NSColor(srgbRed: 0.070, green: 0.235, blue: 0.280, alpha: 1)
 
 func capsule(_ r: NSRect) -> NSBezierPath {
     NSBezierPath(roundedRect: r, xRadius: r.width / 2, yRadius: r.width / 2)
