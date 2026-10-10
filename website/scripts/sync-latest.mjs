@@ -10,7 +10,8 @@
 //                            writes it). /download/mac goes to its Dictator.dmg
 //                            and /appcast.xml to its feed, the address
 //                            installed apps check for updates.
-//   DICTATOR_RELEASES_REPO   otherwise, the latest GitHub release of owner/name
+//   DICTATOR_RELEASES_REPO   otherwise, or while the bucket has no latest.json
+//                            yet, the latest GitHub release of owner/name
 //                            (GITHUB_TOKEN once the repo is private).
 //
 // If neither can be reached, a latest.json left by an earlier run is kept, so
@@ -68,7 +69,15 @@ async function main() {
 
   let latest;
   try {
-    latest = BASE ? await fetchFromBucket() : await fetchFromGitHub();
+    // Before the first release reaches the bucket it has no latest.json; with
+    // a repo named too, the GitHub release stands in until it does.
+    latest = BASE
+      ? await fetchFromBucket().catch((err) => {
+          if (!REPO) throw err;
+          console.warn(`sync-latest: ${err.message}; using ${REPO} for now`);
+          return fetchFromGitHub();
+        })
+      : await fetchFromGitHub();
   } catch (err) {
     latest = JSON.parse(await readFile(DATA, "utf8").catch(() => "null"));
     if (!latest?.version) throw err;
