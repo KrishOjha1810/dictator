@@ -1,4 +1,5 @@
 import DownloadButton from "./DownloadButton";
+import ThemeToggle from "./ThemeToggle";
 import "./Nav.css";
 
 const links = [
@@ -13,7 +14,7 @@ export default function Nav({ tone = "sky" }: { tone?: "sky" | "panel" }) {
     <header className={`c-nav nav ${tone}`}>
       <a className="brand" href="/" aria-label="Dictator home">
         <img src="/icon.png" alt="" width={34} height={34} />
-        <span>Dictator</span>
+        <span>dictator</span>
       </a>
       <nav className="links" aria-label="Main">
         {links.map((l) => (
@@ -21,6 +22,7 @@ export default function Nav({ tone = "sky" }: { tone?: "sky" | "panel" }) {
             {l.label}
           </a>
         ))}
+        <ThemeToggle />
         <DownloadButton className="btn btn-dark cta">Download</DownloadButton>
       </nav>
     </header>

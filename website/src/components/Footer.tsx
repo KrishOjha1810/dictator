@@ -13,7 +13,7 @@ export default function Footer() {
       <div className="row">
         <a className="brand" href="/">
           <img src="/icon.png" alt="" width={28} height={28} />
-          Dictator
+          dictator
         </a>
         <nav className="mono" aria-label="Footer">
           <a href="/download">Install guide</a>

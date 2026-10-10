@@ -152,3 +152,8 @@
     grid-template-columns: 1fr;
   }
 }
+
+[data-theme="dark"] .c-platforms .live {
+  background: rgba(112, 225, 193, 0.14);
+  color: #70e1c1;
+}

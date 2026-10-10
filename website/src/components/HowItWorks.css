@@ -40,7 +40,7 @@
   align-items: center;
   padding: clamp(28px, 4vw, 56px);
   border-radius: var(--radius-lg);
-  background: linear-gradient(170deg, #94c6b2 0%, #7fb3a2 55%, #6aa392 100%);
+  background: var(--tile);
   color: #fff;
 }
 
@@ -73,8 +73,8 @@
   gap: 10px;
   padding: 18px;
   border-radius: 22px;
-  background: #fff;
-  color: #14211d;
+  background: var(--surface);
+  color: var(--surface-text);
   box-shadow: 0 24px 50px -24px rgba(20, 40, 36, 0.5);
 }
 
@@ -87,12 +87,12 @@
 }
 
 .c-how .said {
-  background: #eef3f1;
+  background: var(--surface-soft);
 }
 
 .c-how .said p {
   font-style: italic;
-  color: #4d5d58;
+  color: var(--surface-muted);
 }
 
 .c-how .typed {
@@ -108,7 +108,7 @@
 .c-how .said .mono,
 .c-how .typed .mono {
   font-size: 10px;
-  color: #8a9b95;
+  color: var(--surface-faint);
 }
 
 .c-how .arrow {

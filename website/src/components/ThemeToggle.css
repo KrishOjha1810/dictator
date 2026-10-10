@@ -1,0 +1,43 @@
+/* Scoped to .c-theme, the component's root element. It sits in the nav's
+   links pill, so it takes the links' colour: white on the sky, ink on a
+   panel. */
+
+.c-theme {
+  display: inline-grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+}
+
+.c-theme:hover {
+  background: rgba(255, 255, 255, 0.18);
+}
+
+.c-theme svg {
+  width: 18px;
+  height: 18px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.c-theme .moon {
+  display: none;
+}
+
+[data-theme="dark"] .c-theme .sun {
+  display: none;
+}
+
+[data-theme="dark"] .c-theme .moon {
+  display: block;
+}

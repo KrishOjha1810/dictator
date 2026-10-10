@@ -120,8 +120,8 @@
 }
 
 .c-hero .card {
-  background: #fff;
-  color: #14211d;
+  background: var(--surface);
+  color: var(--surface-text);
   border-radius: 26px;
   padding: 14px;
   box-shadow: 0 30px 60px -30px rgba(20, 40, 36, 0.55);
@@ -143,12 +143,12 @@
   width: 10px;
   height: 10px;
   border-radius: 50%;
-  background: #e4ebe8;
+  background: var(--surface-soft);
 }
 
 .c-hero .app {
   font-size: 11px;
-  color: #7c8c87;
+  color: var(--surface-faint);
 }
 
 .c-hero .thread {
@@ -171,11 +171,11 @@
   position: absolute;
   top: 6px;
   font-size: 9px;
-  color: #9aa8a3;
+  color: var(--surface-faint);
 }
 
 .c-hero .them {
-  background: #edf2f0;
+  background: var(--surface-soft);
 }
 
 .c-hero .them time {
