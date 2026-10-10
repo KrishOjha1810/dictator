@@ -25,9 +25,7 @@ in the environment wins over `.env`.
 | Variable | Meaning |
 |---|---|
 | `DICTATOR_SITE_URL` | the site's public address, for canonical and share links. On Cloudflare Pages without it, the deployment's own address is used |
-| `DICTATOR_DOWNLOAD_BASE` | the R2 bucket's public URL. Set, the release comes from its `latest.json`, and `/download/mac` and `/appcast.xml` redirect into it |
-| `DICTATOR_RELEASES_REPO` | the public GitHub repo that holds the releases (`mynk03/dictator`). Read when `DICTATOR_DOWNLOAD_BASE` is not set; see [`docs/cloudflare-r2.md`](../docs/cloudflare-r2.md) for the bucket |
-| `GITHUB_TOKEN` | optional; the releases repo is public |
+| `DICTATOR_DOWNLOAD_BASE` | the R2 bucket's public URL, required. The release comes from its `latest.json`, and `/download/mac` and `/appcast.xml` redirect into it. See [`docs/cloudflare-r2.md`](../docs/cloudflare-r2.md) |
 
 ## Where the version number comes from
 
@@ -38,7 +36,7 @@ not committed:
 | File | What it holds |
 |---|---|
 | `src/data/latest.json` | version, date, size, SHA256, minimum macOS |
-| `public/_redirects` | `/download/mac` and, with the bucket, `/appcast.xml` |
+| `public/_redirects` | `/download/mac` and `/appcast.xml` |
 
 Every download button links to `/download/mac`, never to a file host, so a
 release changes where that link points and no page has to change.
@@ -49,7 +47,8 @@ pnpm build                         # sync, then build (what Cloudflare runs)
 ```
 
 If the release cannot be fetched, a `latest.json` from an earlier run is kept,
-so an offline rebuild still works.
+so an offline rebuild still works. The very first build needs a release in
+the bucket.
 
 ## Deploy (Cloudflare Pages)
 

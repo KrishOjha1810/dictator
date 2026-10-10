@@ -283,16 +283,19 @@ plutil -replace LSMinimumSystemVersion -string "$MIN_MACOS" "$C/Info.plist"
 plutil -remove DictatorCLI "$C/Info.plist" 2>/dev/null || true
 plutil -remove DictatorLog "$C/Info.plist" 2>/dev/null || true
 # Where the app checks for updates, from the environment or .env (repository
-# variables in CI). With releases served from the R2 bucket
-# (DICTATOR_DOWNLOAD_BASE) behind the website (DICTATOR_SITE_URL), it is the
-# website, which redirects /appcast.xml into the bucket. Otherwise it is the
-# latest release of DICTATOR_RELEASES_REPO on GitHub. With neither, the app
-# keeps the address native/app/Info.plist has.
+# variables in CI). Releases are served from the R2 bucket
+# (DICTATOR_DOWNLOAD_BASE). With the website in front of it
+# (DICTATOR_SITE_URL) the feed is the website's /appcast.xml, which redirects
+# into the bucket, so the storage can move later without a release that moves
+# every app; without the website it is the bucket's own. With neither, the
+# app keeps the address native/app/Info.plist has (a local test build).
 . "$ROOT/tools/env.sh"
-if [ -n "${DICTATOR_SITE_URL:-}" ] && [ -n "${DICTATOR_DOWNLOAD_BASE:-}" ]; then
-    FEED_URL="${DICTATOR_SITE_URL%/}/appcast.xml"
-elif [ -n "${DICTATOR_RELEASES_REPO:-}" ]; then
-    FEED_URL="https://github.com/$DICTATOR_RELEASES_REPO/releases/latest/download/appcast.xml"
+if [ -n "${DICTATOR_DOWNLOAD_BASE:-}" ]; then
+    if [ -n "${DICTATOR_SITE_URL:-}" ]; then
+        FEED_URL="${DICTATOR_SITE_URL%/}/appcast.xml"
+    else
+        FEED_URL="${DICTATOR_DOWNLOAD_BASE%/}/appcast.xml"
+    fi
 fi
 if [ -n "${FEED_URL:-}" ]; then
     plutil -replace SUFeedURL -string "$FEED_URL" "$C/Info.plist"

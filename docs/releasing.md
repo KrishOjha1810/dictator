@@ -5,26 +5,27 @@ offer as an update. This is for maintainers.
 
 ## Where releases live
 
-The code is in a private repo, `cc-vb/dictator`. Releases are published to a
-public repo that holds no code, `mynk03/dictator`, named by the
-`DICTATOR_RELEASES_REPO` variable. `tools/build_dmg.sh` writes the same repo
-into the app as its update feed
-(`github.com/<repo>/releases/latest/download/appcast.xml`).
+| What | Where |
+|---|---|
+| The code | `cc-vb/dictator`, private |
+| What people download, and the feed installed apps read | the Cloudflare R2 bucket, `DICTATOR_DOWNLOAD_BASE` |
+| An archive of every version | GitHub releases in the code repo, private, for maintainers |
 
-Moving releases to another repo later means one release published to both:
-apps installed before it still check the old repo, and that release is what
-moves them to the new one.
+The bucket holds only the newest release: `Dictator-<VERSION>.dmg`,
+`latest.json` (what the website shows) and `appcast.xml`. Setting it up, and
+the usage alerts, are in [`cloudflare-r2.md`](cloudflare-r2.md).
 
-The website reads the newest release from the same repo when it builds.
-
-Serving releases from Cloudflare R2 instead is set up but switched off; how to
-turn it on is in [`cloudflare-r2.md`](cloudflare-r2.md).
+`tools/build_dmg.sh` writes the feed address into the app: the website's
+`/appcast.xml` when `DICTATOR_SITE_URL` is set (it redirects into the
+bucket), otherwise the bucket's own. Pick the address before the first
+release people install: changing it later takes a release that both old and
+new addresses serve, so every installed app moves over.
 
 ## How updates reach users
 
 Installed apps use [Sparkle](https://sparkle-project.org). They read
-`appcast.xml` from the latest release in the releases repo (or from the R2
-bucket, once `DICTATOR_DOWNLOAD_BASE` is set) and take an update only when:
+`appcast.xml` from the bucket (through the website, when it is set) and take
+an update only when:
 
 1. its `.dmg` is signed with the Sparkle update key, and
 2. its build number is higher than their own.
@@ -52,11 +53,11 @@ The same material is in the repository secrets for CI:
 | `DICTATOR_P12_BASE64` | `release.p12`, base64 |
 | `DICTATOR_P12_PASSWORD` | `release.pass` |
 | `DICTATOR_SPARKLE_ED_KEY` | `sparkle_ed25519.key` |
-| `RELEASES_TOKEN` | fine-grained token, Contents read and write on the releases repo only; it expires, so renew it before it does |
+| `CF_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET` | the R2 upload key and bucket |
 | `CF_PAGES_DEPLOY_HOOK` | optional: rebuilds the website after a release |
-| `CF_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET` | Cloudflare R2, only used when the `DICTATOR_DOWNLOAD_BASE` repository variable is set |
 
-And one repository variable: `DICTATOR_RELEASES_REPO` = `mynk03/dictator`.
+And repository variables: `DICTATOR_DOWNLOAD_BASE` (required) and
+`DICTATOR_SITE_URL` (once the website has its address).
 
 Local runs read the same names from `.env`. `.env.example` lists all of them.
 
@@ -78,14 +79,14 @@ It does, in order:
 
 1. builds `build/Dictator-0.1.8.dmg`, signed with the release certificate
 2. signs the `.dmg` with the Sparkle key and writes `build/appcast.xml`
-3. pushes the tag `v0.1.8` to the code repo, and creates the release `v0.1.8`
-   in the releases repo with the `.dmg` (also as `Dictator.dmg`, which the
-   README download link uses), its SHA256 and the feed
-4. with `DICTATOR_DOWNLOAD_BASE` set, uploads the same files to R2 and asks
-   Cloudflare Pages to rebuild the website (`tools/publish_r2.sh`)
+3. uploads the `.dmg`, `latest.json` and the feed to R2, deletes the previous
+   `.dmg`, and asks Cloudflare Pages to rebuild the website
+   (`tools/publish_r2.sh`)
+4. creates the archive release `v0.1.8` in the code repo, with the `.dmg`
+   (also as `Dictator.dmg`), its SHA256 and the feed
 
-It needs a GitHub token in `GH_TOKEN` or in `.env` that can write to the
-releases repo.
+It needs the R2 keys and a GitHub token that can write to the private repo
+(the `repo` scope), in the environment or `.env`.
 
 ## Release from CI
 
@@ -95,12 +96,12 @@ Push a tag on a commit that is on `main`:
 git tag v0.1.8 && git push origin v0.1.8
 ```
 
-The `dmg` job in `.github/workflows/release.yml` builds, signs and publishes
-the same files to the releases repo, then asks Cloudflare Pages to rebuild the
-website when `CF_PAGES_DEPLOY_HOOK` is set. Nothing else runs CI: no push and
-no pull request, so runner minutes are only spent on releases. A tag that is not on `main`, or a tag pushed without the
-secrets, fails instead of publishing. If `tools/release.sh` already published
-that tag, CI sees the feed on the release and does not publish again.
+The `dmg` job in `.github/workflows/release.yml` builds, signs, uploads to R2
+and then writes the archive release. Nothing else runs CI: no push and no pull
+request, so runner minutes are only spent on releases. A tag that is not on
+`main`, or a tag pushed without the secrets and the bucket's address, fails in
+the first job instead of publishing. If `tools/release.sh` already published
+that tag, CI sees the feed on the archive release and does not publish again.
 
 ## Guards that stop a bad release
 
@@ -110,18 +111,18 @@ that tag, CI sees the feed on the release and does not publish again.
 | Build number must go up | `tools/appcast.sh` | apps ignore an update with a lower build number, forever |
 | No ad-hoc signature on a tag | workflow | an ad-hoc build drops every user's permissions |
 | No feed without the Sparkle key | workflow | a release without a signed feed breaks updates for everyone |
-| No release to another repo without `RELEASES_TOKEN` | workflow, first job | fails in a minute on Linux instead of after the macOS build |
+| No release without the bucket and its keys | workflow, first job | fails in a minute on Linux instead of after the macOS build |
 
 The build number is the commit count of the branch. That is why pull requests
 are merged with merge commits, never squashed: a squash can lower the count.
 
 ## After releasing
 
-- Check the release page in the releases repo has `Dictator.dmg`, `Dictator-<VERSION>.dmg`, the
-  `.sha256` and `appcast.xml`.
+- `$DICTATOR_DOWNLOAD_BASE/appcast.xml` opens as XML and names the new version,
+  and the website's download gives `Dictator-<VERSION>.dmg`.
 - On a Mac with the previous version: Dictator → Check for Updates. It should
   offer the new one, install it, and keep working without asking for
   permissions again.
 - If a release went out broken, publish a fixed one with a higher version.
-  Do not delete the release: apps read the feed from the latest release, and
-  removing it leaves them pointed at the one before.
+  Do not put an older feed back: apps ignore a lower build number, so it
+  fixes nothing and hides the problem.

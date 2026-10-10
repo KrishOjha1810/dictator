@@ -13,9 +13,9 @@ and is the fallback if anything in the app goes wrong.
 
 ## The app
 
-**[Download Dictator for Mac](https://github.com/mynk03/dictator/releases/latest/download/Dictator.dmg)**
+**[Download Dictator for Mac](https://github.com/cc-vb/dictator/releases/latest/download/Dictator.dmg)**
 (about 24 MB). Every version, with its SHA256, is on the
-[releases page](https://github.com/mynk03/dictator/releases).
+[releases page](https://github.com/cc-vb/dictator/releases).
 
 1. Open `Dictator.dmg` and drag Dictator into Applications. Open it from
    Applications, not from the disk image window: macOS stops a copy run from

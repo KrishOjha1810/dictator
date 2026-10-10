@@ -1,73 +1,52 @@
-# Serving releases from Cloudflare R2
+# Cloudflare R2: downloads and updates
 
-Releases are served from the public GitHub repo `mynk03/dictator` today (see
-[`releasing.md`](releasing.md#where-releases-live)). Everything needed to serve
-them from a Cloudflare R2 bucket instead is already in the code and switched
-off. This page is how to switch it on, and back off.
+Every release is served from a Cloudflare R2 bucket: the `.dmg` people
+download, `latest.json` the website shows, and `appcast.xml`, the feed
+installed apps check for updates. This page sets it up and keeps an eye on
+what it costs. How a release is made is in [`releasing.md`](releasing.md).
 
-## Why you might switch
+## What it costs
 
-| | GitHub releases repo (now) | Cloudflare R2 |
+R2 has a free allowance every month, and downloads (egress) are always free:
+
+| | Free each month | What uses it here |
 |---|---|---|
-| Card on file | no | yes, R2 asks for one even on the free tier |
-| Cost | free | free up to 10 GB stored and 10 million downloads a month; egress is free |
-| `appcast.xml` opened in a browser | downloads with an "insecure download" warning, because GitHub serves release files as attachments | shows as XML, no warning |
-| Download address | `github.com/...` | your own domain |
-| Old versions | every release is kept | only the newest `.dmg` is kept |
-| Download counts | per file, from the GitHub API | Cloudflare analytics on the custom domain |
+| Storage | 10 GB-month | one `.dmg` (about 35 MB) and two small files |
+| Class A operations (writes, lists) | 1 million | about 4 per release |
+| Class B operations (reads) | 10 million | every download, and every update check an installed app makes |
 
-The warning never affects the app: Sparkle reads the feed either way. Switch
-for the address and the clean feed, not for the app.
+Class B is the one that grows. Each installed app checks the feed about once a
+day, so 10 million reads a month is roughly 300,000 apps checking daily. Past
+the allowance it is $0.36 per million reads.
 
-Gatekeeper's "Open Anyway" step is the same on both. Only notarization
-(Apple Developer Program) removes it.
-
-## Before you start
-
-- **A domain on Cloudflare.** The address the app checks for updates is
-  written into every build, so it has to be one you keep. The bucket's free
-  `r2.dev` address is rate limited and not meant for real traffic, and a
-  `*.pages.dev` address would have to be moved again once you buy a domain.
-- **The website on Cloudflare Pages**, set up as in
-  [`website/README.md`](../website/README.md#deploy-cloudflare-pages).
-
-## What is already built
-
-| Piece | What it does with R2 on |
-|---|---|
-| `tools/publish_r2.sh` | uploads `Dictator-<VERSION>.dmg`, `latest.json` and `appcast.xml` to the bucket, deletes the previous `.dmg`, asks Pages to rebuild |
-| `tools/appcast.sh` | the feed points at the `.dmg` in the bucket; the build number check reads the bucket's feed, falling back to GitHub's |
-| `tools/build_dmg.sh` | writes `SUFeedURL = $DICTATOR_SITE_URL/appcast.xml` into the app |
-| `website/scripts/sync-latest.mjs` | reads `latest.json` from the bucket; `/download/mac` and `/appcast.xml` on the site redirect into it |
-| `.github/workflows/release.yml` | the "Publish to Cloudflare R2" step runs |
-
-All of it is keyed on one repository variable, `DICTATOR_DOWNLOAD_BASE`.
-Empty, none of it runs.
+R2 asks for a card to turn it on, even on the free allowance.
 
 ## Set up Cloudflare
+
+You need a domain on Cloudflare. The bucket's free `r2.dev` address is rate
+limited and not meant for real traffic, and the feed address is written into
+every app, so it has to be one you keep.
 
 1. **R2 → Create bucket**, for example `dictator-downloads`.
 2. **Bucket → Settings → Custom Domains → Connect Domain**, for example
    `downloads.example.com`. That address is `DICTATOR_DOWNLOAD_BASE`.
-3. **R2 → Manage R2 API Tokens → Create API token**, Object Read & Write,
-   limited to that bucket. Note the access key ID and secret, and the account
-   ID shown on the R2 page.
-4. **Pages → your site → Settings → Builds → Deploy hooks**, create one for
-   `main`. That URL is `CF_PAGES_DEPLOY_HOOK` (you may already have it).
-5. **Pages → your site → Settings → Variables**: add `DICTATOR_DOWNLOAD_BASE`
-   and `DICTATOR_SITE_URL` (your domain, for example `https://example.com`).
-   Keep `DICTATOR_RELEASES_REPO`: the site falls back to it until the bucket
-   has its first release.
+3. **R2 → Manage R2 API Tokens → Create API token**: Object Read & Write,
+   limited to that bucket. Note the access key ID and the secret (shown once),
+   and the account ID on the R2 overview page.
+4. **Workers & Pages → the website → Settings → Builds → Deploy hooks**:
+   create one for `main`. That URL is `CF_PAGES_DEPLOY_HOOK`.
+5. **The website → Settings → Variables**: `DICTATOR_DOWNLOAD_BASE`, and
+   `DICTATOR_SITE_URL` once the site has its address.
 
 ## Set up GitHub
 
-In the private code repo, **Settings → Secrets and variables → Actions**:
+In `cc-vb/dictator`, **Settings → Secrets and variables → Actions**:
 
 | Kind | Name | Value |
 |---|---|---|
 | Variable | `DICTATOR_DOWNLOAD_BASE` | `https://downloads.example.com` |
-| Variable | `DICTATOR_SITE_URL` | `https://example.com` |
-| Secret | `CF_ACCOUNT_ID` | account ID |
+| Variable | `DICTATOR_SITE_URL` | `https://example.com`, once the website has it |
+| Secret | `CF_ACCOUNT_ID` | the account ID |
 | Secret | `R2_ACCESS_KEY_ID` | from step 3 |
 | Secret | `R2_SECRET_ACCESS_KEY` | from step 3 |
 | Secret | `R2_BUCKET` | `dictator-downloads` |
@@ -75,34 +54,47 @@ In the private code repo, **Settings → Secrets and variables → Actions**:
 
 For releases made from your Mac, put the same names in `.env`.
 
-## The switch
+Decide on `DICTATOR_SITE_URL` before the first release anyone installs. With
+it, apps check `https://example.com/appcast.xml`, which the website redirects
+into the bucket, so the storage can change later without moving any app.
+Without it they check the bucket directly.
 
-Release as usual (`git tag vX.Y.Z && git push origin vX.Y.Z`). That one
-release:
+## The first release
 
-1. is still published to the GitHub releases repo, so every installed app
-   finds it on the address it checks today;
-2. is uploaded to the bucket, with its feed;
-3. carries the new feed address (`https://example.com/appcast.xml`) inside the
-   app, so after updating, an app checks the website from then on.
+The website reads `latest.json` from the bucket when it builds, so the first
+release has to land before the site's first deploy. Then:
 
-Nobody is stranded: releases keep going to GitHub as well, so an app that
-skips this update finds the next one there and moves over with it.
-
-Check, after the release:
-
-- `https://example.com/appcast.xml` opens as XML and names the new version.
+- `https://downloads.example.com/appcast.xml` opens as XML and names the
+  version.
 - `https://example.com/download/mac` downloads `Dictator-X.Y.Z.dmg`.
-- On a Mac with the previous version, Check for Updates offers and installs
-  it, and after that `defaults read <app>/Contents/Info SUFeedURL` shows the
-  website's address.
+- After an update, the app's feed is the one you chose:
+  `defaults read /Applications/Dictator.app/Contents/Info SUFeedURL`.
 
-Keep the GitHub releases repo public and receiving releases for as long as
-any old copy may still be out there. It costs nothing.
+## Usage alerts
 
-## Switching back
+Cloudflare's own alerts are in dollars, not in operations, and the free
+allowance costs $0. So they tell you when you have gone past the free
+allowance, not when you are halfway to it.
 
-Empty the `DICTATOR_DOWNLOAD_BASE` and `DICTATOR_SITE_URL` variables. The next
-build points the app at the GitHub feed again. Until every app has that
-build, keep the bucket and the website's `/appcast.xml` working, because apps
-that took an R2 release still check the website.
+**Past the free allowance (built in).** **Manage Account → Billing → Billable
+Usage → Create budget alert**, or **Notifications → Add → Budget Alert**.
+Set it low, for example $1: any spend at all means the free allowance is
+used up. It emails when the projected spend for the month reaches the amount.
+It does not stop or cap anything. Cloudflare may already have made one at
+$10; lower it.
+
+**Where you are now.** **R2 → the bucket → Metrics** shows storage and
+Class A and Class B operations. **Billable Usage** shows what each product
+costs this month, R2 included.
+
+**At 50% and 75% of the free allowance.** Cloudflare has no setting for this.
+It takes a small scheduled check that reads the month's R2 usage from
+Cloudflare's GraphQL analytics API and sends a notification past each
+threshold. It is not built yet.
+
+## Moving the storage later
+
+`tools/publish_r2.sh` uploads with the S3 protocol, so any S3-compatible
+storage can replace R2. Only the upload address and region in that script
+are R2's. With `DICTATOR_SITE_URL` as the feed address, a move is a change of
+`DICTATOR_DOWNLOAD_BASE` and the keys, and no app has to move.

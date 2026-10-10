@@ -6,8 +6,8 @@ Local, private dictation for macOS that works in any app (terminal, browser,
 Slack, any text field) and understands English, Hindi and Hinglish. Everything
 runs on your Mac. No audio leaves it, and there is no account.
 
-**[Download for Mac](https://github.com/mynk03/dictator/releases/latest/download/Dictator.dmg)**
-· Apple silicon · macOS 14+ · [All releases](https://github.com/mynk03/dictator/releases)
+**[Download for Mac](https://github.com/cc-vb/dictator/releases/latest/download/Dictator.dmg)**
+· Apple silicon · macOS 14+ · [All releases](https://github.com/cc-vb/dictator/releases)
 
 ---
 

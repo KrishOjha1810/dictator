@@ -11,20 +11,16 @@
 #      before installing anything: an update that is not signed by this key
 #      is refused, whoever hosts it
 #   3. writes build/appcast.xml, the feed the app reads
-#   4. creates the GitHub release v<VERSION> with the .dmg (under its own name
-#      and as Dictator.dmg, for the README link) and appcast.xml, in
-#      DICTATOR_RELEASES_REPO: the public repo that holds releases and no
-#      code. The tag is also pushed here, so the code repo records what
-#      shipped; CI then finds the release complete and does not publish again
-#   5. with DICTATOR_DOWNLOAD_BASE set (environment or .env), uploads the same .dmg and
-#      feed to the R2 bucket the website serves (tools/publish_r2.sh)
-#
-# The app looks for updates at releases/latest/download/appcast.xml, so the
-# newest release is always the one offered, and nothing else has to be hosted.
+#   4. uploads the .dmg, latest.json and the feed to the Cloudflare R2 bucket
+#      (tools/publish_r2.sh): what people download and installed apps read
+#   5. creates the GitHub release v<VERSION> in this private repo, the
+#      maintainers' archive of every version. CI, started by its tag, then
+#      finds the release complete and does not publish again
 #
 # Needs: ~/.dictator-release/{release.p12,release.pass,sparkle_ed25519.key},
-# build/cache/sparkle (tools/build_dmg.sh fetches it), and a GitHub token in
-# GH_TOKEN, or in GITPAT_TOKEN_MYNK03 in .env. Run it from a clean tree on the
+# build/cache/sparkle (tools/build_dmg.sh fetches it), DICTATOR_DOWNLOAD_BASE
+# and the R2 keys, and a GitHub token that can write to this private repo, in
+# GH_TOKEN or in GITPAT_TOKEN_MYNK03, all in the environment or .env. Run it from a clean tree on the
 # commit you want to ship; it refuses otherwise, so a release is always a
 # commit somebody can check out.
 set -euo pipefail
@@ -34,8 +30,12 @@ VERSION="${1:?usage: tools/release.sh VERSION [notes.md]}"
 NOTES="${2:-}"
 # shellcheck source=env.sh
 . "$ROOT/tools/env.sh"
-REPO="${DICTATOR_RELEASES_REPO:?set DICTATOR_RELEASES_REPO (owner/name) in the environment or .env}"
+for v in DICTATOR_DOWNLOAD_BASE CF_ACCOUNT_ID R2_ACCESS_KEY_ID R2_SECRET_ACCESS_KEY R2_BUCKET; do
+    [ -n "${!v:-}" ] || { echo "no $v (environment or .env); see docs/cloudflare-r2.md" >&2; exit 1; }
+done
 KEYDIR="${DICTATOR_RELEASE_DIR:-$HOME/.dictator-release}"
+# This repo's owner/name, from origin's address: where the archive release goes.
+REPO="$(git remote get-url origin | sed -E 's#^(git@[^:]+:|https://github\.com/)##; s#\.git$##')"
 DMG="$ROOT/build/Dictator-$VERSION.dmg"
 FEED="$ROOT/build/appcast.xml"
 
@@ -73,25 +73,15 @@ DICTATOR_SIGN_ID="$ID" tools/build_dmg.sh "$VERSION"
 # 2 and 3. the update signature and the feed, shared with the CI release job
 tools/appcast.sh "$VERSION" "$REPO" "$KEYDIR/sparkle_ed25519.key"
 
-# 4. publish
+# 4. the copy people download, and the feed installed apps read
+tools/publish_r2.sh "$VERSION"
+
+# 5. the archive, in this repo, on the release commit: the same tag CI would
+# have made.
 cp "$DMG" build/Dictator.dmg
 notes_args=(--generate-notes)
 [ -n "$NOTES" ] && notes_args=(--notes-file "$NOTES")
-# The code repo's own owner/name, from origin's address.
-ORIGIN="$(git remote get-url origin | sed -E 's#^(git@github\.com:|https://github\.com/)##; s#\.git$##')"
-target_args=(--target "$(git rev-parse HEAD)")
-if [ "$REPO" != "$ORIGIN" ]; then
-    # This commit does not exist in the releases repo, so its tag goes on that
-    # repo's default branch, and the code repo gets the tag that matches.
-    target_args=()
-    git tag "v$VERSION" && git push origin "v$VERSION"
-fi
-gh release create "v$VERSION" -R "$REPO" ${target_args[@]+"${target_args[@]}"} \
+gh release create "v$VERSION" -R "$REPO" --target "$(git rev-parse HEAD)" \
     --title "Dictator $VERSION" --latest "${notes_args[@]}" \
     "$DMG" build/Dictator.dmg "$DMG.sha256" "$FEED"
-echo "published v$VERSION: https://github.com/$REPO/releases/tag/v$VERSION"
-
-# 5. the website's copy, and the feed apps on the new address read
-if [ -n "${DICTATOR_DOWNLOAD_BASE:-}" ]; then
-    tools/publish_r2.sh "$VERSION"
-fi
+echo "published v$VERSION: $DICTATOR_DOWNLOAD_BASE/Dictator-$VERSION.dmg"
