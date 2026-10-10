@@ -657,7 +657,7 @@ def run(key: str = "fn", send: bool = False, debug: bool = True) -> int:
     # not only when a key is pressed.
     stop_watch = threading.Event()
     # The app has no installer to fetch them, so the loop does, English
-    # first. A repo install got them from install.sh and is left alone.
+    # first. A repo install got them from scripts/install.sh and is left alone.
     if core.BUNDLE:
         fetch.in_background()
     if stt.missing():

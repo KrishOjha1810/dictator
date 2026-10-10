@@ -258,7 +258,7 @@ def test_the_app_bundle_is_never_force_rebuilt():
 
 def test_the_installer_no_longer_asks_for_sox():
     """sox was half the Homebrew dependency, and it was the GPL half."""
-    text = (ROOT / "install.sh").read_text()
+    text = (ROOT / "scripts" / "install.sh").read_text()
     assert "brew install" in text
     assert "for pkg in whisper-cpp" in text, "the brew package list changed"
 

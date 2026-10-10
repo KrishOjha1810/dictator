@@ -117,7 +117,7 @@ other app on their machine permanently.
 ### The third row is why the product works today
 
 Ad-hoc signed and **not** quarantined runs normally. That is exactly what
-`install.sh` produces: `curl` and `git` do not set the quarantine attribute, so
+`scripts/install.sh` produces: `curl` and `git` do not set the quarantine attribute, so
 the app the installer builds and signs on the user's own machine is never
 quarantined and never assessed. The install path that exists is not a
 workaround. It is the only path Gatekeeper leaves open for free.
@@ -391,7 +391,7 @@ other three.)*
    October 2026" above. Ship a small app with the Swift helpers, whisper, a
    Python runtime and `jellyfish` inside it, signed with one self-signed
    certificate kept for every release, and the models downloaded on first
-   launch as `install.sh` already does. About 60 to 90 MB installed and 30 to
+   launch as `scripts/install.sh` already does. About 60 to 90 MB installed and 30 to
    45 MB as a `.dmg`, estimated rather than measured. The download page shows
    the warning and the Open Anyway screen with a screenshot of each. This is
    not the `xattr` README ruled out above: the user never opens a terminal.
@@ -444,7 +444,7 @@ hard:
 
 llama.cpp publishes the same shape of Windows CPU zip on every build tag, so
 `recap.py`'s `llama-server` ports as well. The model files are the identical
-GGML and GGUF from the same Hugging Face URLs `install.sh` already uses.
+GGML and GGUF from the same Hugging Face URLs `scripts/install.sh` already uses.
 
 **The whole ASR and summarisation engine layer ports by changing
 `brew install whisper-cpp` into "download a zip".**
@@ -626,7 +626,7 @@ The engine ports for free. The speed does not.
   seconds and about 1.7.
 - **Parakeet is the saving grace and should be the Windows default.**
   Independent CPU measurements put Parakeet int8 at about 30 times real time on
-  an i7-12700KF and about 17 on a 2014 i7-4790. `install.sh` already makes
+  an i7-12700KF and about 17 on a 2014 i7-4790. `scripts/install.sh` already makes
   Parakeet the English default and calls it "about half a second". That
   survives the port.
 - **Hinglish is the casualty, and it already was.** Parakeet has no Hindi, so

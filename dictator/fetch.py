@@ -1,6 +1,6 @@
 """Download the speech models, from inside the app.
 
-The repo install gets its models from install.sh, with curl. The app has no
+The repo install gets its models from scripts/install.sh, with curl. The app has no
 installer: somebody drags it into Applications and opens it, so the first
 launch has to fetch them itself, or the app installs, asks for every
 permission, and then cannot turn a single word into text.
@@ -12,7 +12,7 @@ truncated or swapped file would not fail here; it would fail later, as
 nonsense text, which reads as the product being bad at listening.
 
 The English models come first and in order, then the Hinglish one, so English
-works as soon as it can, the same order install.sh uses. One download at a
+works as soon as it can, the same order scripts/install.sh uses. One download at a
 time, across every process: the app and the dictation loop can both ask, and
 two writers on one .part file would make a model that passes no check.
 """

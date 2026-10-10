@@ -1354,7 +1354,7 @@ def doctor() -> int:
            "" if here else
            (f"downloading now ({mb}MB)" if stt.arriving(name)
             else f"missing ({mb}MB)"
-            + ("" if bundled else "; run ./install.sh again")))
+            + ("" if bundled else "; run scripts/install.sh again")))
 
     # The delivery helper. Without it nothing arrives anywhere, and the only
     # symptom is that the key appears to do nothing.
@@ -1433,7 +1433,7 @@ def doctor() -> int:
 
     on_path = shutil.which("dictator")
     ok("the dictator command is on your PATH", bool(on_path),
-       "" if on_path else "run ./install.sh again, or call it by full path")
+       "" if on_path else "run scripts/install.sh again, or call it by full path")
 
     # And that it is THIS one. /opt/homebrew/bin is shared by every account on
     # the Mac, so whichever installed last owns the name and everybody else's
@@ -1449,7 +1449,7 @@ def doctor() -> int:
            "" if same else
            f"`dictator` on your PATH runs {real}, not {mine}. Nothing you "
            f"change here takes effect. Call it by full path, or re-run "
-           f"./install.sh to put yours in ~/.local/bin")
+           f"scripts/install.sh to put yours in ~/.local/bin")
 
     # Two listeners on the same key means every hold is handled twice and
     # every sentence is pasted twice, and the symptom reads as a paste bug.
