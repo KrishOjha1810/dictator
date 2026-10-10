@@ -48,8 +48,8 @@ and it fades in with its buttons:
 | Button | What it does |
 |---|---|
 | the pill (mic) | click to start hands free dictation, click again to finish |
-| record | start or stop the Notetaker (a meeting recording). The first time, the app explains that it records other people and asks before it starts. Red while recording. `⌥M` from anywhere |
-| pencil | open the Scratchpad, a notes window with the cursor ready, so you can dictate into it. Notes are Markdown files in `~/.dictator/notes`. `⌥S` from anywhere |
+| record | open the app on its Meetings page. Red while a meeting records. To start or stop a recording, press `⌥M` from anywhere or use the menu bar item; the first time, the app explains that it records other people and asks before it starts. Later, this button will also start taking notes for the meeting |
+| pencil | open the app on its Scratchpad page, so you can dictate into a note. Notes are Markdown files in `~/.dictator/notes`. `⌥S` from anywhere opens the Scratchpad window |
 
 Hovering a button shows its name and shortcut. Drag the pill to any of eight
 places: at the top and bottom centre it lies flat, at the side edges and in

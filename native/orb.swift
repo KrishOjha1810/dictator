@@ -59,10 +59,10 @@
 //
 //   the pill itself (dictate)   click: start hands free dictation; click again,
 //                               or press the key once, to finish and paste
-//   notetaker                   start or stop recording a meeting, through the
-//                               app (which asks for consent the first time);
-//                               red while a meeting records
-//   scratchpad                  open the Scratchpad window in the app
+//   notetaker                   open the app on its Meetings page (planned: and
+//                               start taking notes there); red while a
+//                               meeting records
+//   scratchpad                  open the app on its Scratchpad page
 //
 // They stack from the pill toward the middle of the screen. Hovering one slides
 // out a label with its name and shortcut, on the inside: left of the stack at
@@ -1394,7 +1394,7 @@ final class App: NSObject, NSApplicationDelegate, OrbDelegate {
             }
         case .cancel: tellLoop("cancel")
         case .finish: tellLoop("finish")
-        case .button(.notetaker): openInApp("notetaker", activate: false)
+        case .button(.notetaker): openInApp("notetaker", activate: true)
         case .button(.scratchpad): openInApp("scratchpad", activate: true)
         case .button(.dictate): tellLoop("toggle")
         }
@@ -1418,11 +1418,12 @@ final class App: NSObject, NSApplicationDelegate, OrbDelegate {
             }
         case .cancel: return LabelView.make("Cancel, paste nothing", "esc")
         case .finish: return LabelView.make("Finish and paste", KEY_NAME)
+        // Both open the app on its page. ⌥M still starts and stops a
+        // recording, which a click no longer does, so it is not shown here.
         case .button(.notetaker):
-            return LabelView.make(recording ? "Stop Notetaker" : "Start Notetaker",
-                                  s.shortcutNotetaker ? "⌥ M" : nil)
+            return LabelView.make(recording ? "Recording, open Meetings" : "Open Meetings", nil)
         case .button(.scratchpad):
-            return LabelView.make("Scratchpad", s.shortcutScratchpad ? "⌥ S" : nil)
+            return LabelView.make("Open Scratchpad", s.shortcutScratchpad ? "⌥ S" : nil)
         case .button(.dictate): return nil
         }
     }
@@ -1679,8 +1680,8 @@ enum Snapshot {
         if sc != nil, let h = hover {
             let t: NSAttributedString?
             switch h {
-            case .button(.notetaker): t = LabelView.make(recording ? "Stop Notetaker" : "Start Notetaker", "⌥ M")
-            case .button(.scratchpad): t = LabelView.make("Scratchpad", "⌥ S")
+            case .button(.notetaker): t = LabelView.make(recording ? "Recording, open Meetings" : "Open Meetings", nil)
+            case .button(.scratchpad): t = LabelView.make("Open Scratchpad", "⌥ S")
             case .cancel: t = LabelView.make("Cancel, paste nothing", "esc")
             case .finish: t = LabelView.make("Finish and paste", KEY_NAME)
             case .pill: t = LabelView.make("Dictate hands free", "double-tap \(KEY_NAME)")

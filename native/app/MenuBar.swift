@@ -254,14 +254,19 @@ final class UI: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWindowDelegat
     }
 
     /// dictator://scratchpad and dictator://notetaker, from the pill's
-    /// buttons (native/orb.swift). The pill opens the Notetaker one without
-    /// bringing the app forward; the consent question brings it forward
-    /// itself, the first time only.
+    /// buttons (native/orb.swift). Both open the app on its own page: the
+    /// Scratchpad page, and Meetings.
+    ///
+    /// Planned: once the Meetings page records and takes notes itself (it
+    /// will get a window of its own), the Notetaker button should open it
+    /// and start taking notes for the meeting in one click. Until then it
+    /// only opens the page; ⌥M and the menu still start and stop a recording
+    /// through Notetaker.shared.toggle().
     func application(_ application: NSApplication, open urls: [URL]) {
         for u in urls where u.scheme == "dictator" {
             switch u.host ?? "" {
-            case "scratchpad": showScratchpad(nil)
-            case "notetaker": Notetaker.shared.toggle()
+            case "scratchpad": showHub(.scratchpad)
+            case "notetaker": showHub(.meetings)
             default: NSLog("dictator: unknown link \(u)")
             }
         }
